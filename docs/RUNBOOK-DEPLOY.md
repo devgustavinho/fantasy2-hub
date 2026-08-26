@@ -114,17 +114,29 @@ Como o deploy automático roda `sudo -n systemctl restart fantasy2-hub` sem senh
 getflix ALL=(ALL) NOPASSWD: /bin/systemctl restart fantasy2-hub, /bin/systemctl is-active fantasy2-hub
 ```
 
-## 6. nginx + TLS para a API
+## 6. nginx para a API (feito — status: ✅ concluído nesta VPS)
 
-Bloco de servidor (ex. `/etc/nginx/sites-available/api-fantasy2.conf`):
+A VPS já tinha um padrão pronto para o getflix: restringir a porta 80 só a IPs da Cloudflare
+(`geo $is_cloudflare` em `/etc/nginx/conf.d/cloudflare-geo.conf`) e deixar o TLS público por conta do
+proxy da Cloudflare (modo "Flexible"/"Full"), sem certbot na origem. Segui o mesmo padrão em vez de
+gerar um certificado próprio, para manter consistência com o getflix:
 
 ```nginx
+# /etc/nginx/sites-available/api-fantasy2.gcsolutions-devs.com.br
 server {
     listen 80;
+    listen [::]:80;
     server_name api-fantasy2.gcsolutions-devs.com.br;
+
+    if ($is_cloudflare = 0) {
+        return 403;
+    }
+
+    limit_req zone=fantasy2_api burst=30 nodelay;
 
     location / {
         proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -133,16 +145,22 @@ server {
 }
 ```
 
+(zona de rate limit `fantasy2_api` adicionada em `/etc/nginx/conf.d/rate-limit-zones.conf`, mesmo padrão do `getflix_api`)
+
 ```bash
-sudo ln -s /etc/nginx/sites-available/api-fantasy2.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/api-fantasy2.gcsolutions-devs.com.br /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d api-fantasy2.gcsolutions-devs.com.br
 ```
+
+**Importante**: como a origem só aceita tráfego de IPs da Cloudflare e não tem certificado próprio, o
+registro DNS abaixo **precisa** estar com o proxy da Cloudflare ligado (nuvem laranja) — se ficar "DNS
+only" (cinza), ninguém consegue acessar a API.
 
 ## 7. DNS (Cloudflare)
 
 - `api-fantasy2.gcsolutions-devs.com.br` → registro `A` apontando para `45.90.123.41`, com proxy da
-  Cloudflare ligado (nuvem laranja), igual ao getflix.
+  Cloudflare **ligado** (nuvem laranja, obrigatório — ver nota acima), igual ao getflix. SSL/TLS mode
+  do domínio deve estar como "Flexible" ou "Full" (não "Full (strict)", já que a origem não tem certificado próprio).
 - `fantasy2.gcsolutions-devs.com.br` → configurado depois, na etapa do Cloudflare Pages (passo 9), que
   te dará o CNAME exato a criar em "Custom domains".
 
@@ -172,11 +190,13 @@ o repositório e builda automaticamente a cada push em `main` (preview builds em
 
 ## Checklist final
 
-- [ ] Repo privado criado e código enviado
-- [ ] `FANTASY2_DEPLOY_SSH_KEY` configurado no GitHub
-- [ ] VPS: `.env` preenchido, migrations + seed rodados, admin criado
-- [ ] systemd `fantasy2-hub` ativo e respondendo em `/health`
-- [ ] nginx + certbot servindo `api-fantasy2.gcsolutions-devs.com.br`
-- [ ] DNS da API apontando pra VPS
-- [ ] Cloudflare Pages conectado, build passando, domínio `fantasy2.gcsolutions-devs.com.br` ativo
-- [ ] Testar cadastro real de um apartamento ponta a ponta em produção
+- [x] Repo privado criado e código enviado
+- [x] `FANTASY2_DEPLOY_SSH_KEY` configurado no GitHub e na VPS (`/home/getflix/.ssh/authorized_keys`)
+- [x] Deploy key de leitura do repo configurada na VPS (`github.com-fantasy2` no `~/.ssh/config`)
+- [x] VPS: `.env` preenchido, migrations + seed rodados, admin criado (`gustavocarneiro.zr@gmail.com`)
+- [x] systemd `fantasy2-hub` ativo e respondendo em `/health` (porta 3100)
+- [x] sudoers configurado para restart sem senha (deploy automático)
+- [x] nginx servindo `api-fantasy2.gcsolutions-devs.com.br` → `127.0.0.1:3100` (padrão Cloudflare-only do getflix)
+- [ ] DNS da API apontando pra VPS (proxy Cloudflare ligado) — **pendente, depende da sua conta Cloudflare**
+- [ ] Cloudflare Pages conectado, build passando, domínio `fantasy2.gcsolutions-devs.com.br` ativo — **pendente**
+- [ ] Testar cadastro real de um apartamento ponta a ponta em produção — depende dos itens acima
