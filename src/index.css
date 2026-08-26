@@ -5,23 +5,30 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --foreground: 190 45% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 221 83% 40%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --card-foreground: 190 45% 12%;
+    --primary: 345 85% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 193 55% 95%;
+    --secondary-foreground: 193 70% 18%;
+    --muted: 190 20% 95%;
+    --muted-foreground: 190 12% 42%;
+    --accent: 36 100% 60%;
+    --accent-foreground: 190 45% 12%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 40%;
-    --radius: 0.5rem;
+    --destructive-foreground: 0 0% 100%;
+    --border: 190 20% 88%;
+    --input: 190 20% 88%;
+    --ring: 345 85% 50%;
+    --radius: 0.75rem;
+
+    /* Tons da marca (extraídos da logo do Fantasy 2), pra uso pontual
+       fora do sistema semântico do shadcn — gradientes, glows, destaques. */
+    --brand-pink: 345 100% 60%;
+    --brand-gold: 36 100% 60%;
+    --brand-cyan: 193 80% 42%;
+    --brand-navy: 190 97% 12%;
   }
 }
 

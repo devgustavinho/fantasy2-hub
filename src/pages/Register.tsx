@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { GradientBorderCard } from "@/components/ui/gradient-border-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -67,8 +68,11 @@ export default function Register() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-8">
-      <Card className="w-full max-w-lg">
+    <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4 py-8">
+      <div className="w-full max-w-lg space-y-6">
+      <img src="/logo.png" alt="Fantasy 2" className="mx-auto h-16 w-16" />
+      <GradientBorderCard>
+      <Card className="border-none shadow-none">
         <CardHeader>
           <CardTitle>Cadastro do condômino</CardTitle>
           <CardDescription>
@@ -185,6 +189,8 @@ export default function Register() {
           </p>
         </CardContent>
       </Card>
+      </GradientBorderCard>
+      </div>
     </div>
   );
 }

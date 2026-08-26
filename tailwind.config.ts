@@ -35,6 +35,12 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          pink: "hsl(var(--brand-pink))",
+          gold: "hsl(var(--brand-gold))",
+          cyan: "hsl(var(--brand-cyan))",
+          navy: "hsl(var(--brand-navy))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

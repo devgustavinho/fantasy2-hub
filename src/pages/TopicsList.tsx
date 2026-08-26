@@ -89,7 +89,7 @@ export default function TopicsList() {
       <div className="space-y-3">
         {data?.topics.map((topic) => (
           <Link key={topic.id} to={`/topics/${topic.id}`}>
-            <Card className="transition-colors hover:bg-accent/40">
+            <Card className="transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-base">{topic.title}</CardTitle>
