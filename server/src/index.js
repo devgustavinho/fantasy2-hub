@@ -10,6 +10,7 @@ import { topicsRoutes } from "./modules/topics/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { webauthnRoutes } from "./modules/webauthn/routes.js";
 import { notificationsRoutes } from "./modules/notifications/routes.js";
+import { pushRoutes } from "./modules/push/routes.js";
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use("/topics", topicsRoutes());
 app.use("/users", usersRoutes());
 app.use("/webauthn", authLimiter, webauthnRoutes());
 app.use("/notifications", notificationsRoutes());
+app.use("/push", pushRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });

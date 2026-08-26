@@ -7,6 +7,9 @@ const schema = z.object({
   DATABASE_PATH: z.string().default("./data/fantasy2.db"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET deve ter pelo menos 16 caracteres"),
   CORS_ORIGIN: z.string().min(1),
+  VAPID_PUBLIC_KEY: z.string().min(1),
+  VAPID_PRIVATE_KEY: z.string().min(1),
+  VAPID_SUBJECT: z.string().min(1),
 });
 
 const parsed = schema.safeParse(process.env);

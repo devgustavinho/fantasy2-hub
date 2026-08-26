@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import * as webauthnService from "@/services/webauthn";
+import * as pushService from "@/services/push";
 import type { Role } from "@/lib/types";
 
 function roleLabel(role: Role) {
@@ -41,6 +42,28 @@ export default function Profile() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => webauthnService.deletePasskey(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["passkeys"] }),
+  });
+
+  const pushSupported = pushService.supportsPush();
+  const [pushError, setPushError] = useState<string | null>(null);
+  const { data: pushSubscription, isLoading: pushLoading } = useQuery({
+    queryKey: ["push-subscription"],
+    queryFn: pushService.getCurrentPushSubscription,
+    enabled: pushSupported,
+  });
+
+  const enablePushMutation = useMutation({
+    mutationFn: pushService.enablePush,
+    onSuccess: () => {
+      setPushError(null);
+      queryClient.invalidateQueries({ queryKey: ["push-subscription"] });
+    },
+    onError: (err) => setPushError(err instanceof Error ? err.message : "Erro ao ativar notificações."),
+  });
+
+  const disablePushMutation = useMutation({
+    mutationFn: pushService.disablePush,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["push-subscription"] }),
   });
 
   if (!user) return null;
@@ -126,6 +149,50 @@ export default function Profile() {
               <p className="text-sm text-muted-foreground">Nenhum aparelho cadastrado ainda.</p>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Notificações push</CardTitle>
+          <CardDescription>
+            Receba um aviso neste aparelho quando alguém comentar, mudar o status ou responder numa
+            pauta que você acompanha — mesmo com o site fechado. No iPhone, precisa primeiro "Adicionar
+            à Tela de Início" pelo Safari.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!pushSupported && (
+            <p className="text-sm text-muted-foreground">
+              Este navegador não tem suporte a notificações push.
+            </p>
+          )}
+          {pushSupported && pushLoading && (
+            <p className="text-sm text-muted-foreground">Verificando...</p>
+          )}
+          {pushSupported && !pushLoading && (
+            <>
+              <p className="text-sm">
+                Status neste aparelho:{" "}
+                <strong>{pushSubscription ? "ativadas" : "desativadas"}</strong>
+              </p>
+              {pushSubscription ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={disablePushMutation.isPending}
+                  onClick={() => disablePushMutation.mutate()}
+                >
+                  Desativar neste aparelho
+                </Button>
+              ) : (
+                <Button size="sm" disabled={enablePushMutation.isPending} onClick={() => enablePushMutation.mutate()}>
+                  {enablePushMutation.isPending ? "Ativando..." : "Ativar notificações neste aparelho"}
+                </Button>
+              )}
+              {pushError && <p className="text-sm text-destructive">{pushError}</p>}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

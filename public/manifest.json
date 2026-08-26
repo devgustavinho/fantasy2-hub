@@ -1,0 +1,17 @@
+{
+  "name": "Fantasy 2 Hub",
+  "short_name": "Fantasy 2",
+  "description": "Hub do condomínio Fantasy 2",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#01333d",
+  "theme_color": "#01333d",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "640x640",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
