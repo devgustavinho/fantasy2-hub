@@ -12,3 +12,6 @@ export const createSindico = (data: {
 
 export const changeUserRole = (id: string, role: Extract<Role, "sindico" | "morador">) =>
   api.patch<{ user: { id: string; role: Role } }>(`/users/${id}/role`, { role });
+
+export const resetUserPassword = (id: string) =>
+  api.patch<{ newPassword: string }>(`/users/${id}/reset-password`);

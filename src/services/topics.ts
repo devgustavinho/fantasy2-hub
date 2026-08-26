@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { Comment, Topic, VoteValue } from "@/lib/types";
+import type { Comment, Topic, TopicEvent, VoteValue } from "@/lib/types";
 
 export const listTopics = () => api.get<{ topics: Topic[] }>("/topics");
 
@@ -7,7 +7,7 @@ export const createTopic = (data: { title: string; description: string }) =>
   api.post<{ topic: Topic }>("/topics", data);
 
 export const getTopic = (id: string) =>
-  api.get<{ topic: Topic; comments: Comment[] }>(`/topics/${id}`);
+  api.get<{ topic: Topic; comments: Comment[]; events: TopicEvent[] }>(`/topics/${id}`);
 
 export const voteOnTopic = (id: string, value: VoteValue) =>
   api.post<{ favorCount: number; contraCount: number; myVote: VoteValue }>(`/topics/${id}/vote`, {
@@ -22,3 +22,6 @@ export const scheduleTopic = (id: string, assemblyDate: string | null) =>
 
 export const editTopic = (id: string, data: { title: string; description: string }) =>
   api.patch<{ topic: Topic }>(`/topics/${id}/content`, data);
+
+export const updateStatusNote = (id: string, note: string | null) =>
+  api.patch<{ topic: Topic }>(`/topics/${id}/status-note`, { note });

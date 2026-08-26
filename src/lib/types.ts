@@ -37,6 +37,7 @@ export interface Topic {
   description: string;
   status: TopicStatus;
   assemblyDate: string | null;
+  statusNote: string | null;
   createdAt: string;
   updatedAt: string;
   createdById: string;
@@ -52,4 +53,20 @@ export interface Comment {
   body: string;
   createdAt: string;
   authorName: string;
+  authorRole: Role;
+}
+
+export interface TopicEvent {
+  id: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface Notification {
+  id: string;
+  topicId: string;
+  topicTitle: string;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
 }

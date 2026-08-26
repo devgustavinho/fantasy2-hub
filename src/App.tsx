@@ -1,7 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
+import { ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
 import { Navbar } from "@/components/Navbar";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -70,7 +70,7 @@ export default function App() {
               />
             </Route>
 
-            <Route element={<AdminOnlyRoute />}>
+            <Route element={<StaffRoute />}>
               <Route
                 path="/admin/usuarios"
                 element={

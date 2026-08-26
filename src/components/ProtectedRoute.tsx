@@ -16,12 +16,3 @@ export function StaffRoute() {
   if (user.role !== "admin" && user.role !== "sindico") return <Navigate to="/" replace />;
   return <Outlet />;
 }
-
-// só admin: gerenciar contas e cargos de outros usuários
-export function AdminOnlyRoute() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "admin") return <Navigate to="/" replace />;
-  return <Outlet />;
-}

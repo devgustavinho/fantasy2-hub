@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -27,11 +28,12 @@ export function Navbar() {
                 Administração
               </Link>
             )}
-            {user.role === "admin" && (
+            {(user.role === "admin" || user.role === "sindico") && (
               <Link to="/admin/usuarios" className="text-white/70 transition-colors hover:text-white">
                 Usuários
               </Link>
             )}
+            <NotificationBell />
             <Link to="/perfil" className="text-white/70 transition-colors hover:text-brand-gold">
               {user.name}
             </Link>

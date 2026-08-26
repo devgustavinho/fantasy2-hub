@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
 import type { VoteValue } from "@/lib/types";
-import { formatDateOnly } from "@/lib/utils";
+import { cn, formatDateOnly } from "@/lib/utils";
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +23,8 @@ export default function TopicDetail() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["topic", id],
@@ -63,11 +65,20 @@ export default function TopicDetail() {
     onError: (err) => setEditError(err instanceof Error ? err.message : "Erro ao salvar."),
   });
 
+  const statusNoteMutation = useMutation({
+    mutationFn: (note: string | null) => topicsService.updateStatusNote(id!, note),
+    onSuccess: () => {
+      setIsEditingNote(false);
+      invalidate();
+    },
+  });
+
   if (isLoading || !data) {
     return <p className="mx-auto max-w-4xl px-4 py-8 text-muted-foreground">Carregando...</p>;
   }
 
-  const { topic, comments } = data;
+  const { topic, comments, events } = data;
+  const isStaff = user?.role === "admin" || user?.role === "sindico";
   const canEdit = !!user && (user.id === topic.createdById || user.role === "admin" || user.role === "sindico");
 
   function handleComment(e: FormEvent) {
@@ -87,6 +98,16 @@ export default function TopicDetail() {
     e.preventDefault();
     setEditError(null);
     editMutation.mutate();
+  }
+
+  function startEditingNote() {
+    setNoteText(topic.statusNote ?? "");
+    setIsEditingNote(true);
+  }
+
+  function handleNoteSubmit(e: FormEvent) {
+    e.preventDefault();
+    statusNoteMutation.mutate(noteText.trim() || null);
   }
 
   return (
@@ -154,6 +175,15 @@ export default function TopicDetail() {
             </>
           )}
 
+          {topic.statusNote && !isEditingNote && (
+            <div className="rounded-md border border-brand-gold/40 bg-brand-gold/10 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-gold">
+                Atualização da administração
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{topic.statusNote}</p>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <Button
               variant={topic.myVote === "favor" ? "default" : "outline"}
@@ -171,8 +201,8 @@ export default function TopicDetail() {
             </Button>
           </div>
 
-          {(user?.role === "admin" || user?.role === "sindico") && (
-            <div className="space-y-2 rounded-md border bg-muted/40 p-4">
+          {isStaff && (
+            <div className="space-y-3 rounded-md border bg-muted/40 p-4">
               <p className="text-sm font-medium">Administração</p>
               {topic.status === "scheduled" ? (
                 <Button variant="outline" size="sm" onClick={() => scheduleMutation.mutate(null)}>
@@ -195,8 +225,57 @@ export default function TopicDetail() {
                   </Button>
                 </div>
               )}
+
+              {isEditingNote ? (
+                <form onSubmit={handleNoteSubmit} className="space-y-2 border-t pt-3">
+                  <Label htmlFor="statusNote">Atualização da administração</Label>
+                  <Textarea
+                    id="statusNote"
+                    rows={3}
+                    placeholder='Ex: "Será levada para a assembleia de novembro"'
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={statusNoteMutation.isPending}>
+                      Salvar atualização
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsEditingNote(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="border-t pt-3">
+                  <Button variant="outline" size="sm" onClick={startEditingNote}>
+                    {topic.statusNote ? "Editar atualização" : "Adicionar atualização"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Histórico</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3 border-l-2 border-muted pl-4">
+            {events.map((event) => (
+              <div key={event.id} className="relative">
+                <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary" />
+                <p className="text-sm">{event.message}</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(event.createdAt).toLocaleString("pt-BR")}
+                </p>
+              </div>
+            ))}
+            {events.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sem histórico ainda.</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -218,14 +297,28 @@ export default function TopicDetail() {
           </form>
 
           <div className="space-y-3">
-            {comments.map((comment) => (
-              <div key={comment.id} className="rounded-md border p-3 text-sm">
-                <p>{comment.body}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {comment.authorName} · {new Date(comment.createdAt).toLocaleString("pt-BR")}
-                </p>
-              </div>
-            ))}
+            {comments.map((comment) => {
+              const isOfficial = comment.authorRole === "admin" || comment.authorRole === "sindico";
+              return (
+                <div
+                  key={comment.id}
+                  className={cn(
+                    "rounded-md border p-3 text-sm",
+                    isOfficial && "border-brand-cyan/50 bg-brand-cyan/10",
+                  )}
+                >
+                  {isOfficial && (
+                    <Badge variant="secondary" className="mb-1.5 bg-brand-cyan/20 text-brand-cyan">
+                      Resposta oficial
+                    </Badge>
+                  )}
+                  <p>{comment.body}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {comment.authorName} · {new Date(comment.createdAt).toLocaleString("pt-BR")}
+                  </p>
+                </div>
+              );
+            })}
             {comments.length === 0 && (
               <p className="text-sm text-muted-foreground">Nenhum comentário ainda.</p>
             )}

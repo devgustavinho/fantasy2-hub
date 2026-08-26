@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import * as usersService from "@/services/users";
 import { listApartmentsByTower } from "@/services/apartments";
-import type { Apartment, Role } from "@/lib/types";
+import type { Apartment, ManagedUser, Role } from "@/lib/types";
 
 const TOWERS = [1, 2, 3, 4, 5];
 
@@ -25,8 +26,11 @@ function roleBadge(role: Role) {
 }
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["users"], queryFn: usersService.listUsers });
+  const [resetResult, setResetResult] = useState<{ user: ManagedUser; password: string } | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -80,6 +84,11 @@ export default function UserManagement() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: (target: ManagedUser) => usersService.resetUserPassword(target.id),
+    onSuccess: (result, target) => setResetResult({ user: target, password: result.newPassword }),
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -94,6 +103,24 @@ export default function UserManagement() {
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-semibold">Usuários</h1>
 
+      {resetResult && (
+        <Card className="border-brand-gold/50 bg-brand-gold/10">
+          <CardContent className="space-y-2 pt-6">
+            <p className="text-sm">
+              Nova senha gerada para <strong>{resetResult.user.name}</strong> — repasse por fora (não
+              fica salva em lugar nenhum além desta tela):
+            </p>
+            <p className="rounded-md border bg-card px-3 py-2 font-mono text-sm">
+              {resetResult.password}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setResetResult(null)}>
+              Fechar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Criar conta de síndico</CardTitle>
@@ -212,6 +239,7 @@ export default function UserManagement() {
           </form>
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -231,7 +259,7 @@ export default function UserManagement() {
               </div>
               <div className="flex items-center gap-2">
                 {roleBadge(u.role)}
-                {u.role === "sindico" && (
+                {isAdmin && u.role === "sindico" && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -241,7 +269,7 @@ export default function UserManagement() {
                     Rebaixar para morador
                   </Button>
                 )}
-                {u.role === "morador" && (
+                {isAdmin && u.role === "morador" && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -249,6 +277,16 @@ export default function UserManagement() {
                     onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
                   >
                     Promover a síndico
+                  </Button>
+                )}
+                {u.role !== "admin" && (isAdmin || u.role === "morador") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={resetPasswordMutation.isPending}
+                    onClick={() => resetPasswordMutation.mutate(u)}
+                  >
+                    Resetar senha
                   </Button>
                 )}
               </div>

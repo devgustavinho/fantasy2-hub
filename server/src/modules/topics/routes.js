@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
 import { requireAuth, requireStaff } from "../../auth/guards.js";
+import { notifyTopicWatchers } from "../notifications/service.js";
 
 const nowIso = () => new Date().toISOString();
 
@@ -25,9 +26,14 @@ const patchSchema = z.object({
   assemblyDate: z.string().trim().min(1).nullable(),
 });
 
+const statusNoteSchema = z.object({
+  note: z.string().trim().min(1).max(500).nullable(),
+});
+
 const listTopics = sqlite.prepare(`
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
+    t.status_note AS statusNote,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
     u.name AS createdByName,
     COALESCE(SUM(CASE WHEN v.value = 'favor' THEN 1 ELSE 0 END), 0) AS favorCount,
@@ -43,6 +49,7 @@ const listTopics = sqlite.prepare(`
 const getTopic = sqlite.prepare(`
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
+    t.status_note AS statusNote,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
     t.created_by AS createdById, u.name AS createdByName
   FROM topics t
@@ -60,11 +67,18 @@ const getVoteCounts = sqlite.prepare(`
 const getMyVote = sqlite.prepare("SELECT value FROM votes WHERE topic_id = ? AND user_id = ?");
 
 const listComments = sqlite.prepare(`
-  SELECT c.id, c.body, c.created_at AS createdAt, u.name AS authorName
+  SELECT c.id, c.body, c.created_at AS createdAt, u.name AS authorName, u.role AS authorRole
   FROM comments c
   JOIN users u ON u.id = c.user_id
   WHERE c.topic_id = ?
   ORDER BY c.created_at ASC
+`);
+
+const listEvents = sqlite.prepare(`
+  SELECT e.id, e.message, e.created_at AS createdAt
+  FROM topic_events e
+  WHERE e.topic_id = ?
+  ORDER BY e.created_at ASC
 `);
 
 const insertTopic = sqlite.prepare(`
@@ -81,6 +95,19 @@ const updateTopicContent = sqlite.prepare(`
   UPDATE topics SET title = @title, description = @description, updated_at = @updated_at
   WHERE id = @id
 `);
+
+const updateStatusNote = sqlite.prepare(`
+  UPDATE topics SET status_note = @status_note, updated_at = @updated_at WHERE id = @id
+`);
+
+const insertEvent = sqlite.prepare(`
+  INSERT INTO topic_events (id, topic_id, actor_user_id, message)
+  VALUES (@id, @topic_id, @actor_user_id, @message)
+`);
+
+function recordEvent(topicId, actorUserId, message) {
+  insertEvent.run({ id: randomUUID(), topic_id: topicId, actor_user_id: actorUserId, message });
+}
 
 const upsertVote = sqlite.prepare(`
   INSERT INTO votes (id, topic_id, user_id, value)
@@ -114,6 +141,7 @@ export function topicsRoutes() {
     }
     const id = randomUUID();
     insertTopic.run({ id, ...parsed.data, created_by: req.user.id });
+    recordEvent(id, req.user.id, `${req.user.name} criou a pauta`);
     res.status(201).json({ topic: getTopic.get(id) });
   });
 
@@ -124,6 +152,7 @@ export function topicsRoutes() {
     const counts = getVoteCounts.get(topic.id);
     const myVote = getMyVote.get(topic.id, req.user.id);
     const comments = listComments.all(topic.id);
+    const events = listEvents.all(topic.id);
 
     res.json({
       topic: {
@@ -133,6 +162,7 @@ export function topicsRoutes() {
         myVote: myVote?.value ?? null,
       },
       comments,
+      events,
     });
   });
 
@@ -152,6 +182,13 @@ export function topicsRoutes() {
       assembly_date: assemblyDate,
       updated_at: nowIso(),
     });
+
+    const message = assemblyDate
+      ? `${req.user.name} marcou a pauta como pautada para ${assemblyDate}`
+      : `${req.user.name} reabriu a pauta`;
+    recordEvent(topic.id, req.user.id, message);
+    notifyTopicWatchers({ topicId: topic.id, actorUserId: req.user.id, message });
+
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -171,6 +208,28 @@ export function topicsRoutes() {
     }
 
     updateTopicContent.run({ id: topic.id, ...parsed.data, updated_at: nowIso() });
+    recordEvent(topic.id, req.user.id, `${req.user.name} editou a pauta`);
+    res.json({ topic: getTopic.get(topic.id) });
+  });
+
+  router.patch("/:id/status-note", requireStaff, (req, res) => {
+    const topic = getTopic.get(req.params.id);
+    if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+
+    const parsed = statusNoteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Escreva uma atualização (ou null para remover)." });
+    }
+
+    const { note } = parsed.data;
+    updateStatusNote.run({ id: topic.id, status_note: note, updated_at: nowIso() });
+
+    const message = note
+      ? `${req.user.name} atualizou a pauta: ${note}`
+      : `${req.user.name} removeu a atualização da pauta`;
+    recordEvent(topic.id, req.user.id, message);
+    notifyTopicWatchers({ topicId: topic.id, actorUserId: req.user.id, message });
+
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -210,6 +269,11 @@ export function topicsRoutes() {
 
     const id = randomUUID();
     insertComment.run({ id, topic_id: topic.id, user_id: req.user.id, body: parsed.data.body });
+    notifyTopicWatchers({
+      topicId: topic.id,
+      actorUserId: req.user.id,
+      message: `${req.user.name} comentou em "${topic.title}"`,
+    });
     res.status(201).json({ comments: listComments.all(topic.id) });
   });
 

@@ -1,9 +1,13 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
 import { hashPassword } from "../../auth/password.js";
-import { requireAdmin } from "../../auth/guards.js";
+import { requireAdmin, requireStaff } from "../../auth/guards.js";
+
+function generateTempPassword() {
+  return randomBytes(9).toString("base64url");
+}
 
 const createSindicoSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -26,6 +30,7 @@ const listUsers = sqlite.prepare(`
 `);
 
 const getUserById = sqlite.prepare("SELECT id, role FROM users WHERE id = ?");
+const updatePasswordHash = sqlite.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT id FROM users WHERE email = ?");
@@ -39,13 +44,12 @@ const updateRole = sqlite.prepare("UPDATE users SET role = ? WHERE id = ?");
 
 export function usersRoutes() {
   const router = Router();
-  router.use(requireAdmin);
 
-  router.get("/", (_req, res) => {
+  router.get("/", requireStaff, (_req, res) => {
     res.json({ users: listUsers.all() });
   });
 
-  router.post("/", async (req, res) => {
+  router.post("/", requireAdmin, async (req, res) => {
     const parsed = createSindicoSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Dados inválidos.", issues: parsed.error.issues });
@@ -85,7 +89,7 @@ export function usersRoutes() {
     res.status(201).json({ user: { id, name, email, role: "sindico", apartmentId: apartmentId ?? null } });
   });
 
-  router.patch("/:id/role", (req, res) => {
+  router.patch("/:id/role", requireAdmin, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
     if (target.role === "admin") {
@@ -99,6 +103,26 @@ export function usersRoutes() {
 
     updateRole.run(parsed.data.role, target.id);
     res.json({ user: { id: target.id, role: parsed.data.role } });
+  });
+
+  // Reset assistido: sindico só reseta senha de morador; admin reseta sindico ou morador;
+  // ninguém reseta o admin. A senha nova só existe em texto plano nesta resposta — quem
+  // resetou precisa repassar ao dono da conta por fora (whatsapp, telefone, pessoalmente).
+  router.patch("/:id/reset-password", requireStaff, async (req, res) => {
+    const target = getUserById.get(req.params.id);
+    if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
+    if (target.role === "admin") {
+      return res.status(400).json({ message: "Não é possível resetar a senha do administrador." });
+    }
+    if (req.user.role === "sindico" && target.role !== "morador") {
+      return res.status(403).json({ message: "Síndico só pode resetar a senha de moradores." });
+    }
+
+    const newPassword = generateTempPassword();
+    const passwordHash = await hashPassword(newPassword);
+    updatePasswordHash.run(passwordHash, target.id);
+
+    res.json({ newPassword });
   });
 
   return router;

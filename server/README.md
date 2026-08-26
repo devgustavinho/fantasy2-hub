@@ -28,6 +28,34 @@ npm run dev
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
 
+## Permissões por cargo
+
+| Ação | morador | síndico | admin |
+|---|---|---|---|
+| Criar pauta, votar, comentar | ✅ | ✅ | ✅ |
+| Editar título/descrição de uma pauta | só a própria | ✅ (qualquer) | ✅ (qualquer) |
+| Marcar/reabrir pauta como pautada, definir "atualização da administração" | ❌ | ✅ | ✅ |
+| Ver painel `/admin` (pautas por engajamento) | ❌ | ✅ | ✅ |
+| Ver lista de usuários (`GET /users`) | ❌ | ✅ | ✅ |
+| Resetar senha de um morador | ❌ | ✅ | ✅ |
+| Resetar senha de um síndico | ❌ | ❌ | ✅ |
+| Criar conta de síndico, promover/rebaixar cargo | ❌ | ❌ | ✅ |
+| Resetar/alterar cargo do admin | ❌ | ❌ | ❌ (nem o próprio admin — só via `scripts/create-admin.js` no servidor) |
+
+Reforçado em `src/auth/guards.js` (`requireAuth` < `requireStaff` < `requireAdmin`) e em checagens
+específicas dentro das rotas (ex. dono da pauta em `PATCH /topics/:id/content`, escopo síndico×admin em
+`PATCH /users/:id/reset-password`).
+
+## Notificações e histórico
+
+- `src/modules/notifications/service.js` — `notifyTopicWatchers` notifica quem criou, votou ou
+  comentou numa pauta (exceto quem disparou a ação) sempre que: alguém comenta, a pauta é
+  agendada/reaberta, ou a administração adiciona/edita a "atualização da administração"
+  (`topics.status_note`). Só notificação dentro do site (tabela `notifications`) — sem e-mail.
+- `topic_events` guarda o histórico estrutural de cada pauta (criada, editada, agendada/reaberta,
+  atualização da administração) — comentários já aparecem na própria seção de comentários, não são
+  duplicados no histórico.
+
 ## Adicionando uma nova migration
 
 1. Crie `migrations/000N_nome.sql` (o runner aplica em ordem alfabética e registra em `_migrations`).
