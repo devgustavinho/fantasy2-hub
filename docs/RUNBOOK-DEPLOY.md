@@ -69,7 +69,17 @@ HOST=127.0.0.1
 DATABASE_PATH=/home/getflix/apps/fantasy2-hub/server/data/fantasy2.db
 JWT_SECRET=<gere com: openssl rand -hex 32>
 CORS_ORIGIN=https://fantasy2.gcsolutions-devs.com.br
+VAPID_PUBLIC_KEY=<gere com: npx web-push generate-vapid-keys>
+VAPID_PRIVATE_KEY=<idem>
+VAPID_SUBJECT=mailto:seu-email@example.com
 ```
+
+⚠️ Toda vez que uma env var nova se tornar **obrigatória** em `src/env.js` (como aconteceu com as
+`VAPID_*` — feature de push), o deploy automático quebra no passo de migration (o processo sai com
+`process.exit(1)` antes de chegar no `systemctl restart`) até você adicionar a variável no `.env` da
+VPS. É uma falha segura (o serviço antigo continua rodando), mas o deploy fica "parado no meio" — depois
+de adicionar a env var, complete manualmente via SSH: `node --env-file=.env src/db/migrate.js && node
+--env-file=.env src/db/seed-apartments.js && sudo systemctl restart fantasy2-hub`.
 
 Rode as migrations, o seed e crie o primeiro admin:
 
