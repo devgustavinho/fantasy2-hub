@@ -371,7 +371,7 @@ export default function TopicDetail() {
 
           <div className="space-y-3">
             {comments.map((comment) => {
-              const isOfficial = comment.authorRole === "admin" || comment.authorRole === "sindico";
+              const isOfficial = comment.authorRole === "sindico";
               return (
                 <div
                   key={comment.id}
