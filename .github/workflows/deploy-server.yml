@@ -1,0 +1,47 @@
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", ".github/workflows/deploy-server.yml"]
+  workflow_dispatch: {}
+
+concurrency: { group: deploy-fantasy2-server, cancel-in-progress: false }
+
+env:
+  DEPLOY_HOST: 45.90.123.41
+  DEPLOY_USER: getflix
+  APP_DIR: /home/getflix/apps/fantasy2-hub
+  SERVICE_NAME: fantasy2-hub
+  HEALTH_PORT: 3100
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.FANTASY2_DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        run: |
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "APP_DIR='$APP_DIR' SERVICE_NAME='$SERVICE_NAME' HEALTH_PORT='$HEALTH_PORT' bash -s" <<'REMOTE'
+          set -euo pipefail
+          export PATH=/opt/node22/bin:$PATH
+          cd "$APP_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+          cd server
+          npm ci --omit=dev
+          node --env-file=.env src/db/migrate.js
+          node --env-file=.env src/db/seed-apartments.js
+          sudo -n systemctl restart "$SERVICE_NAME"
+          sleep 2
+          sudo -n systemctl is-active "$SERVICE_NAME"
+          curl -f -s -o /dev/null "http://127.0.0.1:$HEALTH_PORT/health"
+          echo "deploy ok: $(git rev-parse --short HEAD)"
+          REMOTE
