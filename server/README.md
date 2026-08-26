@@ -22,8 +22,10 @@ npm run dev
 - Booleans em SQLite: quando vem de uma subquery (ex. `available`), sempre convertido para `Boolean(...)` antes de responder no JSON.
 - Sessão: JWT assinado (`jsonwebtoken`) em cookie httpOnly (`fantasy2_session`), nunca em localStorage. `secure` ligado automaticamente em produção (`NODE_ENV=production`). Validade de 180 dias (`server/src/auth/jwt.js`) — é um app de condomínio, não banco, então prioriza não pedir login toda hora.
 - Passkeys (WebAuthn, `src/modules/webauthn/`): `rpID`/`rpOrigin` são derivados de `CORS_ORIGIN` (`src/env.js`), não são env vars separadas. **Isso significa que passkeys ficam amarradas ao domínio do frontend no momento do cadastro** — se `CORS_ORIGIN` mudar (ex. sair do `*.pages.dev` para um domínio customizado), as passkeys já cadastradas param de funcionar e os usuários precisam recadastrar em `/perfil`. Challenges de registro/login ficam em `Map`s em memória (TTL de 2 min, uso único) — não precisam sobreviver a um restart do processo.
-- Autorização: só na camada de rota (`requireAuth`, `requireStaff`, `requireAdmin` em `src/auth/guards.js`), sem lógica de permissão dentro do SQL.
-- 3 cargos (`role`): `admin` (só o dono do sistema, criado exclusivamente via `scripts/create-admin.js` — nunca por API), `sindico` (criado/promovido pelo admin em `/users`) e `morador` (auto-cadastro em `/auth/register`). `admin` e `sindico` **podem opcionalmente** ter `apartment_id` também (não são mutuamente exclusivos com "morar no condomínio").
+- Autorização: só na camada de rota (`requireAuth`, `requireApproved`, `requireStaff`, `requireAdmin` em `src/auth/guards.js`), sem lógica de permissão dentro do SQL.
+- 3 cargos (`role`): `admin`, `sindico` e `morador`. O primeiro admin é criado via `scripts/create-admin.js` no servidor (nunca por API), mas **a partir daí qualquer admin pode promover outro usuário a admin** pela tela de Usuários — não é mais um cargo único fixo. Únicas travas continuam: ninguém altera o próprio cargo, e não dá pra rebaixar o último admin restante (`server/src/modules/users/routes.js`). `admin` e `sindico` **podem opcionalmente** ter `apartment_id` também (não são mutuamente exclusivos com "morar no condomínio").
+- Cadastro (`approval_status`: `pending`/`approved`/`rejected`): todo `POST /auth/register` nasce `pending` e só um admin aprova/recusa (`PATCH /users/:id/approve|reject`). Recusar libera o apartamento (`apartment_id = NULL`) automaticamente. Login funciona mesmo pendente/recusado, mas sem sessão de verdade — o front mostra uma tela de status em vez do app (`requireApproved` bloqueia as rotas funcionais pra quem tinha sessão válida e foi recusado depois).
+- 2FA obrigatório pra admin (`src/auth/twoFactor.js`, TOTP via `otplib`, compatível com Google Authenticator): todo login de uma conta `admin` passa por `establishSession`, que só libera o cookie de sessão depois do código de 6 dígitos — na primeira vez, força o cadastro do 2FA (mostra QR code) antes de liberar. Vale tanto pra login por senha quanto por passkey.
 - Um apartamento só pode ter 1 morador vinculado — garantido por índice único parcial (`idx_users_apartment`, `WHERE apartment_id IS NOT NULL`), independente do cargo do usuário.
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
@@ -39,12 +41,16 @@ npm run dev
 | Ver lista de usuários (`GET /users`) | ❌ | ✅ | ✅ |
 | Resetar senha de um morador | ❌ | ✅ | ✅ |
 | Resetar senha de um síndico | ❌ | ❌ | ✅ |
-| Criar conta de síndico, promover/rebaixar cargo | ❌ | ❌ | ✅ |
-| Resetar/alterar cargo do admin | ❌ | ❌ | ❌ (nem o próprio admin — só via `scripts/create-admin.js` no servidor) |
+| Criar conta de síndico | ❌ | ❌ | ✅ |
+| Promover/rebaixar cargo (incl. promover a admin) | ❌ | ❌ | ✅ (exceto o próprio cargo e o último admin) |
+| Aprovar/recusar cadastro pendente | ❌ | ❌ | ✅ |
+| Excluir a própria pauta | ✅ | ✅ | ✅ |
+| Excluir pauta de outra pessoa (com motivo ≥ 10 caracteres) | ❌ | ❌ | ✅ |
+| Ver página de auditoria (`/admin/auditoria`) | ❌ | ❌ | ✅ |
 
-Reforçado em `src/auth/guards.js` (`requireAuth` < `requireStaff` < `requireAdmin`) e em checagens
-específicas dentro das rotas (ex. dono da pauta em `PATCH /topics/:id/content`, escopo síndico×admin em
-`PATCH /users/:id/reset-password`).
+Reforçado em `src/auth/guards.js` (`requireAuth` < `requireApproved` < `requireStaff` < `requireAdmin`)
+e em checagens específicas dentro das rotas (ex. dono da pauta em `PATCH /topics/:id/content` e
+`DELETE /topics/:id`, escopo síndico×admin em `PATCH /users/:id/reset-password`).
 
 ## Notificações e histórico
 
@@ -55,6 +61,20 @@ específicas dentro das rotas (ex. dono da pauta em `PATCH /topics/:id/content`,
 - `topic_events` guarda o histórico estrutural de cada pauta (criada, editada, agendada/reaberta,
   atualização da administração) — comentários já aparecem na própria seção de comentários, não são
   duplicados no histórico.
+- Excluir uma pauta apaga em cascata `votes`/`comments`/`topic_events`/`notifications` daquele
+  `topic_id` numa transação (SQLite não cascateia sozinho — `server/src/modules/topics/routes.js`,
+  `deleteTopicCascade`). Se quem excluiu não era o dono, o dono recebe uma notificação com o motivo
+  (`notifyUser`, `topic_id` fica `null` porque a pauta já não existe mais).
+
+## Auditoria
+
+`server/src/modules/audit/service.js` → `recordAudit(...)`, tabela `audit_log`, exposta em
+`GET /audit` (só admin). Registra ações administrativas/de segurança e mudanças de conteúdo — login,
+cadastro, 2FA ativado, criar/promover/aprovar/recusar/resetar senha de usuário,
+criar/editar/excluir/agendar pauta, atualização de status. **Não** registra ações triviais (voto,
+marcar notificação como lida, inscrição de push) — encheria o log sem valor de auditoria real. Se um
+novo tipo de ação precisar de auditoria, chame `recordAudit` no mesmo lugar onde a ação acontece (não
+tem trigger automático no banco).
 
 ## Adicionando uma nova migration
 

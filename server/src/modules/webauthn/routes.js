@@ -10,8 +10,7 @@ import {
 import { sqlite } from "../../db/client.js";
 import { webauthn } from "../../env.js";
 import { requireAuth } from "../../auth/guards.js";
-import { sessionCookieOptions, signSession, SESSION_COOKIE } from "../../auth/jwt.js";
-import { toPublicUser } from "../auth/routes.js";
+import { establishSession } from "../../auth/twoFactor.js";
 
 const CHALLENGE_TTL_MS = 2 * 60 * 1000;
 
@@ -30,9 +29,7 @@ function takeChallenge(store, key) {
 const getCredentialsByUser = sqlite.prepare(
   "SELECT id, credential_id, transports, device_name, created_at FROM webauthn_credentials WHERE user_id = ?",
 );
-const getUserByEmail = sqlite.prepare(
-  "SELECT id, apartment_id, name, email, role FROM users WHERE email = ?",
-);
+const getUserByEmail = sqlite.prepare("SELECT * FROM users WHERE email = ?");
 const getCredentialByCredentialId = sqlite.prepare(
   "SELECT * FROM webauthn_credentials WHERE credential_id = ?",
 );
@@ -47,11 +44,6 @@ const deleteCredential = sqlite.prepare(
 
 function toCredentialDescriptor(row) {
   return { id: row.credential_id, transports: row.transports ? JSON.parse(row.transports) : undefined };
-}
-
-function setSessionCookie(res, userId) {
-  const token = signSession({ sub: userId });
-  res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
 }
 
 const emailSchema = z.object({ email: z.string().trim().toLowerCase().email() });
@@ -199,8 +191,7 @@ export function webauthnRoutes() {
     }
 
     updateCounter.run(verification.authenticationInfo.newCounter, credentialRow.id);
-    setSessionCookie(res, user.id);
-    res.json({ user: toPublicUser(user) });
+    res.json(await establishSession(res, user));
   });
 
   router.get("/credentials", requireAuth, (req, res) => {

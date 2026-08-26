@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
-import { requireAuth, requireStaff } from "../../auth/guards.js";
-import { notifyTopicWatchers } from "../notifications/service.js";
+import { requireApproved, requireAuth, requireStaff } from "../../auth/guards.js";
+import { notifyTopicWatchers, notifyUser } from "../notifications/service.js";
+import { recordAudit } from "../audit/service.js";
 
 const nowIso = () => new Date().toISOString();
 
@@ -28,6 +29,10 @@ const patchSchema = z.object({
 
 const statusNoteSchema = z.object({
   note: z.string().trim().min(1).max(500).nullable(),
+});
+
+const deleteSchema = z.object({
+  reason: z.string().trim().min(10, "O motivo precisa ter pelo menos 10 caracteres."),
 });
 
 const listTopics = sqlite.prepare(`
@@ -120,9 +125,25 @@ const insertComment = sqlite.prepare(`
   VALUES (@id, @topic_id, @user_id, @body)
 `);
 
+const deleteVotesByTopic = sqlite.prepare("DELETE FROM votes WHERE topic_id = ?");
+const deleteCommentsByTopic = sqlite.prepare("DELETE FROM comments WHERE topic_id = ?");
+const deleteEventsByTopic = sqlite.prepare("DELETE FROM topic_events WHERE topic_id = ?");
+const deleteNotificationsByTopic = sqlite.prepare("DELETE FROM notifications WHERE topic_id = ?");
+const deleteTopicById = sqlite.prepare("DELETE FROM topics WHERE id = ?");
+
+// SQLite não cascateia sozinho — apaga tudo que referencia a pauta antes dela mesma, numa
+// transação (ou tudo ou nada).
+const deleteTopicCascade = sqlite.transaction((topicId) => {
+  deleteVotesByTopic.run(topicId);
+  deleteCommentsByTopic.run(topicId);
+  deleteEventsByTopic.run(topicId);
+  deleteNotificationsByTopic.run(topicId);
+  deleteTopicById.run(topicId);
+});
+
 export function topicsRoutes() {
   const router = Router();
-  router.use(requireAuth);
+  router.use(requireAuth, requireApproved);
 
   router.get("/", (_req, res) => {
     const rows = listTopics.all().map((row) => ({
@@ -142,6 +163,14 @@ export function topicsRoutes() {
     const id = randomUUID();
     insertTopic.run({ id, ...parsed.data, created_by: req.user.id });
     recordEvent(id, req.user.id, `${req.user.name} criou a pauta`);
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "topics.create",
+      entityType: "topic",
+      entityId: id,
+      details: { title: parsed.data.title },
+    });
     res.status(201).json({ topic: getTopic.get(id) });
   });
 
@@ -188,6 +217,14 @@ export function topicsRoutes() {
       : `${req.user.name} reabriu a pauta`;
     recordEvent(topic.id, req.user.id, message);
     notifyTopicWatchers({ topicId: topic.id, actorUserId: req.user.id, message });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: assemblyDate ? "topics.schedule" : "topics.reopen",
+      entityType: "topic",
+      entityId: topic.id,
+      details: { assemblyDate },
+    });
 
     res.json({ topic: getTopic.get(topic.id) });
   });
@@ -209,6 +246,13 @@ export function topicsRoutes() {
 
     updateTopicContent.run({ id: topic.id, ...parsed.data, updated_at: nowIso() });
     recordEvent(topic.id, req.user.id, `${req.user.name} editou a pauta`);
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "topics.edit",
+      entityType: "topic",
+      entityId: topic.id,
+    });
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -229,8 +273,58 @@ export function topicsRoutes() {
       : `${req.user.name} removeu a atualização da pauta`;
     recordEvent(topic.id, req.user.id, message);
     notifyTopicWatchers({ topicId: topic.id, actorUserId: req.user.id, message });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "topics.status_note",
+      entityType: "topic",
+      entityId: topic.id,
+      details: { note },
+    });
 
     res.json({ topic: getTopic.get(topic.id) });
+  });
+
+  router.delete("/:id", (req, res) => {
+    const topic = getTopic.get(req.params.id);
+    if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+
+    const isOwner = topic.createdById === req.user.id;
+    let reason = null;
+
+    if (!isOwner) {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          message: "Só quem criou a pauta (ou um administrador, com um motivo) pode excluí-la.",
+        });
+      }
+      const parsed = deleteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Informe um motivo com pelo menos 10 caracteres." });
+      }
+      reason = parsed.data.reason;
+    }
+
+    deleteTopicCascade(topic.id);
+
+    if (!isOwner) {
+      notifyUser({
+        userId: topic.createdById,
+        topicId: null,
+        message: `Sua pauta "${topic.title}" foi excluída pela administração. Motivo: ${reason}`,
+      });
+    }
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "topics.delete",
+      entityType: "topic",
+      entityId: topic.id,
+      details: { title: topic.title, reason, ownTopic: isOwner },
+    });
+
+    res.status(204).end();
   });
 
   router.post("/:id/vote", (req, res) => {

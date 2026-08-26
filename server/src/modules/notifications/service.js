@@ -37,3 +37,10 @@ export function notifyTopicWatchers({ topicId, actorUserId, message }) {
     sendPushToUser(userId, { title: topic?.title ?? "Fantasy 2 Hub", body: message, url: `/topics/${topicId}` });
   }
 }
+
+// Notifica um único usuário específico, sem depender de uma pauta ainda existir (ex.: aviso
+// de que a própria pauta foi excluída — `topicId` fica null nesse caso).
+export function notifyUser({ userId, topicId, message }) {
+  insertNotification.run({ id: randomUUID(), user_id: userId, topic_id: topicId ?? null, message });
+  sendPushToUser(userId, { title: "Fantasy 2 Hub", body: message, url: topicId ? `/topics/${topicId}` : "/" });
+}

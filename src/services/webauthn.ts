@@ -5,7 +5,7 @@ import {
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import { api } from "@/lib/api";
-import type { User } from "@/lib/types";
+import type { LoginResult } from "@/lib/types";
 
 export interface PasskeyCredential {
   id: string;
@@ -31,5 +31,5 @@ export async function loginWithPasskey(email: string) {
     email,
   });
   const response = await startAuthentication({ optionsJSON });
-  return api.post<{ user: User }>("/webauthn/login/verify", { email, response });
+  return api.post<LoginResult>("/webauthn/login/verify", { email, response });
 }

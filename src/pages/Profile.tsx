@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
+import * as authService from "@/services/auth";
 import type { Role } from "@/lib/types";
 
 function roleLabel(role: Role) {
@@ -18,8 +19,20 @@ function roleLabel(role: Role) {
 }
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const queryClient = useQueryClient();
+  const [whatsapp, setWhatsapp] = useState(user?.whatsapp ?? "");
+  const [whatsappVisible, setWhatsappVisible] = useState(user?.whatsappVisible ?? false);
+  const [whatsappSaved, setWhatsappSaved] = useState(false);
+
+  const whatsappMutation = useMutation({
+    mutationFn: () => authService.updateMyProfile({ whatsapp: whatsapp.trim() || null, whatsappVisible }),
+    onSuccess: ({ user }) => {
+      setUser(user);
+      setWhatsappSaved(true);
+      setTimeout(() => setWhatsappSaved(false), 2500);
+    },
+  });
   const [deviceName, setDeviceName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const supported = browserSupportsWebAuthn();
@@ -193,6 +206,41 @@ export default function Profile() {
               {pushError && <p className="text-sm text-destructive">{pushError}</p>}
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">WhatsApp</CardTitle>
+          <CardDescription>
+            Opcional. Se preenchido e marcado como visível, outros moradores conseguem ver seu WhatsApp
+            junto do seu nome nas pautas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp">Número</Label>
+            <Input
+              id="whatsapp"
+              placeholder="(11) 91234-5678"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={whatsappVisible}
+              onChange={(e) => setWhatsappVisible(e.target.checked)}
+            />
+            Mostrar meu WhatsApp para outros moradores
+          </label>
+          <div className="flex items-center gap-3">
+            <Button size="sm" disabled={whatsappMutation.isPending} onClick={() => whatsappMutation.mutate()}>
+              {whatsappMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+            {whatsappSaved && <span className="text-sm text-muted-foreground">Salvo!</span>}
+          </div>
         </CardContent>
       </Card>
     </div>

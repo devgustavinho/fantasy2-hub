@@ -25,3 +25,6 @@ export const editTopic = (id: string, data: { title: string; description: string
 
 export const updateStatusNote = (id: string, note: string | null) =>
   api.patch<{ topic: Topic }>(`/topics/${id}/status-note`, { note });
+
+export const deleteTopic = (id: string, reason?: string) =>
+  api.delete<void>(`/topics/${id}`, reason ? { reason } : undefined);

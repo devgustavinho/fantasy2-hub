@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { sqlite } from "../../db/client.js";
-import { requireAuth } from "../../auth/guards.js";
+import { requireApproved, requireAuth } from "../../auth/guards.js";
 
 const nowIso = () => new Date().toISOString();
 
@@ -8,7 +8,7 @@ const listMine = sqlite.prepare(`
   SELECT n.id, n.topic_id AS topicId, t.title AS topicTitle, n.message,
          n.read_at AS readAt, n.created_at AS createdAt
   FROM notifications n
-  JOIN topics t ON t.id = n.topic_id
+  LEFT JOIN topics t ON t.id = n.topic_id
   WHERE n.user_id = ?
   ORDER BY n.created_at DESC
   LIMIT 50
@@ -28,7 +28,7 @@ const markAllRead = sqlite.prepare(
 
 export function notificationsRoutes() {
   const router = Router();
-  router.use(requireAuth);
+  router.use(requireAuth, requireApproved);
 
   router.get("/", (req, res) => {
     res.json({

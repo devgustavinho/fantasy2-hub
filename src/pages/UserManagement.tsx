@@ -25,6 +25,12 @@ function roleBadge(role: Role) {
   return <Badge variant="secondary">Morador</Badge>;
 }
 
+function approvalBadge(status: ManagedUser["approvalStatus"]) {
+  if (status === "pending") return <Badge variant="secondary">Pendente</Badge>;
+  if (status === "rejected") return <Badge variant="destructive">Recusado</Badge>;
+  return null;
+}
+
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
@@ -78,15 +84,29 @@ export default function UserManagement() {
     onError: (err) => setError(err instanceof Error ? err.message : "Erro ao criar síndico."),
   });
 
+  const [roleError, setRoleError] = useState<string | null>(null);
   const roleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: "sindico" | "morador" }) =>
-      usersService.changeUserRole(id, role),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    mutationFn: ({ id, role }: { id: string; role: Role }) => usersService.changeUserRole(id, role),
+    onSuccess: () => {
+      setRoleError(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err) => setRoleError(err instanceof Error ? err.message : "Erro ao mudar o cargo."),
   });
 
   const resetPasswordMutation = useMutation({
     mutationFn: (target: ManagedUser) => usersService.resetUserPassword(target.id),
     onSuccess: (result, target) => setResetResult({ user: target, password: result.newPassword }),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => usersService.approveUser(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (id: string) => usersService.rejectUser(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
   });
 
   function handleSubmit(e: FormEvent) {
@@ -116,6 +136,45 @@ export default function UserManagement() {
             <Button size="sm" variant="outline" onClick={() => setResetResult(null)}>
               Fechar
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && data && data.users.some((u) => u.approvalStatus === "pending") && (
+        <Card className="border-brand-cyan/50 bg-brand-cyan/10">
+          <CardHeader>
+            <CardTitle className="text-base">Cadastros pendentes de aprovação</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {data.users
+              .filter((u) => u.approvalStatus === "pending")
+              .map((u) => (
+                <div key={u.id} className="flex items-center justify-between gap-3 rounded-md border bg-card p-3 text-sm">
+                  <div>
+                    <p className="font-medium">{u.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {u.email} · {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={approveMutation.isPending}
+                      onClick={() => approveMutation.mutate(u.id)}
+                    >
+                      Aprovar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={rejectMutation.isPending}
+                      onClick={() => rejectMutation.mutate(u.id)}
+                    >
+                      Recusar
+                    </Button>
+                  </div>
+                </div>
+              ))}
           </CardContent>
         </Card>
       )}
@@ -247,51 +306,96 @@ export default function UserManagement() {
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading && <p className="text-muted-foreground">Carregando...</p>}
-          {data?.users.map((u) => (
-            <div key={u.id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
-              <div>
-                <p className="font-medium">
-                  {u.name} <span className="font-normal text-muted-foreground">· {u.email}</span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
-                </p>
+          {roleError && <p className="text-sm text-destructive">{roleError}</p>}
+          {data?.users.map((u) => {
+            const isSelf = u.id === currentUser?.id;
+            return (
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                <div>
+                  <p className="font-medium">
+                    {u.name} <span className="font-normal text-muted-foreground">· {u.email}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {roleBadge(u.role)}
+                  {approvalBadge(u.approvalStatus)}
+                  {!isSelf && isAdmin && u.role === "admin" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={roleMutation.isPending}
+                        onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
+                      >
+                        Rebaixar p/ síndico
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={roleMutation.isPending}
+                        onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
+                      >
+                        Rebaixar p/ morador
+                      </Button>
+                    </>
+                  )}
+                  {!isSelf && isAdmin && u.role === "sindico" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={roleMutation.isPending}
+                        onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
+                      >
+                        Rebaixar para morador
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={roleMutation.isPending}
+                        onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
+                      >
+                        Promover a admin
+                      </Button>
+                    </>
+                  )}
+                  {!isSelf && isAdmin && u.role === "morador" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={roleMutation.isPending}
+                        onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
+                      >
+                        Promover a síndico
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={roleMutation.isPending}
+                        onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
+                      >
+                        Promover a admin
+                      </Button>
+                    </>
+                  )}
+                  {!isSelf && u.role !== "admin" && (isAdmin || u.role === "morador") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resetPasswordMutation.isPending}
+                      onClick={() => resetPasswordMutation.mutate(u)}
+                    >
+                      Resetar senha
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {roleBadge(u.role)}
-                {isAdmin && u.role === "sindico" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={roleMutation.isPending}
-                    onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
-                  >
-                    Rebaixar para morador
-                  </Button>
-                )}
-                {isAdmin && u.role === "morador" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={roleMutation.isPending}
-                    onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
-                  >
-                    Promover a síndico
-                  </Button>
-                )}
-                {u.role !== "admin" && (isAdmin || u.role === "morador") && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={resetPasswordMutation.isPending}
-                    onClick={() => resetPasswordMutation.mutate(u)}
-                  >
-                    Resetar senha
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
     </div>

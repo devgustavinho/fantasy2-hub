@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientBorderCard } from "@/components/ui/gradient-border-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
 import * as authService from "@/services/auth";
 import { listApartmentsByTower } from "@/services/apartments";
 import type { Apartment } from "@/lib/types";
@@ -31,9 +30,7 @@ export default function Register() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const { setUser } = useAuth();
-  const navigate = useNavigate();
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (tower === null) return;
@@ -57,9 +54,8 @@ export default function Register() {
     setError(null);
     setLoading(true);
     try {
-      const { user } = await authService.register({ apartmentId, name, email, password });
-      setUser(user);
-      navigate("/");
+      await authService.register({ apartmentId, name, email, password });
+      setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cadastrar.");
     } finally {
@@ -81,6 +77,18 @@ export default function Register() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {submitted ? (
+            <div className="space-y-3 text-center">
+              <p className="text-sm">
+                Cadastro enviado! Sua conta fica aguardando aprovação da administração do condomínio —
+                você recebe acesso assim que for aprovado.
+              </p>
+              <Link to="/login" className="text-sm font-medium text-primary underline">
+                Voltar para o login
+              </Link>
+            </div>
+          ) : (
+          <>
           <div className="space-y-2">
             <Label>Torre</Label>
             <div className="flex flex-wrap gap-2">
@@ -187,6 +195,8 @@ export default function Register() {
               Entrar
             </Link>
           </p>
+          </>
+          )}
         </CardContent>
       </Card>
       </GradientBorderCard>

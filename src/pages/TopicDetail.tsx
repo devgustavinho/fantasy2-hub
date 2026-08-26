@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,10 @@ import { cn, formatDateOnly } from "@/lib/utils";
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [isDeletingWithReason, setIsDeletingWithReason] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [assemblyDate, setAssemblyDate] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -73,13 +76,35 @@ export default function TopicDetail() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (reason?: string) => topicsService.deleteTopic(id!, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["topics"] });
+      navigate("/");
+    },
+  });
+
   if (isLoading || !data) {
     return <p className="mx-auto max-w-4xl px-4 py-8 text-muted-foreground">Carregando...</p>;
   }
 
   const { topic, comments, events } = data;
   const isStaff = user?.role === "admin" || user?.role === "sindico";
-  const canEdit = !!user && (user.id === topic.createdById || user.role === "admin" || user.role === "sindico");
+  const isOwner = user?.id === topic.createdById;
+  const canEdit = !!user && (isOwner || user.role === "admin" || user.role === "sindico");
+  const canDelete = !!user && (isOwner || user.role === "admin");
+
+  function handleDeleteOwn() {
+    if (window.confirm("Tem certeza que deseja excluir esta pauta? Essa ação não pode ser desfeita.")) {
+      deleteMutation.mutate(undefined);
+    }
+  }
+
+  function handleDeleteWithReason(e: FormEvent) {
+    e.preventDefault();
+    if (deleteReason.trim().length < 10) return;
+    deleteMutation.mutate(deleteReason.trim());
+  }
 
   function handleComment(e: FormEvent) {
     e.preventDefault();
@@ -131,6 +156,16 @@ export default function TopicDetail() {
               {canEdit && !isEditing && (
                 <Button variant="outline" size="sm" onClick={startEditing}>
                   Editar
+                </Button>
+              )}
+              {isOwner && canDelete && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleteMutation.isPending}
+                  onClick={handleDeleteOwn}
+                >
+                  Excluir
                 </Button>
               )}
             </div>
@@ -250,6 +285,44 @@ export default function TopicDetail() {
                   <Button variant="outline" size="sm" onClick={startEditingNote}>
                     {topic.statusNote ? "Editar atualização" : "Adicionar atualização"}
                   </Button>
+                </div>
+              )}
+
+              {!isOwner && user?.role === "admin" && (
+                <div className="border-t pt-3">
+                  {isDeletingWithReason ? (
+                    <form onSubmit={handleDeleteWithReason} className="space-y-2">
+                      <Label htmlFor="deleteReason">Motivo da exclusão (mínimo 10 caracteres)</Label>
+                      <Textarea
+                        id="deleteReason"
+                        rows={2}
+                        value={deleteReason}
+                        onChange={(e) => setDeleteReason(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="submit"
+                          variant="destructive"
+                          size="sm"
+                          disabled={deleteReason.trim().length < 10 || deleteMutation.isPending}
+                        >
+                          Confirmar exclusão
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsDeletingWithReason(false)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <Button variant="destructive" size="sm" onClick={() => setIsDeletingWithReason(true)}>
+                      Excluir pauta
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

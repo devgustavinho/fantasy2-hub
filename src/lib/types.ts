@@ -1,4 +1,5 @@
 export type Role = "admin" | "sindico" | "morador";
+export type ApprovalStatus = "pending" | "approved" | "rejected";
 
 export interface User {
   id: string;
@@ -6,6 +7,9 @@ export interface User {
   email: string;
   role: Role;
   apartmentId: string | null;
+  approvalStatus: ApprovalStatus;
+  whatsapp: string | null;
+  whatsappVisible: boolean;
 }
 
 export interface ManagedUser {
@@ -14,6 +18,9 @@ export interface ManagedUser {
   email: string;
   role: Role;
   createdAt: string;
+  approvalStatus: ApprovalStatus;
+  whatsapp: string | null;
+  whatsappVisible: boolean;
   tower: number | null;
   apartmentCode: string | null;
 }
@@ -64,9 +71,28 @@ export interface TopicEvent {
 
 export interface Notification {
   id: string;
-  topicId: string;
-  topicTitle: string;
+  topicId: string | null;
+  topicTitle: string | null;
   message: string;
   readAt: string | null;
   createdAt: string;
 }
+
+export interface AuditEntry {
+  id: string;
+  actorUserId: string | null;
+  actorName: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+// Resultado de login (senha ou passkey) — o backend pode responder de 4 formas diferentes
+// dependendo do estado da conta (aprovação pendente/recusada, 2FA obrigatório pra admin).
+export type LoginResult =
+  | { status: "ok"; user: User }
+  | { status: "pending" | "rejected" }
+  | { status: "totp-setup-required"; token: string; otpauthUrl: string; qrDataUrl: string }
+  | { status: "totp-verify-required"; token: string };

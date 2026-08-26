@@ -33,6 +33,11 @@ export function Navbar() {
                 Usuários
               </Link>
             )}
+            {user.role === "admin" && (
+              <Link to="/admin/auditoria" className="text-white/70 transition-colors hover:text-white">
+                Auditoria
+              </Link>
+            )}
             <NotificationBell />
             <Link to="/perfil" className="text-white/70 transition-colors hover:text-brand-gold">
               {user.name}

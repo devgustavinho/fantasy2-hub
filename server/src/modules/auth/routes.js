@@ -3,8 +3,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
 import { hashPassword, verifyPassword } from "../../auth/password.js";
-import { signSession, sessionCookieOptions, SESSION_COOKIE } from "../../auth/jwt.js";
+import { SESSION_COOKIE } from "../../auth/jwt.js";
 import { requireAuth } from "../../auth/guards.js";
+import { toPublicUser } from "../../auth/publicUser.js";
+import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
+import { recordAudit } from "../audit/service.js";
 
 const registerSchema = z.object({
   apartmentId: z.string().min(1),
@@ -18,30 +21,28 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const totpSchema = z.object({
+  token: z.string().min(1),
+  code: z.string().trim().min(6).max(6),
+});
+
+const meUpdateSchema = z.object({
+  whatsapp: z.string().trim().max(30).nullable().optional(),
+  whatsappVisible: z.boolean().optional(),
+});
+
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
-const getUserByEmail = sqlite.prepare(
-  "SELECT id, apartment_id, name, email, password_hash, role FROM users WHERE email = ?",
-);
+const getUserByEmail = sqlite.prepare("SELECT * FROM users WHERE email = ?");
 const insertUser = sqlite.prepare(`
-  INSERT INTO users (id, apartment_id, name, email, password_hash, role)
-  VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador')
+  INSERT INTO users (id, apartment_id, name, email, password_hash, role, approval_status)
+  VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador', 'pending')
 `);
+const updateMe = sqlite.prepare(
+  "UPDATE users SET whatsapp = @whatsapp, whatsapp_visible = @whatsapp_visible WHERE id = @id",
+);
 
-export function toPublicUser(user) {
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    apartmentId: user.apartment_id,
-  };
-}
-
-function setSessionCookie(res, userId) {
-  const token = signSession({ sub: userId });
-  res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
-}
+export { toPublicUser };
 
 export function authRoutes() {
   const router = Router();
@@ -81,10 +82,16 @@ export function authRoutes() {
       throw err;
     }
 
-    setSessionCookie(res, userId);
-    res.status(201).json({
-      user: { id: userId, name, email, role: "morador", apartmentId },
+    recordAudit({
+      actorUserId: userId,
+      actorName: name,
+      action: "auth.register",
+      entityType: "user",
+      entityId: userId,
+      details: { email, apartmentId },
     });
+
+    res.status(201).json({ status: "pending" });
   });
 
   router.post("/login", async (req, res) => {
@@ -99,8 +106,35 @@ export function authRoutes() {
       return res.status(401).json({ message: "E-mail ou senha incorretos." });
     }
 
-    setSessionCookie(res, user.id);
-    res.json({ user: toPublicUser(user) });
+    recordAudit({ actorUserId: user.id, actorName: user.name, action: "auth.login", entityType: "user", entityId: user.id });
+    res.json(await establishSession(res, user));
+  });
+
+  router.post("/2fa/setup/confirm", (req, res) => {
+    const parsed = totpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Informe o código de 6 dígitos." });
+
+    const result = confirmTotpSetup(res, parsed.data.token, parsed.data.code);
+    if (result.error) return res.status(400).json({ message: result.error });
+
+    recordAudit({
+      actorUserId: result.user.id,
+      actorName: result.user.name,
+      action: "auth.2fa_enabled",
+      entityType: "user",
+      entityId: result.user.id,
+    });
+    res.json({ status: "ok", user: result.user });
+  });
+
+  router.post("/2fa/verify", (req, res) => {
+    const parsed = totpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Informe o código de 6 dígitos." });
+
+    const result = verifyTotpLogin(res, parsed.data.token, parsed.data.code);
+    if (result.error) return res.status(400).json({ message: result.error });
+
+    res.json({ status: "ok", user: result.user });
   });
 
   router.post("/logout", (_req, res) => {
@@ -110,6 +144,20 @@ export function authRoutes() {
 
   router.get("/me", requireAuth, (req, res) => {
     res.json({ user: toPublicUser(req.user) });
+  });
+
+  router.patch("/me", requireAuth, (req, res) => {
+    const parsed = meUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Dados inválidos." });
+
+    const whatsapp = parsed.data.whatsapp !== undefined ? parsed.data.whatsapp : req.user.whatsapp;
+    const whatsappVisible =
+      parsed.data.whatsappVisible !== undefined ? parsed.data.whatsappVisible : Boolean(req.user.whatsapp_visible);
+
+    updateMe.run({ id: req.user.id, whatsapp: whatsapp || null, whatsapp_visible: whatsappVisible ? 1 : 0 });
+    res.json({
+      user: toPublicUser({ ...req.user, whatsapp: whatsapp || null, whatsapp_visible: whatsappVisible ? 1 : 0 }),
+    });
   });
 
   return router;
