@@ -9,6 +9,7 @@ import TopicsList from "@/pages/TopicsList";
 import TopicDetail from "@/pages/TopicDetail";
 import AdminPanel from "@/pages/AdminPanel";
 import UserManagement from "@/pages/UserManagement";
+import Profile from "@/pages/Profile";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <TopicDetail />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/perfil"
+                element={
+                  <AppLayout>
+                    <Profile />
                   </AppLayout>
                 }
               />

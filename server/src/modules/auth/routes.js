@@ -28,7 +28,7 @@ const insertUser = sqlite.prepare(`
   VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador')
 `);
 
-function toPublicUser(user) {
+export function toPublicUser(user) {
   return {
     id: user.id,
     name: user.name,

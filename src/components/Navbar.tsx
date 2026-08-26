@@ -32,7 +32,9 @@ export function Navbar() {
                 Usuários
               </Link>
             )}
-            <span className="text-muted-foreground">{user.name}</span>
+            <Link to="/perfil" className="text-muted-foreground hover:text-foreground">
+              {user.name}
+            </Link>
             <Button variant="outline" size="sm" onClick={handleLogout}>
               Sair
             </Button>

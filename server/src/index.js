@@ -8,6 +8,7 @@ import { authRoutes } from "./modules/auth/routes.js";
 import { apartmentsRoutes } from "./modules/apartments/routes.js";
 import { topicsRoutes } from "./modules/topics/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
+import { webauthnRoutes } from "./modules/webauthn/routes.js";
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/auth", authLimiter, authRoutes());
 app.use("/apartments", apartmentsRoutes());
 app.use("/topics", topicsRoutes());
 app.use("/users", usersRoutes());
+app.use("/webauthn", authLimiter, webauthnRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });

@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { env, isProd } from "../env.js";
 
 export const SESSION_COOKIE = "fantasy2_session";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 dias
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 180; // 180 dias — app do condomínio, não banco
 
 export function signSession(payload) {
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: SESSION_TTL_SECONDS });

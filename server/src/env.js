@@ -19,3 +19,12 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProd = env.NODE_ENV === "production";
+
+// Passkeys ficam amarradas ao domínio do front no momento do cadastro — se o CORS_ORIGIN
+// mudar (ex. domínio customizado no lugar do *.pages.dev), passkeys antigas param de
+// funcionar e os usuários precisam recadastrar.
+export const webauthn = {
+  rpID: new URL(env.CORS_ORIGIN).hostname,
+  rpOrigin: env.CORS_ORIGIN,
+  rpName: "Fantasy 2 Hub",
+};
