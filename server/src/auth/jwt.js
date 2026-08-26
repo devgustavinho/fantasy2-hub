@@ -19,7 +19,10 @@ export function verifySession(token) {
 export const sessionCookieOptions = {
   httpOnly: true,
   secure: isProd,
-  sameSite: "lax",
+  // Front (Cloudflare Pages) e API (VPS) vivem em domínios diferentes, então o cookie
+  // precisa ser cross-site. SameSite=None exige Secure, por isso só em produção (HTTPS);
+  // em dev local (http://localhost) cai para "lax", que é o único valor aceito sem Secure.
+  sameSite: isProd ? "none" : "lax",
   path: "/",
   maxAge: SESSION_TTL_SECONDS * 1000,
 };
