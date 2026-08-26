@@ -152,18 +152,25 @@ sudo certbot --nginx -d api-fantasy2.gcsolutions-devs.com.br
 Isso reescreve o arquivo automaticamente (bloco 443 com o certificado + redirect 80→443), igual ao
 `n8n.gcsolutions-devs.com.br.conf` existente.
 
-## 7. DNS
+## 7. DNS (feito — status: ✅ concluído)
 
-`gcsolutions-devs.com.br` fica onde já está hoje (não precisou migrar pra Cloudflare). Só precisa
-adicionar, no provedor de DNS atual do domínio:
+`gcsolutions-devs.com.br` ficou onde já estava (não precisou migrar pra Cloudflare). Registro `A` de
+`api-fantasy2.gcsolutions-devs.com.br` → `45.90.123.41` adicionado no Registro.br, sem proxy/CDN na
+frente (acesso direto à VPS). Certificado emitido via certbot no passo 6.
 
-- `api-fantasy2.gcsolutions-devs.com.br` → registro `A` → `45.90.123.41` (sem proxy/CDN na frente, é
-  acesso direto à VPS — nada de "nuvem laranja" aqui, já que não é Cloudflare).
+O frontend usa por enquanto a URL padrão gratuita do Cloudflare Pages
+(`https://fantasy2-hub.pages.dev`) em vez de um domínio customizado — como `gcsolutions-devs.com.br`
+não está na Cloudflare, apontar um domínio próprio para o Pages não é trivial. Isso pode ser revisitado
+no futuro se quiser um domínio customizado para o front.
 
-O frontend (`fantasy2.gcsolutions-devs.com.br`) fica para depois: como o domínio não está na
-Cloudflare, um domínio customizado no Cloudflare Pages não é trivial de configurar agora. Por padrão,
-o Cloudflare Pages já entrega um subdomínio gratuito `*.pages.dev` que funciona independente de onde o
-domínio principal está hospedado — comece usando esse.
+## ⚠️ Nota importante: cookie cross-site
+
+Como o front (`fantasy2-hub.pages.dev`) e a API (`api-fantasy2.gcsolutions-devs.com.br`) são **sites
+diferentes** (eTLD+1 distintos), o cookie de sessão precisa de `SameSite=None; Secure` para ser aceito
+em requisições cross-site — já ajustado em `server/src/auth/jwt.js` (`sessionCookieOptions`). Se um dia
+o front passar a usar um subdomínio de `gcsolutions-devs.com.br` (mesmo site da API), isso deixa de ser
+estritamente necessário, mas `SameSite=None` continua funcionando normalmente mesmo same-site — não
+precisa reverter.
 
 ## 8. Secrets do GitHub Actions
 
@@ -198,7 +205,12 @@ o repositório e builda automaticamente a cada push em `main` (preview builds em
 - [x] systemd `fantasy2-hub` ativo e respondendo em `/health` (porta 3100)
 - [x] sudoers configurado para restart sem senha (deploy automático)
 - [x] nginx servindo `api-fantasy2.gcsolutions-devs.com.br` → `127.0.0.1:3100` (padrão certbot direto, igual ao n8n — domínio não está na Cloudflare)
-- [ ] DNS: registro `A` de `api-fantasy2.gcsolutions-devs.com.br` → `45.90.123.41` no provedor atual do domínio — **pendente, você precisa adicionar**
-- [ ] `sudo certbot --nginx -d api-fantasy2.gcsolutions-devs.com.br` na VPS, depois do DNS propagar
-- [ ] Cloudflare Pages conectado, build passando, usando a URL `*.pages.dev` (domínio customizado fica para depois) — **pendente**
-- [ ] Testar cadastro real de um apartamento ponta a ponta em produção — depende dos itens acima
+- [x] DNS: registro `A` de `api-fantasy2.gcsolutions-devs.com.br` → `45.90.123.41` (Registro.br)
+- [x] Certificado TLS emitido via `certbot --nginx -d api-fantasy2.gcsolutions-devs.com.br`
+- [x] Cloudflare Pages conectado (`https://fantasy2-hub.pages.dev`), build correto (output `dist`)
+- [x] `VITE_API_URL` e `CORS_ORIGIN` configurados para o par pages.dev ↔ api-fantasy2
+- [x] Cookie de sessão ajustado para `SameSite=None` (necessário por serem sites diferentes)
+- [x] Testado ponta a ponta em produção: cadastro de apartamento, login, criar pauta, votar,
+      comentar, marcar/reabrir como pautada (admin) — tudo funcionando
+- [ ] Domínio customizado do frontend (`fantasy2.gcsolutions-devs.com.br`) — opcional, fica para
+      quando/se quiser investir em mover esse domínio (ou um subdomínio dele) para a Cloudflare
