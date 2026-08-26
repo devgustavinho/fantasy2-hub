@@ -25,7 +25,7 @@ const getUserByEmail = sqlite.prepare(
 );
 const insertUser = sqlite.prepare(`
   INSERT INTO users (id, apartment_id, name, email, password_hash, role)
-  VALUES (@id, @apartment_id, @name, @email, @password_hash, 'resident')
+  VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador')
 `);
 
 function toPublicUser(user) {
@@ -83,7 +83,7 @@ export function authRoutes() {
 
     setSessionCookie(res, userId);
     res.status(201).json({
-      user: { id: userId, name, email, role: "resident", apartmentId },
+      user: { id: userId, name, email, role: "morador", apartmentId },
     });
   });
 

@@ -8,7 +8,17 @@ export function ProtectedRoute() {
   return <Outlet />;
 }
 
-export function AdminRoute() {
+// admin + sindico: painel de pautas por engajamento, marcar/reabrir pauta
+export function StaffRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "admin" && user.role !== "sindico") return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
+// só admin: gerenciar contas e cargos de outros usuários
+export function AdminOnlyRoute() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;

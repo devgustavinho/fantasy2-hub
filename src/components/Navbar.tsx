@@ -22,9 +22,14 @@ export function Navbar() {
             <Link to="/" className="text-muted-foreground hover:text-foreground">
               Pautas
             </Link>
-            {user.role === "admin" && (
+            {(user.role === "admin" || user.role === "sindico") && (
               <Link to="/admin" className="text-muted-foreground hover:text-foreground">
                 Administração
+              </Link>
+            )}
+            {user.role === "admin" && (
+              <Link to="/admin/usuarios" className="text-muted-foreground hover:text-foreground">
+                Usuários
               </Link>
             )}
             <span className="text-muted-foreground">{user.name}</span>

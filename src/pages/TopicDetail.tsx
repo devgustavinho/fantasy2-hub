@@ -100,7 +100,7 @@ export default function TopicDetail() {
             </Button>
           </div>
 
-          {user?.role === "admin" && (
+          {(user?.role === "admin" || user?.role === "sindico") && (
             <div className="space-y-2 rounded-md border bg-muted/40 p-4">
               <p className="text-sm font-medium">Administração</p>
               {topic.status === "scheduled" ? (

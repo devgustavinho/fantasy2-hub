@@ -1,4 +1,4 @@
-export type Role = "resident" | "admin";
+export type Role = "admin" | "sindico" | "morador";
 
 export interface User {
   id: string;
@@ -6,6 +6,16 @@ export interface User {
   email: string;
   role: Role;
   apartmentId: string | null;
+}
+
+export interface ManagedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  createdAt: string;
+  tower: number | null;
+  apartmentCode: string | null;
 }
 
 export interface Apartment {

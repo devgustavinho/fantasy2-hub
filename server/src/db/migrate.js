@@ -25,11 +25,15 @@ let count = 0;
 for (const file of files) {
   if (applied.has(file)) continue;
   const sql = readFileSync(join(migrationsDir, file), "utf8");
+  // foreign_keys é no-op dentro de transação, então migrations que recriam tabelas
+  // (ex. mudar um CHECK constraint) precisam desabilitar antes de abrir a transação.
+  sqlite.pragma("foreign_keys = OFF");
   const runMigration = sqlite.transaction(() => {
     sqlite.exec(sql);
     sqlite.prepare("INSERT INTO _migrations (name) VALUES (?)").run(file);
   });
   runMigration();
+  sqlite.pragma("foreign_keys = ON");
   console.log(`applied migration: ${file}`);
   count += 1;
 }

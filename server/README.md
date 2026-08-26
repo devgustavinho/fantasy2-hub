@@ -21,8 +21,9 @@ npm run dev
 - IDs: `crypto.randomUUID()` gerado na aplicação, nunca autoincrement.
 - Booleans em SQLite: quando vem de uma subquery (ex. `available`), sempre convertido para `Boolean(...)` antes de responder no JSON.
 - Sessão: JWT assinado (`jsonwebtoken`) em cookie httpOnly (`fantasy2_session`), nunca em localStorage. `secure` ligado automaticamente em produção (`NODE_ENV=production`).
-- Autorização: só na camada de rota (`requireAuth`, `requireAdmin` em `src/auth/guards.js`), sem lógica de permissão dentro do SQL.
-- Um apartamento só pode ter 1 morador — garantido por índice único parcial (`idx_users_apartment`, `WHERE apartment_id IS NOT NULL`). Contas admin têm `apartment_id = NULL` e não contam nesse limite.
+- Autorização: só na camada de rota (`requireAuth`, `requireStaff`, `requireAdmin` em `src/auth/guards.js`), sem lógica de permissão dentro do SQL.
+- 3 cargos (`role`): `admin` (só o dono do sistema, criado exclusivamente via `scripts/create-admin.js` — nunca por API), `sindico` (criado/promovido pelo admin em `/users`) e `morador` (auto-cadastro em `/auth/register`). `admin` e `sindico` **podem opcionalmente** ter `apartment_id` também (não são mutuamente exclusivos com "morar no condomínio").
+- Um apartamento só pode ter 1 morador vinculado — garantido por índice único parcial (`idx_users_apartment`, `WHERE apartment_id IS NOT NULL`), independente do cargo do usuário.
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
 

@@ -22,10 +22,20 @@ export function requireAuth(req, res, next) {
   next();
 }
 
+// admin + sindico: tarefas operacionais do dia a dia (marcar pauta como agendada, etc.)
+export function requireStaff(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
+  if (req.user.role !== "admin" && req.user.role !== "sindico") {
+    return res.status(403).json({ message: "Apenas a administração pode fazer isso." });
+  }
+  next();
+}
+
+// só admin (conta única do dono do sistema): gerenciar contas e cargos de outros usuários.
 export function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
   if (req.user.role !== "admin") {
-    return res.status(403).json({ message: "Apenas a administração pode fazer isso." });
+    return res.status(403).json({ message: "Apenas o administrador pode fazer isso." });
   }
   next();
 }

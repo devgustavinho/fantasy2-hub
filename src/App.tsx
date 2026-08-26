@@ -1,13 +1,14 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { AdminRoute, ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
 import { Navbar } from "@/components/Navbar";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import TopicsList from "@/pages/TopicsList";
 import TopicDetail from "@/pages/TopicDetail";
 import AdminPanel from "@/pages/AdminPanel";
+import UserManagement from "@/pages/UserManagement";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,12 +50,23 @@ export default function App() {
               />
             </Route>
 
-            <Route element={<AdminRoute />}>
+            <Route element={<StaffRoute />}>
               <Route
                 path="/admin"
                 element={
                   <AppLayout>
                     <AdminPanel />
+                  </AppLayout>
+                }
+              />
+            </Route>
+
+            <Route element={<AdminOnlyRoute />}>
+              <Route
+                path="/admin/usuarios"
+                element={
+                  <AppLayout>
+                    <UserManagement />
                   </AppLayout>
                 }
               />

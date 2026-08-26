@@ -1,0 +1,14 @@
+import { api } from "@/lib/api";
+import type { ManagedUser, Role } from "@/lib/types";
+
+export const listUsers = () => api.get<{ users: ManagedUser[] }>("/users");
+
+export const createSindico = (data: {
+  name: string;
+  email: string;
+  password: string;
+  apartmentId?: string | null;
+}) => api.post<{ user: ManagedUser }>("/users", data);
+
+export const changeUserRole = (id: string, role: Extract<Role, "sindico" | "morador">) =>
+  api.patch<{ user: { id: string; role: Role } }>(`/users/${id}/role`, { role });

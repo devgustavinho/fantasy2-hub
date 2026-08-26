@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
-import { requireAuth, requireAdmin } from "../../auth/guards.js";
+import { requireAuth, requireStaff } from "../../auth/guards.js";
 
 const nowIso = () => new Date().toISOString();
 
@@ -129,7 +129,7 @@ export function topicsRoutes() {
     });
   });
 
-  router.patch("/:id", requireAdmin, (req, res) => {
+  router.patch("/:id", requireStaff, (req, res) => {
     const topic = getTopic.get(req.params.id);
     if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
 
