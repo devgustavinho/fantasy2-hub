@@ -19,3 +19,6 @@ export const commentOnTopic = (id: string, body: string) =>
 
 export const scheduleTopic = (id: string, assemblyDate: string | null) =>
   api.patch<{ topic: Topic }>(`/topics/${id}`, { assemblyDate });
+
+export const editTopic = (id: string, data: { title: string; description: string }) =>
+  api.patch<{ topic: Topic }>(`/topics/${id}/content`, data);

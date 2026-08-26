@@ -11,6 +11,8 @@ const createSchema = z.object({
   description: z.string().trim().min(4).max(4000),
 });
 
+const editSchema = createSchema;
+
 const voteSchema = z.object({
   value: z.enum(["favor", "contra"]),
 });
@@ -42,7 +44,7 @@ const getTopic = sqlite.prepare(`
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
-    u.name AS createdByName
+    t.created_by AS createdById, u.name AS createdByName
   FROM topics t
   JOIN users u ON u.id = t.created_by
   WHERE t.id = ?
@@ -72,6 +74,11 @@ const insertTopic = sqlite.prepare(`
 
 const updateTopicSchedule = sqlite.prepare(`
   UPDATE topics SET status = @status, assembly_date = @assembly_date, updated_at = @updated_at
+  WHERE id = @id
+`);
+
+const updateTopicContent = sqlite.prepare(`
+  UPDATE topics SET title = @title, description = @description, updated_at = @updated_at
   WHERE id = @id
 `);
 
@@ -145,6 +152,25 @@ export function topicsRoutes() {
       assembly_date: assemblyDate,
       updated_at: nowIso(),
     });
+    res.json({ topic: getTopic.get(topic.id) });
+  });
+
+  router.patch("/:id/content", (req, res) => {
+    const topic = getTopic.get(req.params.id);
+    if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+
+    const isOwner = topic.createdById === req.user.id;
+    const isStaff = req.user.role === "admin" || req.user.role === "sindico";
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ message: "Só quem criou a pauta (ou a administração) pode editá-la." });
+    }
+
+    const parsed = editSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Preencha título e descrição da pauta." });
+    }
+
+    updateTopicContent.run({ id: topic.id, ...parsed.data, updated_at: nowIso() });
     res.json({ topic: getTopic.get(topic.id) });
   });
 

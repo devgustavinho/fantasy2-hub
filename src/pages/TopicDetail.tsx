@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
@@ -18,6 +19,10 @@ export default function TopicDetail() {
   const queryClient = useQueryClient();
   const [commentBody, setCommentBody] = useState("");
   const [assemblyDate, setAssemblyDate] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["topic", id],
@@ -48,16 +53,40 @@ export default function TopicDetail() {
     onSuccess: invalidate,
   });
 
+  const editMutation = useMutation({
+    mutationFn: () => topicsService.editTopic(id!, { title: editTitle, description: editDescription }),
+    onSuccess: () => {
+      setIsEditing(false);
+      setEditError(null);
+      invalidate();
+    },
+    onError: (err) => setEditError(err instanceof Error ? err.message : "Erro ao salvar."),
+  });
+
   if (isLoading || !data) {
     return <p className="mx-auto max-w-4xl px-4 py-8 text-muted-foreground">Carregando...</p>;
   }
 
   const { topic, comments } = data;
+  const canEdit = !!user && (user.id === topic.createdById || user.role === "admin" || user.role === "sindico");
 
   function handleComment(e: FormEvent) {
     e.preventDefault();
     if (!commentBody.trim()) return;
     commentMutation.mutate();
+  }
+
+  function startEditing() {
+    setEditTitle(topic.title);
+    setEditDescription(topic.description);
+    setEditError(null);
+    setIsEditing(true);
+  }
+
+  function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    setEditError(null);
+    editMutation.mutate();
   }
 
   return (
@@ -69,19 +98,61 @@ export default function TopicDetail() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
-            <CardTitle>{topic.title}</CardTitle>
-            {topic.status === "scheduled" ? (
-              <Badge variant="success">
-                Pautada em {topic.assemblyDate ? formatDateOnly(topic.assemblyDate) : "-"}
-              </Badge>
-            ) : (
-              <Badge variant="secondary">Em aberto</Badge>
-            )}
+            {!isEditing && <CardTitle>{topic.title}</CardTitle>}
+            <div className="ml-auto flex items-center gap-2">
+              {topic.status === "scheduled" ? (
+                <Badge variant="success">
+                  Pautada em {topic.assemblyDate ? formatDateOnly(topic.assemblyDate) : "-"}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">Em aberto</Badge>
+              )}
+              {canEdit && !isEditing && (
+                <Button variant="outline" size="sm" onClick={startEditing}>
+                  Editar
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="whitespace-pre-wrap text-sm">{topic.description}</p>
-          <p className="text-xs text-muted-foreground">Criada por {topic.createdByName}</p>
+          {isEditing ? (
+            <form onSubmit={handleEditSubmit} className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="editTitle">Título</Label>
+                <Input
+                  id="editTitle"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editDescription">Descrição</Label>
+                <Textarea
+                  id="editDescription"
+                  required
+                  rows={5}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                />
+              </div>
+              {editError && <p className="text-sm text-destructive">{editError}</p>}
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={editMutation.isPending}>
+                  {editMutation.isPending ? "Salvando..." : "Salvar"}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <p className="whitespace-pre-wrap text-sm">{topic.description}</p>
+              <p className="text-xs text-muted-foreground">Criada por {topic.createdByName}</p>
+            </>
+          )}
 
           <div className="flex items-center gap-3">
             <Button

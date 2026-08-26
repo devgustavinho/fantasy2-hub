@@ -39,6 +39,7 @@ export interface Topic {
   assemblyDate: string | null;
   createdAt: string;
   updatedAt: string;
+  createdById: string;
   createdByName: string;
   favorCount: number;
   contraCount: number;
