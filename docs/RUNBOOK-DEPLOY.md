@@ -1,17 +1,20 @@
 # Runbook de deploy — Fantasy 2 Hub
 
-Este é um passo a passo manual. Eu (assistente) não tenho acesso SSH à VPS nesta sessão, então
-cada bloco abaixo é para você rodar. Depois de feito, o deploy do backend passa a ser automático
-(GitHub Actions) e o frontend também (Cloudflare Pages via Git).
+Passo a passo de como o deploy está montado hoje. Depois de feito, o deploy do backend é
+automático (GitHub Actions) e o frontend também (Cloudflare Pages via Git).
 
 Pressupostos:
-- VPS: a mesma do `getflix` (`45.90.123.41`), reaproveitando o usuário de sistema `getflix` que já
-  existe lá (tem Node 22 em `/opt/node22/bin`, já sabe fazer `git fetch`/deploy).
+- VPS: `45.90.123.41`, compartilhada com o `getflix` (outro projeto), mas com **usuário de sistema
+  dedicado** `fantasy2hub` (home `/home/fantasy2hub`) — nenhum arquivo, systemd unit ou sudoers do
+  fantasy2-hub vive dentro do usuário/diretório do getflix. Node 22 em `/opt/node22/bin` (mesmo
+  binário compartilhado, instalado uma vez na VPS).
 - Domínio: `gcsolutions-devs.com.br`, já gerenciado (idealmente) pela Cloudflare.
 - Repositório: privado, `devgustavinho/fantasy2-hub`.
 
-Se preferir um usuário de sistema dedicado (`fantasy2` em vez de reaproveitar `getflix`), troque os
-caminhos abaixo — a lógica é a mesma, só muda o `$APP_DIR` e o `User=` do systemd.
+> **Histórico**: o app rodou inicialmente em `/home/getflix/apps/fantasy2-hub` (usuário `getflix`
+> reaproveitado, por conveniência no primeiro deploy). Foi migrado em 2026-08-27 pro usuário/diretório
+> dedicado atual, pra manter os dois projetos completamente isolados (arquivos, systemd, sudoers,
+> chave SSH de deploy). Só o `Node.js` em `/opt/node22/bin` continua compartilhado entre os dois.
 
 ## 1. Criar o repositório privado no GitHub
 
@@ -34,7 +37,7 @@ Gere um par de chaves **dedicado** a este projeto (não reaproveite a chave do g
 ssh-keygen -t ed25519 -f fantasy2_deploy_key -C "fantasy2-hub-deploy" -N ""
 ```
 
-- Adicione o conteúdo de `fantasy2_deploy_key.pub` no `~/.ssh/authorized_keys` do usuário `getflix` na VPS.
+- Adicione o conteúdo de `fantasy2_deploy_key.pub` no `~/.ssh/authorized_keys` do usuário `fantasy2hub` na VPS.
 - Adicione o conteúdo de `fantasy2_deploy_key` (a chave privada) como secret do repositório GitHub:
   `Settings → Secrets and variables → Actions → New repository secret` → nome `FANTASY2_DEPLOY_SSH_KEY`.
 - Apague os dois arquivos locais depois de configurar (`rm fantasy2_deploy_key*`).
@@ -44,17 +47,23 @@ ssh-keygen -t ed25519 -f fantasy2_deploy_key -C "fantasy2-hub-deploy" -N ""
 O runner do GitHub Actions faz SSH até a VPS e roda `git fetch` **de dentro da VPS** — então a VPS
 também precisa de permissão de leitura no repositório privado:
 
-1. Na VPS, como usuário `getflix`: `ssh-keygen -t ed25519 -f ~/.ssh/fantasy2_repo_key -N ""` (se ainda não tiver uma chave para isso).
+1. Na VPS, como usuário `fantasy2hub`: `ssh-keygen -t ed25519 -f ~/.ssh/fantasy2_repo_key -N ""` (se ainda não tiver uma chave para isso).
 2. Adicione `~/.ssh/fantasy2_repo_key.pub` em `github.com/devgustavinho/fantasy2-hub` → `Settings → Deploy keys → Add deploy key` (sem write access).
-3. Configure o `~/.ssh/config` da VPS para usar essa chave ao acessar `github.com` (ou clone via `GIT_SSH_COMMAND`).
+3. Configure o `~/.ssh/config` do usuário `fantasy2hub` (`/home/fantasy2hub/.ssh/config`) com um
+   host alias `github.com-fantasy2` apontando pra essa chave (`IdentityFile ~/.ssh/fantasy2_repo_key`,
+   `IdentitiesOnly yes`) — o remote do repo na VPS usa esse alias (`git@github.com-fantasy2:...`),
+   não `git@github.com:...` direto, pra não colidir com a chave do getflix pro próprio repo dele.
 
 ## 4. Preparar o diretório na VPS
 
 ```bash
-ssh getflix@45.90.123.41
-mkdir -p /home/getflix/apps/fantasy2-hub
-cd /home/getflix/apps/fantasy2-hub
-git clone git@github.com:devgustavinho/fantasy2-hub.git .
+# como root (ou com sudo), uma única vez:
+useradd -m -d /home/fantasy2hub -s /bin/bash fantasy2hub
+
+ssh fantasy2hub@45.90.123.41
+mkdir -p /home/fantasy2hub/fantasy2-hub
+cd /home/fantasy2hub/fantasy2-hub
+git clone git@github.com-fantasy2:devgustavinho/fantasy2-hub.git .
 cd server
 npm ci --omit=dev
 cp .env.example .env
@@ -66,7 +75,7 @@ Edite `.env` na VPS:
 NODE_ENV=production
 PORT=3100
 HOST=127.0.0.1
-DATABASE_PATH=/home/getflix/apps/fantasy2-hub/server/data/fantasy2.db
+DATABASE_PATH=/home/fantasy2hub/fantasy2-hub/server/data/fantasy2.db
 JWT_SECRET=<gere com: openssl rand -hex 32>
 CORS_ORIGIN=https://fantasy2.gcsolutions-devs.com.br
 VAPID_PUBLIC_KEY=<gere com: npx web-push generate-vapid-keys>
@@ -107,8 +116,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=getflix
-WorkingDirectory=/home/getflix/apps/fantasy2-hub/server
+User=fantasy2hub
+WorkingDirectory=/home/fantasy2hub/fantasy2-hub/server
 ExecStart=/opt/node22/bin/node --env-file=.env src/index.js
 Restart=always
 RestartSec=5
@@ -128,7 +137,7 @@ Como o deploy automático roda `sudo -n systemctl restart fantasy2-hub` sem senh
 (`sudo visudo -f /etc/sudoers.d/fantasy2-hub`):
 
 ```
-getflix ALL=(ALL) NOPASSWD: /bin/systemctl restart fantasy2-hub, /bin/systemctl is-active fantasy2-hub
+fantasy2hub ALL=(ALL) NOPASSWD: /bin/systemctl restart fantasy2-hub, /bin/systemctl is-active fantasy2-hub
 ```
 
 ## 6. nginx + certbot para a API (feito — status: ✅ concluído nesta VPS)
@@ -216,11 +225,14 @@ o repositório e builda automaticamente a cada push em `main` (preview builds em
 ## Checklist final
 
 - [x] Repo privado criado e código enviado
-- [x] `FANTASY2_DEPLOY_SSH_KEY` configurado no GitHub e na VPS (`/home/getflix/.ssh/authorized_keys`)
-- [x] Deploy key de leitura do repo configurada na VPS (`github.com-fantasy2` no `~/.ssh/config`)
+- [x] Usuário de sistema dedicado `fantasy2hub` (home `/home/fantasy2hub`), sem nenhuma dependência
+      do usuário `getflix`
+- [x] `FANTASY2_DEPLOY_SSH_KEY` configurado no GitHub e na VPS (`/home/fantasy2hub/.ssh/authorized_keys`)
+- [x] Deploy key de leitura do repo configurada na VPS (`github.com-fantasy2` no
+      `/home/fantasy2hub/.ssh/config`)
 - [x] VPS: `.env` preenchido, migrations + seed rodados, admin criado (`gustavocarneiro.zr@gmail.com`)
-- [x] systemd `fantasy2-hub` ativo e respondendo em `/health` (porta 3100)
-- [x] sudoers configurado para restart sem senha (deploy automático)
+- [x] systemd `fantasy2-hub` ativo (`User=fantasy2hub`) e respondendo em `/health` (porta 3100)
+- [x] sudoers configurado para `fantasy2hub` restartar o serviço sem senha (deploy automático)
 - [x] nginx servindo `api-fantasy2.gcsolutions-devs.com.br` → `127.0.0.1:3100` (padrão certbot direto, igual ao n8n — domínio não está na Cloudflare)
 - [x] DNS: registro `A` de `api-fantasy2.gcsolutions-devs.com.br` → `45.90.123.41` (Registro.br)
 - [x] Certificado TLS emitido via `certbot --nginx -d api-fantasy2.gcsolutions-devs.com.br`

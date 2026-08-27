@@ -6,7 +6,9 @@ votam a favor/contra, comentam, e a administração marca quando uma pauta foi l
 ## Estrutura
 
 - `/` — frontend (Vite + React + TypeScript + Tailwind + shadcn/ui), hospedado no Cloudflare Pages.
-- `/server` — backend (Node + Express puro, JavaScript ESM, sem build step), roda na mesma VPS do getflix.
+- `/server` — backend (Node + Express puro, JavaScript ESM, sem build step). Roda numa VPS que
+  também hospeda o `getflix` (projeto separado), mas com usuário de sistema, diretório e systemd
+  próprios (`fantasy2hub`, `/home/fantasy2hub`) — nenhum arquivo é compartilhado entre os dois.
 
 ## Desenvolvimento local
 

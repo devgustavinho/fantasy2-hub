@@ -10,8 +10,8 @@ concurrency: { group: deploy-fantasy2-server, cancel-in-progress: false }
 
 env:
   DEPLOY_HOST: 45.90.123.41
-  DEPLOY_USER: getflix
-  APP_DIR: /home/getflix/apps/fantasy2-hub
+  DEPLOY_USER: fantasy2hub
+  APP_DIR: /home/fantasy2hub/fantasy2-hub
   SERVICE_NAME: fantasy2-hub
   HEALTH_PORT: 3100
 
