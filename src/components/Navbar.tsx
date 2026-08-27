@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 
-export function Navbar() {
+export function TopBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -13,6 +13,40 @@ export function Navbar() {
     navigate("/login");
   }
 
+  if (!user) return null;
+
+  return (
+    <header className="border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
+      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5">
+        <Link to="/" className="flex items-center gap-2 font-semibold tracking-wide">
+          <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 rounded-full" />
+          <span className="hidden text-brand-gold sm:inline">Fantasy 2 Hub</span>
+        </Link>
+        <div className="flex items-center gap-3 text-sm">
+          <NotificationBell />
+          <Link to="/perfil" className="hidden text-white/70 transition-colors hover:text-brand-gold sm:inline">
+            {user.name}
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="rounded-md border border-white/25 px-3 py-1.5 text-white/90 transition-colors hover:border-white/50 hover:bg-white/10"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// `sticky` (não `fixed`) de propósito: em vários navegadores mobile (barra de endereço que
+// aparece/some), um elemento `position: fixed` no rodapé fica ancorado no "layout viewport"
+// (que inclui a área atrás da barra do navegador) em vez do viewport visível — o dock parece
+// "flutuar" acima do rodapé de verdade, com um vão embaixo. `sticky` dentro de um container
+// flex de altura mínima 100dvh não sofre desse problema: ele é sempre o último item da coluna,
+// empurrado pro fim do conteúdo (ou colado no fim da tela visível, o que for maior).
+export function BottomDock() {
+  const { user } = useAuth();
   if (!user) return null;
 
   const isStaff = user.role === "admin" || user.role === "sindico";
@@ -34,31 +68,8 @@ export function Navbar() {
   ];
 
   return (
-    <>
-      <header className="border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5">
-          <Link to="/" className="flex items-center gap-2 font-semibold tracking-wide">
-            <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 rounded-full" />
-            <span className="hidden text-brand-gold sm:inline">Fantasy 2 Hub</span>
-          </Link>
-          <div className="flex items-center gap-3 text-sm">
-            <NotificationBell />
-            <Link to="/perfil" className="hidden text-white/70 transition-colors hover:text-brand-gold sm:inline">
-              {user.name}
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="rounded-md border border-white/25 px-3 py-1.5 text-white/90 transition-colors hover:border-white/50 hover:bg-white/10"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4">
-        <FloatingDock items={items} />
-      </div>
-    </>
+    <div className="sticky bottom-4 z-30 mt-6 flex justify-center px-4 [padding-bottom:env(safe-area-inset-bottom)]">
+      <FloatingDock items={items} />
+    </div>
   );
 }

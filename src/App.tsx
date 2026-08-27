@@ -2,7 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
-import { Navbar } from "@/components/Navbar";
+import { TopBar, BottomDock } from "@/components/Navbar";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import TopicsList from "@/pages/TopicsList";
@@ -20,9 +20,10 @@ const queryClient = new QueryClient();
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-muted/10 pb-24">
-      <Navbar />
-      {children}
+    <div className="flex min-h-screen flex-col bg-muted/10" style={{ minHeight: "100dvh" }}>
+      <TopBar />
+      <main className="flex-1">{children}</main>
+      <BottomDock />
     </div>
   );
 }
