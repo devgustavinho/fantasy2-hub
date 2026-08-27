@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
 import { TopBar, BottomDock } from "@/components/Navbar";
+import { OnboardingBanner } from "@/components/OnboardingBanner";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import TopicsList from "@/pages/TopicsList";
@@ -23,6 +24,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-muted/10" style={{ minHeight: "100dvh" }}>
       <TopBar />
+      <OnboardingBanner />
       <main className="flex-1">{children}</main>
       <BottomDock />
     </div>

@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
 import * as authService from "@/services/auth";
+import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
 import type { Role } from "@/lib/types";
 
 function roleLabel(role: Role) {
@@ -59,6 +60,16 @@ export default function Profile() {
   const [deviceName, setDeviceName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const supported = browserSupportsWebAuthn();
+
+  const [standalone] = useState(isRunningStandalone);
+  const [installHelp, setInstallHelp] = useState(false);
+  async function handleInstallClick() {
+    if (hasNativeInstallPrompt()) {
+      await triggerNativeInstallPrompt();
+    } else {
+      setInstallHelp((v) => !v);
+    }
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["passkeys"],
@@ -126,6 +137,30 @@ export default function Profile() {
         </CardContent>
       </Card>
 
+      {!standalone && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Instalar aplicativo</CardTitle>
+            <CardDescription>
+              Adicione o Fantasy 2 Hub na tela inicial do seu celular pra abrir como um app, mais
+              rápido e sem a barra de endereço.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {installHelp && (
+              <p className="text-sm text-muted-foreground">
+                No iPhone: toque em Compartilhar e depois em "Adicionar à Tela de Início". No
+                Android: toque no menu (⋮) do navegador e em "Instalar aplicativo" ou "Adicionar à
+                tela inicial".
+              </p>
+            )}
+            <Button size="sm" onClick={handleInstallClick}>
+              Instalar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {canInviteFamily && (
         <Card>
           <CardHeader>
@@ -189,8 +224,8 @@ export default function Profile() {
         <CardHeader>
           <CardTitle className="text-base">Login por biometria</CardTitle>
           <CardDescription>
-            Cadastre este aparelho para entrar com a digital ou reconhecimento facial, sem digitar a
-            senha.
+            Cadastre este aparelho para entrar com o mesmo desbloqueador do seu celular, sem digitar
+            a senha.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

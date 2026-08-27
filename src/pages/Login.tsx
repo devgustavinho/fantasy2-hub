@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
+import { Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientBorderCard } from "@/components/ui/gradient-border-card";
@@ -12,7 +14,9 @@ import * as webauthnService from "@/services/webauthn";
 import type { LoginResult } from "@/lib/types";
 
 type View =
-  | { name: "credentials" }
+  | { name: "email" }
+  | { name: "biometric"; email: string }
+  | { name: "password"; email: string }
   | { name: "totp-setup"; token: string; qrDataUrl: string }
   | { name: "totp-verify"; token: string };
 
@@ -22,8 +26,9 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
-  const [view, setView] = useState<View>({ name: "credentials" });
+  const [view, setView] = useState<View>({ name: "email" });
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const supportsBiometric = browserSupportsWebAuthn();
@@ -39,7 +44,43 @@ export default function Login() {
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
+  // Passo 1: só o e-mail. Se a conta já tiver passkey cadastrada neste navegador/celular, já
+  // dispara o prompt de biometria na hora — sem nem pedir a senha. Só cai pro campo de senha se
+  // não tiver passkey (ou se a pessoa cancelar a biometria).
+  async function handleEmailSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setError(null);
+    setCheckingEmail(true);
+
+    let optionsJSON: PublicKeyCredentialRequestOptionsJSON | null = null;
+    if (supportsBiometric) {
+      try {
+        optionsJSON = await webauthnService.getLoginOptions(email);
+      } catch {
+        optionsJSON = null;
+      }
+    }
+    setCheckingEmail(false);
+
+    if (!optionsJSON) {
+      setView({ name: "password", email });
+      return;
+    }
+
+    setView({ name: "biometric", email });
+    setBiometricLoading(true);
+    try {
+      handleResult(await webauthnService.verifyLogin(email, optionsJSON));
+    } catch {
+      setError("Não foi possível confirmar a biometria. Digite sua senha.");
+      setView({ name: "password", email });
+    } finally {
+      setBiometricLoading(false);
+    }
+  }
+
+  async function handlePasswordSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -49,22 +90,6 @@ export default function Login() {
       setError(err instanceof Error ? err.message : "Erro ao entrar.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleBiometricLogin() {
-    if (!email) {
-      setError("Digite seu e-mail para entrar com biometria.");
-      return;
-    }
-    setError(null);
-    setBiometricLoading(true);
-    try {
-      handleResult(await webauthnService.loginWithPasskey(email));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao entrar com biometria.");
-    } finally {
-      setBiometricLoading(false);
     }
   }
 
@@ -91,30 +116,85 @@ export default function Login() {
         <img src="/logo.png" alt="Fantasy 2" className="mx-auto h-20 w-20" />
         <GradientBorderCard>
           <Card className="border-none shadow-none">
-            {view.name === "credentials" && (
+            {view.name === "email" && (
               <>
                 <CardHeader>
                   <CardTitle>Entrar</CardTitle>
                   <CardDescription>Acesse o hub do condomínio Fantasy 2.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                  <form onSubmit={handleEmailSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="email">E-mail</Label>
                       <Input
                         id="email"
                         type="email"
                         required
+                        autoFocus
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                       />
                     </div>
+                    {error && <p className="text-sm text-destructive">{error}</p>}
+                    <Button type="submit" className="w-full" disabled={checkingEmail}>
+                      {checkingEmail ? "Verificando..." : "Continuar"}
+                    </Button>
+                  </form>
+
+                  <p className="mt-4 text-center text-sm text-muted-foreground">
+                    Ainda não tem conta?{" "}
+                    <Link to="/register" className="font-medium text-primary underline">
+                      Cadastre seu apartamento
+                    </Link>
+                  </p>
+                </CardContent>
+              </>
+            )}
+
+            {view.name === "biometric" && (
+              <>
+                <CardHeader>
+                  <CardTitle>Confirme sua biometria</CardTitle>
+                  <CardDescription>{view.email}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col items-center gap-3 py-4 text-center">
+                    <Fingerprint className="h-12 w-12 animate-pulse text-primary" />
+                    <p className="text-sm text-muted-foreground">
+                      {biometricLoading ? "Aguardando confirmação..." : "Confirme no seu aparelho."}
+                    </p>
+                  </div>
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setError(null);
+                      setView({ name: "password", email: view.email });
+                    }}
+                  >
+                    Usar senha em vez disso
+                  </Button>
+                </CardContent>
+              </>
+            )}
+
+            {view.name === "password" && (
+              <>
+                <CardHeader>
+                  <CardTitle>Entrar</CardTitle>
+                  <CardDescription>{view.email}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handlePasswordSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="password">Senha</Label>
                       <Input
                         id="password"
                         type="password"
                         required
+                        autoFocus
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                       />
@@ -123,33 +203,18 @@ export default function Login() {
                     <Button type="submit" className="w-full" disabled={loading}>
                       {loading ? "Entrando..." : "Entrar"}
                     </Button>
+                    <button
+                      type="button"
+                      className="w-full text-center text-xs text-muted-foreground underline"
+                      onClick={() => {
+                        setError(null);
+                        setPassword("");
+                        setView({ name: "email" });
+                      }}
+                    >
+                      Trocar e-mail
+                    </button>
                   </form>
-
-                  {supportsBiometric && (
-                    <>
-                      <div className="my-4 flex items-center gap-2 text-xs text-muted-foreground">
-                        <div className="h-px flex-1 bg-border" />
-                        ou
-                        <div className="h-px flex-1 bg-border" />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        disabled={biometricLoading}
-                        onClick={handleBiometricLogin}
-                      >
-                        {biometricLoading ? "Verificando..." : "Entrar com biometria"}
-                      </Button>
-                    </>
-                  )}
-
-                  <p className="mt-4 text-center text-sm text-muted-foreground">
-                    Ainda não tem conta?{" "}
-                    <Link to="/register" className="font-medium text-primary underline">
-                      Cadastre seu apartamento
-                    </Link>
-                  </p>
                 </CardContent>
               </>
             )}

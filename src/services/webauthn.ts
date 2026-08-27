@@ -26,10 +26,13 @@ export async function registerPasskey(deviceName?: string) {
   });
 }
 
-export async function loginWithPasskey(email: string) {
-  const optionsJSON = await api.post<PublicKeyCredentialRequestOptionsJSON>("/webauthn/login/options", {
-    email,
-  });
+// Separado em duas etapas (em vez de um `loginWithPasskey` só) porque o login novo primeiro
+// checa em silêncio se o e-mail tem passkey — só dispara o prompt nativo de biometria
+// (`verifyLogin`) se de fato existir uma, senão cai pro campo de senha sem nem tentar.
+export const getLoginOptions = (email: string) =>
+  api.post<PublicKeyCredentialRequestOptionsJSON>("/webauthn/login/options", { email });
+
+export async function verifyLogin(email: string, optionsJSON: PublicKeyCredentialRequestOptionsJSON) {
   const response = await startAuthentication({ optionsJSON });
   return api.post<LoginResult>("/webauthn/login/verify", { email, response });
 }
