@@ -30,6 +30,9 @@ const ACTION_LABELS: Record<string, string> = {
   "services.item_create": "Item de serviço criado",
   "services.item_edit": "Item de serviço editado",
   "services.item_delete": "Item de serviço excluído",
+  "services.tags_set": "Tags do serviço atualizadas",
+  "tags.create": "Tag criada",
+  "tags.delete": "Tag excluída",
 };
 
 function actionBadgeVariant(action: string): "default" | "secondary" | "destructive" | "success" {

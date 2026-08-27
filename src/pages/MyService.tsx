@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { API_URL } from "@/lib/api";
 import { formatCentsToBRL } from "@/lib/utils";
 import type { ServiceItem } from "@/lib/types";
 
+const MAX_IMAGES = 5;
+
 function ItemForm({
   initial,
   onSubmit,
@@ -19,20 +22,51 @@ function ItemForm({
   pending,
 }: {
   initial?: ServiceItem;
-  onSubmit: (data: { name: string; description: string; price: number; image: File | null }) => void;
+  onSubmit: (data: {
+    name: string;
+    description: string;
+    price: number;
+    images: File[];
+    removeImageIds: string[];
+  }) => void;
   onCancel?: () => void;
   pending: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(initial ? String(initial.priceCents / 100) : "");
-  const [image, setImage] = useState<File | null>(null);
+  const [existingImages, setExistingImages] = useState(initial?.images ?? []);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<File[]>([]);
+
+  const remainingSlots = MAX_IMAGES - existingImages.length - newImages.length;
+
+  function handleFiles(files: FileList | null) {
+    if (!files) return;
+    const picked = Array.from(files).slice(0, Math.max(0, remainingSlots));
+    setNewImages((current) => [...current, ...picked]);
+  }
+
+  function removeExisting(id: string) {
+    setExistingImages((current) => current.filter((img) => img.id !== id));
+    setRemovedIds((current) => [...current, id]);
+  }
+
+  function removeNew(index: number) {
+    setNewImages((current) => current.filter((_, i) => i !== index));
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const priceNumber = Number(price.replace(",", "."));
     if (!name.trim() || Number.isNaN(priceNumber)) return;
-    onSubmit({ name: name.trim(), description: description.trim(), price: priceNumber, image });
+    onSubmit({
+      name: name.trim(),
+      description: description.trim(),
+      price: priceNumber,
+      images: newImages,
+      removeImageIds: removedIds,
+    });
   }
 
   return (
@@ -58,13 +92,50 @@ function ItemForm({
         <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="space-y-1">
-        <Label>Foto (opcional)</Label>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-          className="block text-sm"
-        />
+        <Label>Fotos (até {MAX_IMAGES})</Label>
+        <div className="flex flex-wrap gap-2">
+          {existingImages.map((img) => (
+            <div key={img.id} className="relative h-16 w-16 overflow-hidden rounded border">
+              <img src={`${API_URL}${img.path}`} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removeExisting(img.id)}
+                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
+                aria-label="Remover foto"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          {newImages.map((file, idx) => (
+            <div key={idx} className="relative h-16 w-16 overflow-hidden rounded border">
+              <img src={URL.createObjectURL(file)} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removeNew(idx)}
+                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
+                aria-label="Remover foto"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          {remainingSlots > 0 && (
+            <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded border border-dashed text-[10px] text-muted-foreground hover:border-primary/50">
+              + foto
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
       </div>
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending}>
@@ -123,22 +194,26 @@ export default function MyService() {
     onSuccess: invalidate,
   });
 
+  const [itemError, setItemError] = useState<string | null>(null);
+
   const addItemMutation = useMutation({
-    mutationFn: (input: { name: string; description: string; price: number; image: File | null }) =>
-      servicesApi.addServiceItem(input),
+    mutationFn: (input: servicesApi.ServiceItemInput) => servicesApi.addServiceItem(input),
     onSuccess: () => {
+      setItemError(null);
       setAddingItem(false);
       invalidate();
     },
+    onError: (err) => setItemError(err instanceof Error ? err.message : "Erro ao salvar item."),
   });
 
   const editItemMutation = useMutation({
-    mutationFn: (input: { name: string; description: string; price: number; image: File | null }) =>
-      servicesApi.editServiceItem(editingItemId!, input),
+    mutationFn: (input: servicesApi.ServiceItemInput) => servicesApi.editServiceItem(editingItemId!, input),
     onSuccess: () => {
+      setItemError(null);
       setEditingItemId(null);
       invalidate();
     },
+    onError: (err) => setItemError(err instanceof Error ? err.message : "Erro ao salvar item."),
   });
 
   const deleteItemMutation = useMutation({
@@ -218,6 +293,15 @@ export default function MyService() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Dados do serviço</CardTitle>
+              {service.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {service.tags.map((tag) => (
+                    <span key={tag.id} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <form onSubmit={handleUpdate} className="space-y-3">
@@ -255,6 +339,7 @@ export default function MyService() {
               <CardTitle className="text-base">Itens ({service.items.length})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {itemError && <p className="text-sm text-destructive">{itemError}</p>}
               {service.items.map((item) =>
                 editingItemId === item.id ? (
                   <ItemForm
@@ -267,9 +352,9 @@ export default function MyService() {
                 ) : (
                   <div key={item.id} className="flex items-center gap-3 rounded-md border p-2">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
-                      {item.imagePath ? (
+                      {item.images.length > 0 ? (
                         <img
-                          src={`${API_URL}${item.imagePath}`}
+                          src={`${API_URL}${item.images[0].path}`}
                           alt={item.name}
                           className="h-full w-full object-cover"
                         />
@@ -279,7 +364,10 @@ export default function MyService() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{formatCentsToBRL(item.priceCents)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCentsToBRL(item.priceCents)}
+                        {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
+                      </p>
                     </div>
                     <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
                       Editar

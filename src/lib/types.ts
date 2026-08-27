@@ -80,12 +80,17 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface ServiceItemImage {
+  id: string;
+  path: string;
+}
+
 export interface ServiceItem {
   id: string;
   name: string;
   description: string | null;
   priceCents: number;
-  imagePath: string | null;
+  images: ServiceItemImage[];
   createdAt: string;
 }
 
@@ -97,12 +102,18 @@ export interface ServiceOwner {
   apartmentCode: string | null;
 }
 
+export interface Tag {
+  id: string;
+  name: string;
+}
+
 export interface CondoService {
   id: string;
   name: string;
   description: string | null;
   createdAt: string;
   owner: ServiceOwner;
+  tags: Tag[];
   items: ServiceItem[];
 }
 
@@ -110,6 +121,7 @@ export interface MyService {
   id: string;
   name: string;
   description: string | null;
+  tags: Tag[];
   items: ServiceItem[];
 }
 

@@ -50,6 +50,7 @@ npm run dev
 | Excluir pauta de outra pessoa (com motivo ≥ 10 caracteres) | ❌ | ❌ | ✅ |
 | Ver página de auditoria (`/admin/auditoria`) | ❌ | ❌ | ✅ |
 | Cadastrar/gerenciar o próprio serviço no `/servicos` | ✅ | ✅ | ✅ |
+| Criar/excluir tag e atribuir a um serviço (`/admin/tags`) | ❌ | ❌ | ✅ |
 
 Reforçado em `src/auth/guards.js` (`requireAuth` < `requireApproved` < `requireStaff` < `requireAdmin`)
 e em checagens específicas dentro das rotas (ex. dono da pauta em `PATCH /topics/:id/content` e
@@ -84,21 +85,36 @@ acontece (não tem trigger automático no banco).
 ## Serviços do condomínio
 
 `src/modules/services/routes.js` (`/services`) — moradores anunciam um serviço/produto próprio
-(ex. "Doces da Maria") com itens (nome, descrição, preço, foto opcional). Um usuário só pode ter
+(ex. "Doces da Maria") com itens (nome, descrição, preço, até 5 fotos). Um usuário só pode ter
 **um** serviço (`condo_services.user_id` é `UNIQUE`); os itens ficam em `condo_service_items`,
-apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
+apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído. Ao clicar num item, o front
+abre um painel estilo iFood (galeria de fotos, descrição, preço) com um botão
+**"Falar com {nome do serviço}"** que já abre o WhatsApp com uma mensagem de interesse pré-preenchida.
 
 - Cadastrar um serviço (`POST /services`) **exige** um WhatsApp e automaticamente marca
-  `whatsapp_visible = 1` — é assim que outros moradores entram em contato (o item, ao ser clicado no
-  front, já abre um link `wa.me` com uma mensagem de interesse pré-preenchida). Não dá pra esconder o
+  `whatsapp_visible = 1` — é assim que outros moradores entram em contato. Não dá pra esconder o
   WhatsApp de novo enquanto o serviço existir sem apagar o serviço.
-- Fotos de item: upload via `multipart/form-data` (`multer`), salvas em `data/uploads/services/`
-  (fora do banco, só o caminho relativo fica em `image_path`), servidas estaticamente em
-  `/uploads/services/<arquivo>`. Limite de 3MB, apenas JPG/PNG/WebP. Arquivo antigo é apagado do disco
-  ao trocar a foto de um item ou excluir o item/serviço.
+- Fotos de item (até 5, `condo_service_item_images`, ordenadas por `position`): upload via
+  `multipart/form-data` (`multer`, `memoryStorage`), **sempre processadas pelo `sharp`** antes de
+  salvar — decodifica qualquer formato de entrada (JPEG/PNG/WebP/**HEIC/HEIF**, o formato que
+  iPhones usam por padrão e que alguns navegadores reportam com mimetype inconsistente), corrige
+  orientação EXIF, redimensiona pro lado maior ter no máximo 1200px e regrava sempre como
+  `.jpg`. Isso é o que garante a "miniatura" de verdade (em vez de guardar a foto original de
+  10+MP direto do celular) e evita qualquer bug de formato/mimetype no upload. Arquivos são salvos em
+  `data/uploads/services/`, servidos estaticamente em `/uploads/services/<arquivo>`, e apagados do
+  disco ao remover a foto, editar o item ou excluir o item/serviço.
 - Todo mundo aprovado (`requireApproved`) pode ver a lista pública e cadastrar o próprio serviço — não
   tem restrição por cargo.
-- Auditado: `services.create/edit/delete` e `services.item_create/edit/delete`.
+- Auditado: `services.create/edit/delete`, `services.item_create/edit/delete`, `services.tags_set`.
+
+## Tags de serviço
+
+`src/modules/tags/routes.js` (`/tags`) — vocabulário controlado de tags (`tags` + `service_tags`),
+criado e atribuído **só por admin** (`POST /tags`, `DELETE /tags/:id`, `PUT /services/:id/tags`) —
+quem anuncia o serviço não escolhe as próprias tags, pra manter a taxonomia consistente. Qualquer
+usuário aprovado pode listar as tags (`GET /tags`) e filtrar `GET /services?tags=id1,id2` (serviço
+aparece se tiver **qualquer uma** das tags informadas). Página de administração em `/admin/tags`.
+Auditado: `tags.create`, `tags.delete`.
 
 ## Adicionando uma nova migration
 

@@ -3,39 +3,47 @@ import { mkdirSync, unlink } from "node:fs";
 import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
+import sharp from "sharp";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
-import { requireAuth, requireApproved } from "../../auth/guards.js";
+import { requireAuth, requireApproved, requireAdmin } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 
 const UPLOADS_ROOT = path.resolve("data/uploads/services");
 mkdirSync(UPLOADS_ROOT, { recursive: true });
 
-const ALLOWED_MIME = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
+const MAX_IMAGES_PER_ITEM = 5;
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_ROOT),
-  filename: (_req, file, cb) => cb(null, `${randomUUID()}${ALLOWED_MIME[file.mimetype] ?? ""}`),
-});
-
+// Guarda os arquivos em memória (não em disco) porque toda imagem passa pelo sharp antes de
+// ser salva — normaliza formato (inclusive HEIC/HEIF de iPhone, que o navegador às vezes manda
+// com um mimetype que o multer sozinho rejeitaria) e gera uma miniatura de verdade, em vez de
+// guardar a foto original de 12MP direto do celular.
 const upload = multer({
-  storage,
-  limits: { fileSize: 3 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (!ALLOWED_MIME[file.mimetype]) {
-      return cb(new Error("Formato de imagem inválido (use JPG, PNG ou WebP)."));
-    }
-    cb(null, true);
-  },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: MAX_IMAGES_PER_ITEM },
 });
 
-// Multer/fileFilter erros vão pro `next(err)` do Express; sem esse wrapper, cairiam no
-// error handler genérico (500) em vez de virar um 400 com mensagem útil pro usuário.
-function handleImageUpload(req, res, next) {
-  upload.single("image")(req, res, (err) => {
-    if (err) return res.status(400).json({ message: err.message || "Erro no upload da imagem." });
+// Multer/sharp erros vão pro `next(err)` do Express; sem esse wrapper, cairiam no error
+// handler genérico (500) em vez de virar um 400 com mensagem útil pro usuário.
+function handleImagesUpload(req, res, next) {
+  upload.array("images", MAX_IMAGES_PER_ITEM)(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || "Erro no upload das imagens." });
     next();
   });
+}
+
+// Decodifica com o sharp (aceita JPEG/PNG/WebP/HEIC/HEIF e outros) e sempre regrava como JPEG
+// de até 1200px no lado maior — isso é o que garante a "miniatura" pedida, elimina qualquer
+// ambiguidade de mimetype vinda do celular, e evita guardar fotos de vários MB sem necessidade.
+async function processAndSaveImage(buffer) {
+  const filename = `${randomUUID()}.jpg`;
+  const outPath = path.join(UPLOADS_ROOT, filename);
+  await sharp(buffer)
+    .rotate()
+    .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 82 })
+    .toFile(outPath);
+  return `/uploads/services/${filename}`;
 }
 
 function deleteImageFile(imagePath) {
@@ -56,7 +64,13 @@ const itemSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).optional().nullable(),
   price: z.coerce.number().min(0).max(1_000_000),
+  removeImageIds: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((v) => (v ? (Array.isArray(v) ? v : [v]) : [])),
 });
+
+const tagsAssignSchema = z.object({ tagIds: z.array(z.string()).max(20) });
 
 const setWhatsappVisible = sqlite.prepare(
   "UPDATE users SET whatsapp = ?, whatsapp_visible = 1 WHERE id = ?",
@@ -65,7 +79,7 @@ const setWhatsappVisible = sqlite.prepare(
 const getServiceByUser = sqlite.prepare("SELECT * FROM condo_services WHERE user_id = ?");
 const getServiceById = sqlite.prepare("SELECT * FROM condo_services WHERE id = ?");
 
-const listServices = sqlite.prepare(`
+const listServicesBase = sqlite.prepare(`
   SELECT s.id, s.name, s.description, s.created_at AS createdAt,
          u.id AS ownerId, u.name AS ownerName, u.whatsapp AS ownerWhatsapp,
          a.tower, a.code AS apartmentCode
@@ -76,11 +90,31 @@ const listServices = sqlite.prepare(`
 `);
 
 const listItemsByService = sqlite.prepare(`
-  SELECT id, name, description, price_cents AS priceCents, image_path AS imagePath,
-         created_at AS createdAt
+  SELECT id, name, description, price_cents AS priceCents, created_at AS createdAt
   FROM condo_service_items
   WHERE service_id = ?
   ORDER BY created_at ASC
+`);
+
+const listImagesByItem = sqlite.prepare(`
+  SELECT id, path FROM condo_service_item_images WHERE item_id = ? ORDER BY position ASC, created_at ASC
+`);
+
+const countImagesByItem = sqlite.prepare(
+  "SELECT COUNT(*) AS c FROM condo_service_item_images WHERE item_id = ?",
+);
+
+const insertImage = sqlite.prepare(`
+  INSERT INTO condo_service_item_images (id, item_id, path, position)
+  VALUES (@id, @item_id, @path, @position)
+`);
+
+const getImageById = sqlite.prepare("SELECT * FROM condo_service_item_images WHERE id = ?");
+const deleteImageRow = sqlite.prepare("DELETE FROM condo_service_item_images WHERE id = ?");
+
+const listTagsByService = sqlite.prepare(`
+  SELECT t.id, t.name FROM service_tags st JOIN tags t ON t.id = st.tag_id
+  WHERE st.service_id = ? ORDER BY t.name ASC
 `);
 
 const insertService = sqlite.prepare(`
@@ -98,18 +132,26 @@ const deleteServiceById = sqlite.prepare("DELETE FROM condo_services WHERE id = 
 const getItemById = sqlite.prepare("SELECT * FROM condo_service_items WHERE id = ?");
 
 const insertItem = sqlite.prepare(`
-  INSERT INTO condo_service_items (id, service_id, name, description, price_cents, image_path)
-  VALUES (@id, @service_id, @name, @description, @price_cents, @image_path)
+  INSERT INTO condo_service_items (id, service_id, name, description, price_cents)
+  VALUES (@id, @service_id, @name, @description, @price_cents)
 `);
 
 const updateItem = sqlite.prepare(`
   UPDATE condo_service_items
-  SET name = @name, description = @description, price_cents = @price_cents,
-      image_path = @image_path, updated_at = @updated_at
+  SET name = @name, description = @description, price_cents = @price_cents, updated_at = @updated_at
   WHERE id = @id
 `);
 
 const deleteItemById = sqlite.prepare("DELETE FROM condo_service_items WHERE id = ?");
+const deleteServiceTags = sqlite.prepare("DELETE FROM service_tags WHERE service_id = ?");
+const insertServiceTag = sqlite.prepare(
+  "INSERT OR IGNORE INTO service_tags (service_id, tag_id) VALUES (?, ?)",
+);
+const getTagById = sqlite.prepare("SELECT id FROM tags WHERE id = ?");
+
+function serializeItem(row) {
+  return { ...row, images: listImagesByItem.all(row.id) };
+}
 
 function serializeService(row) {
   return {
@@ -124,16 +166,33 @@ function serializeService(row) {
       tower: row.tower,
       apartmentCode: row.apartmentCode,
     },
-    items: listItemsByService.all(row.id),
+    tags: listTagsByService.all(row.id),
+    items: listItemsByService.all(row.id).map(serializeItem),
   };
+}
+
+async function saveNewImages(itemId, files, startPosition) {
+  let position = startPosition;
+  for (const file of files) {
+    const imagePath = await processAndSaveImage(file.buffer);
+    insertImage.run({ id: randomUUID(), item_id: itemId, path: imagePath, position });
+    position += 1;
+  }
 }
 
 export function servicesRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
 
-  router.get("/", (_req, res) => {
-    res.json({ services: listServices.all().map(serializeService) });
+  router.get("/", (req, res) => {
+    const tagFilter = typeof req.query.tags === "string" ? req.query.tags.split(",").filter(Boolean) : [];
+
+    let services = listServicesBase.all().map(serializeService);
+    if (tagFilter.length > 0) {
+      services = services.filter((s) => s.tags.some((t) => tagFilter.includes(t.id)));
+    }
+
+    res.json({ services });
   });
 
   router.get("/mine", (req, res) => {
@@ -144,7 +203,8 @@ export function servicesRoutes() {
         id: service.id,
         name: service.name,
         description: service.description,
-        items: listItemsByService.all(service.id),
+        tags: listTagsByService.all(service.id),
+        items: listItemsByService.all(service.id).map(serializeItem),
       },
     });
   });
@@ -179,7 +239,9 @@ export function servicesRoutes() {
     });
 
     const created = getServiceById.get(id);
-    res.status(201).json({ service: { id: created.id, name: created.name, description: created.description, items: [] } });
+    res.status(201).json({
+      service: { id: created.id, name: created.name, description: created.description, tags: [], items: [] },
+    });
   });
 
   router.patch("/mine", (req, res) => {
@@ -212,7 +274,8 @@ export function servicesRoutes() {
         id: updated.id,
         name: updated.name,
         description: updated.description,
-        items: listItemsByService.all(updated.id),
+        tags: listTagsByService.all(updated.id),
+        items: listItemsByService.all(updated.id).map(serializeItem),
       },
     });
   });
@@ -222,7 +285,9 @@ export function servicesRoutes() {
     if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
 
     for (const item of listItemsByService.all(service.id)) {
-      deleteImageFile(item.imagePath);
+      for (const image of listImagesByItem.all(item.id)) {
+        deleteImageFile(image.path);
+      }
     }
     deleteServiceById.run(service.id);
 
@@ -238,7 +303,39 @@ export function servicesRoutes() {
     res.status(204).end();
   });
 
-  router.post("/mine/items", handleImageUpload, (req, res) => {
+  // Admin-only: define o conjunto de tags de um serviço (substitui tudo). As tags em si são
+  // um vocabulário controlado pela administração (`/tags`) — quem anuncia o serviço não
+  // escolhe as próprias tags, pra manter a taxonomia consistente entre os moradores.
+  router.put("/:id/tags", requireAdmin, (req, res) => {
+    const service = getServiceById.get(req.params.id);
+    if (!service) return res.status(404).json({ message: "Serviço não encontrado." });
+
+    const parsed = tagsAssignSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Lista de tags inválida." });
+
+    for (const tagId of parsed.data.tagIds) {
+      if (!getTagById.get(tagId)) return res.status(400).json({ message: "Tag inexistente." });
+    }
+
+    const applyTags = sqlite.transaction((tagIds) => {
+      deleteServiceTags.run(service.id);
+      for (const tagId of tagIds) insertServiceTag.run(service.id, tagId);
+    });
+    applyTags(parsed.data.tagIds);
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.tags_set",
+      entityType: "service",
+      entityId: service.id,
+      details: { tagIds: parsed.data.tagIds },
+    });
+
+    res.json({ tags: listTagsByService.all(service.id) });
+  });
+
+  router.post("/mine/items", handleImagesUpload, async (req, res) => {
     const service = getServiceByUser.get(req.user.id);
     if (!service) return res.status(404).json({ message: "Cadastre seu serviço antes de adicionar itens." });
 
@@ -247,15 +344,26 @@ export function servicesRoutes() {
       return res.status(400).json({ message: "Preencha nome e preço do item." });
     }
 
+    const files = req.files ?? [];
+    if (files.length > MAX_IMAGES_PER_ITEM) {
+      return res.status(400).json({ message: `Envie no máximo ${MAX_IMAGES_PER_ITEM} fotos por item.` });
+    }
+
     const id = randomUUID();
-    insertItem.run({
-      id,
-      service_id: service.id,
-      name: parsed.data.name,
-      description: parsed.data.description || null,
-      price_cents: Math.round(parsed.data.price * 100),
-      image_path: req.file ? `/uploads/services/${req.file.filename}` : null,
-    });
+    try {
+      insertItem.run({
+        id,
+        service_id: service.id,
+        name: parsed.data.name,
+        description: parsed.data.description || null,
+        price_cents: Math.round(parsed.data.price * 100),
+      });
+      await saveNewImages(id, files, 0);
+    } catch (err) {
+      for (const image of listImagesByItem.all(id)) deleteImageFile(image.path);
+      deleteItemById.run(id);
+      return res.status(400).json({ message: "Não foi possível processar uma das imagens enviadas." });
+    }
 
     recordAudit({
       actorUserId: req.user.id,
@@ -266,10 +374,10 @@ export function servicesRoutes() {
       details: { serviceId: service.id, name: parsed.data.name },
     });
 
-    res.status(201).json({ items: listItemsByService.all(service.id) });
+    res.status(201).json({ items: listItemsByService.all(service.id).map(serializeItem) });
   });
 
-  router.patch("/mine/items/:itemId", handleImageUpload, (req, res) => {
+  router.patch("/mine/items/:itemId", handleImagesUpload, async (req, res) => {
     const service = getServiceByUser.get(req.user.id);
     if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
 
@@ -283,10 +391,18 @@ export function servicesRoutes() {
       return res.status(400).json({ message: "Preencha nome e preço do item." });
     }
 
-    let imagePath = item.image_path;
-    if (req.file) {
-      deleteImageFile(item.image_path);
-      imagePath = `/uploads/services/${req.file.filename}`;
+    const files = req.files ?? [];
+    const currentCount = countImagesByItem.get(item.id).c;
+    const keptCount = currentCount - parsed.data.removeImageIds.length;
+    if (keptCount + files.length > MAX_IMAGES_PER_ITEM) {
+      return res.status(400).json({ message: `Envie no máximo ${MAX_IMAGES_PER_ITEM} fotos por item.` });
+    }
+
+    for (const imageId of parsed.data.removeImageIds) {
+      const image = getImageById.get(imageId);
+      if (!image || image.item_id !== item.id) continue;
+      deleteImageFile(image.path);
+      deleteImageRow.run(imageId);
     }
 
     updateItem.run({
@@ -294,9 +410,14 @@ export function servicesRoutes() {
       name: parsed.data.name,
       description: parsed.data.description || null,
       price_cents: Math.round(parsed.data.price * 100),
-      image_path: imagePath,
       updated_at: nowIso(),
     });
+
+    try {
+      await saveNewImages(item.id, files, countImagesByItem.get(item.id).c);
+    } catch (err) {
+      return res.status(400).json({ message: "Não foi possível processar uma das imagens enviadas." });
+    }
 
     recordAudit({
       actorUserId: req.user.id,
@@ -306,7 +427,7 @@ export function servicesRoutes() {
       entityId: item.id,
     });
 
-    res.json({ items: listItemsByService.all(service.id) });
+    res.json({ items: listItemsByService.all(service.id).map(serializeItem) });
   });
 
   router.delete("/mine/items/:itemId", (req, res) => {
@@ -318,7 +439,9 @@ export function servicesRoutes() {
       return res.status(404).json({ message: "Item não encontrado." });
     }
 
-    deleteImageFile(item.image_path);
+    for (const image of listImagesByItem.all(item.id)) {
+      deleteImageFile(image.path);
+    }
     deleteItemById.run(item.id);
 
     recordAudit({

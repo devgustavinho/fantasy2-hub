@@ -13,13 +13,14 @@ import Profile from "@/pages/Profile";
 import Services from "@/pages/Services";
 import MyService from "@/pages/MyService";
 import AuditLog from "@/pages/AuditLog";
+import ServiceTagsAdmin from "@/pages/ServiceTagsAdmin";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-muted/10">
+    <div className="min-h-screen bg-muted/10 pb-24">
       <Navbar />
       {children}
     </div>
@@ -106,6 +107,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <AuditLog />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/admin/tags"
+                element={
+                  <AppLayout>
+                    <ServiceTagsAdmin />
                   </AppLayout>
                 }
               />
