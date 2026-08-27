@@ -29,6 +29,7 @@ function ItemForm({
     description: string;
     price: number;
     isNegotiable: boolean;
+    maxQuantity: number | null;
     images: File[];
     removeImageIds: string[];
   }) => void;
@@ -39,6 +40,8 @@ function ItemForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [price, setPrice] = useState(initial && !initial.isNegotiable ? String(initial.priceCents / 100) : "");
   const [isNegotiable, setIsNegotiable] = useState(initial?.isNegotiable ?? false);
+  const [multipliable, setMultipliable] = useState(!!initial?.maxQuantity);
+  const [maxQuantity, setMaxQuantity] = useState(initial?.maxQuantity ? String(initial.maxQuantity) : "5");
   const [existingImages, setExistingImages] = useState(initial?.images ?? []);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [newImages, setNewImages] = useState<File[]>([]);
@@ -69,6 +72,7 @@ function ItemForm({
       description: description.trim(),
       price: priceNumber,
       isNegotiable,
+      maxQuantity: multipliable ? Number(maxQuantity) || 1 : null,
       images: newImages,
       removeImageIds: removedIds,
     });
@@ -97,6 +101,22 @@ function ItemForm({
         <input type="checkbox" checked={isNegotiable} onChange={(e) => setIsNegotiable(e.target.checked)} />
         Preço "a negociar" (sem valor fixo)
       </label>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={multipliable} onChange={(e) => setMultipliable(e.target.checked)} />
+          Cliente pode pedir mais de 1
+        </label>
+        {multipliable && (
+          <Input
+            type="number"
+            min={2}
+            max={99}
+            className="h-8 w-20"
+            value={maxQuantity}
+            onChange={(e) => setMaxQuantity(e.target.value)}
+          />
+        )}
+      </div>
       <div className="space-y-1">
         <Label>Descrição</Label>
         <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />

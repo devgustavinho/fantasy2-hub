@@ -130,6 +130,7 @@ export interface ServiceItem {
   description: string | null;
   priceCents: number;
   isNegotiable: boolean;
+  maxQuantity: number | null;
   images: ServiceItemImage[];
   optionGroups: ServiceItemOptionGroup[];
   createdAt: string;

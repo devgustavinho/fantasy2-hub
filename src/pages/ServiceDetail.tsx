@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Instagram, MessageCircle, Minus, ShoppingCart, X } from "lucide-react";
+import { ArrowLeft, Instagram, MessageCircle, Minus, Plus, ShoppingCart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QueryError } from "@/components/QueryError";
@@ -26,6 +26,7 @@ interface CartLine {
   key: string;
   itemName: string;
   isNegotiable: boolean;
+  quantity: number;
   groups: ChosenGroup[];
   subtotalCents: number | null;
 }
@@ -41,6 +42,8 @@ function ItemConfigurator({
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
+  const [quantity, setQuantity] = useState(1);
+  const canMultiply = !!item.maxQuantity && item.maxQuantity > 1;
 
   function toggleOption(group: ServiceItem["optionGroups"][number], optionId: string) {
     setSelections((current) => {
@@ -64,7 +67,8 @@ function ItemConfigurator({
         const ids = selections[g.id] ?? [];
         return sum + g.options.filter((o) => ids.includes(o.id)).reduce((s, o) => s + o.priceDeltaCents, 0);
       }, 0);
-  const totalCents = item.priceCents + deltaCents;
+  const unitCents = item.priceCents + deltaCents;
+  const totalCents = unitCents * quantity;
 
   function handleAdd() {
     const groups: ChosenGroup[] = item.optionGroups
@@ -81,6 +85,7 @@ function ItemConfigurator({
       key: crypto.randomUUID(),
       itemName: item.name,
       isNegotiable: item.isNegotiable,
+      quantity,
       groups,
       subtotalCents: item.isNegotiable ? null : totalCents,
     });
@@ -175,6 +180,33 @@ function ItemConfigurator({
             </div>
           ))}
 
+          {canMultiply && (
+            <div className="flex items-center justify-between border-t pt-3">
+              <span className="text-sm font-medium">Quantidade</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  disabled={quantity <= 1}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border disabled:opacity-40"
+                  aria-label="Diminuir"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <span className="w-4 text-center text-sm">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.min(item.maxQuantity ?? 1, q + 1))}
+                  disabled={quantity >= (item.maxQuantity ?? 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border disabled:opacity-40"
+                  aria-label="Aumentar"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between border-t pt-3">
             <span className="text-sm font-medium">Total</span>
             <span className="text-lg font-semibold">
@@ -197,7 +229,7 @@ function buildCheckoutMessage(service: CondoService, cart: CartLine[]) {
   let hasNegotiable = false;
 
   for (const line of cart) {
-    lines.push(`1x ${line.itemName}`);
+    lines.push(`${line.quantity}x ${line.itemName}`);
     for (const group of line.groups) {
       lines.push(`  - ${group.groupName}: ${group.options.map((o) => o.name).join(", ")}`);
     }
@@ -329,7 +361,10 @@ export default function ServiceDetail() {
             {cart.map((line) => (
               <div key={line.key} className="flex items-start justify-between gap-2 rounded-md border p-2 text-sm">
                 <div>
-                  <p className="font-medium">{line.itemName}</p>
+                  <p className="font-medium">
+                    {line.quantity > 1 ? `${line.quantity}x ` : ""}
+                    {line.itemName}
+                  </p>
                   {line.groups.map((g) => (
                     <p key={g.groupId} className="text-xs text-muted-foreground">
                       {g.groupName}: {g.options.map((o) => o.name).join(", ")}

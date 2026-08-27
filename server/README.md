@@ -96,6 +96,13 @@ apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
   `POST/DELETE /services/mine/photo`, mesmo pipeline de processamento (sharp + R2) dos itens.
 - Preço do item pode ser fixo (`price_cents`, aceita centavos) ou **"a negociar"**
   (`is_negotiable = 1` — nesse caso `price_cents` fica em 0 e o front sempre mostra "A combinar").
+- Item pode ser "multiplicável": `max_quantity` (`NULL` = fixo em 1 unidade, o padrão; um número
+  > 1 deixa o cliente escolher a quantidade de 1 até esse valor no montador). Multiplica o preço
+  já somado das opções escolhidas (preço unitário × quantidade), não afeta itens "a negociar".
+  ⚠️ **`isNegotiable`/`required` chegam via `multipart/form-data` como STRING** — `z.coerce.boolean()`
+  usa `Boolean(valor)`, e `Boolean("false")` é `true` (JS trata qualquer string não-vazia como
+  verdadeira)! Por isso existe `booleanInput` (um `z.preprocess` que só considera `"true"`/`"1"`
+  como verdadeiro) — NUNCA use `z.coerce.boolean()` direto num campo que pode vir de FormData.
 - **Configurador de item** (`condo_service_item_option_groups` + `condo_service_item_options`):
   cada item pode ter grupos de opção configuráveis pelo dono (ex. "Toppings" com até 3 escolhas,
   "Cobertura" com 1 entre 2, "Sabor" obrigatório) — cada grupo tem `selectionType`

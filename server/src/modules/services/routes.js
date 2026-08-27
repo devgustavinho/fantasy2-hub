@@ -76,11 +76,23 @@ const serviceSchema = z.object({
   instagram: z.string().trim().max(60).optional().nullable(),
 });
 
+// `z.coerce.boolean()` usa `Boolean(valor)` — pra uma STRING (é assim que chega de
+// multipart/form-data), qualquer string não-vazia vira `true`, inclusive a string `"false"`
+// literal! Isso fazia todo item marcado como "não negociável" no formulário ser salvo como
+// negociável (zerando o preço). Esse preprocess trata string/boolean de verdade.
+const booleanInput = z.preprocess((val) => {
+  if (typeof val === "string") return val === "true" || val === "1";
+  return val;
+}, z.boolean());
+
 const itemSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).optional().nullable(),
   price: z.coerce.number().min(0).max(1_000_000).optional().default(0),
-  isNegotiable: z.coerce.boolean().optional().default(false),
+  isNegotiable: booleanInput.optional().default(false),
+  // Não preenchido = item fixo em 1 unidade (comportamento padrão). Um número > 1 deixa o
+  // cliente escolher a quantidade (1 até esse valor) no montador do item.
+  maxQuantity: z.coerce.number().int().min(1).max(99).optional().nullable(),
   removeImageIds: z
     .union([z.string(), z.array(z.string())])
     .optional()
@@ -91,7 +103,7 @@ const groupSchema = z.object({
   name: z.string().trim().min(1).max(80),
   selectionType: z.enum(["single", "multi"]),
   maxSelections: z.coerce.number().int().min(1).max(20).optional().nullable(),
-  required: z.coerce.boolean().optional().default(false),
+  required: booleanInput.optional().default(false),
 });
 
 const optionSchema = z.object({
@@ -126,7 +138,8 @@ const listServicesBase = sqlite.prepare(`${SERVICE_JOIN_SELECT} ORDER BY s.creat
 const getServiceWithOwnerById = sqlite.prepare(`${SERVICE_JOIN_SELECT} WHERE s.id = ?`);
 
 const listItemsByService = sqlite.prepare(`
-  SELECT id, name, description, price_cents AS priceCents, is_negotiable AS isNegotiable, created_at AS createdAt
+  SELECT id, name, description, price_cents AS priceCents, is_negotiable AS isNegotiable,
+         max_quantity AS maxQuantity, created_at AS createdAt
   FROM condo_service_items
   WHERE service_id = ?
   ORDER BY created_at ASC
@@ -172,14 +185,14 @@ const deleteServiceById = sqlite.prepare("DELETE FROM condo_services WHERE id = 
 const getItemById = sqlite.prepare("SELECT * FROM condo_service_items WHERE id = ?");
 
 const insertItem = sqlite.prepare(`
-  INSERT INTO condo_service_items (id, service_id, name, description, price_cents, is_negotiable)
-  VALUES (@id, @service_id, @name, @description, @price_cents, @is_negotiable)
+  INSERT INTO condo_service_items (id, service_id, name, description, price_cents, is_negotiable, max_quantity)
+  VALUES (@id, @service_id, @name, @description, @price_cents, @is_negotiable, @max_quantity)
 `);
 
 const updateItem = sqlite.prepare(`
   UPDATE condo_service_items
   SET name = @name, description = @description, price_cents = @price_cents,
-      is_negotiable = @is_negotiable, updated_at = @updated_at
+      is_negotiable = @is_negotiable, max_quantity = @max_quantity, updated_at = @updated_at
   WHERE id = @id
 `);
 
@@ -245,6 +258,7 @@ function serializeItem(row) {
     description: row.description,
     priceCents: row.priceCents,
     isNegotiable: Boolean(row.isNegotiable),
+    maxQuantity: row.maxQuantity ?? null,
     createdAt: row.createdAt,
     images: listImagesByItem.all(row.id),
     optionGroups: listGroupsByItem.all(row.id).map(serializeGroup),
@@ -521,6 +535,7 @@ export function servicesRoutes() {
         description: parsed.data.description || null,
         price_cents: parsed.data.isNegotiable ? 0 : Math.round(parsed.data.price * 100),
         is_negotiable: parsed.data.isNegotiable ? 1 : 0,
+        max_quantity: parsed.data.maxQuantity ?? null,
       });
       await saveNewImages(id, files, 0);
     } catch (err) {
@@ -575,6 +590,7 @@ export function servicesRoutes() {
       description: parsed.data.description || null,
       price_cents: parsed.data.isNegotiable ? 0 : Math.round(parsed.data.price * 100),
       is_negotiable: parsed.data.isNegotiable ? 1 : 0,
+      max_quantity: parsed.data.maxQuantity ?? null,
       updated_at: nowIso(),
     });
 

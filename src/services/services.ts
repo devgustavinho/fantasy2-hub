@@ -40,6 +40,7 @@ export interface ServiceItemInput {
   description?: string;
   price: number;
   isNegotiable?: boolean;
+  maxQuantity?: number | null;
   images?: File[];
   removeImageIds?: string[];
 }
@@ -50,6 +51,7 @@ function toFormData(data: ServiceItemInput) {
   if (data.description) form.set("description", data.description);
   form.set("price", String(data.price));
   form.set("isNegotiable", String(data.isNegotiable ?? false));
+  if (data.maxQuantity) form.set("maxQuantity", String(data.maxQuantity));
   for (const file of data.images ?? []) form.append("images", file);
   for (const id of data.removeImageIds ?? []) form.append("removeImageIds", id);
   return form;
