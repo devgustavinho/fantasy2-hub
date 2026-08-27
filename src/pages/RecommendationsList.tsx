@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageCircle } from "lucide-react";
@@ -10,22 +10,41 @@ import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/QueryError";
 import { StarRating } from "@/components/StarRating";
 import * as recommendationsService from "@/services/recommendations";
+import * as tagsApi from "@/services/tags";
+import { cn } from "@/lib/utils";
 
 export default function RecommendationsList() {
   const queryClient = useQueryClient();
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+
+  const { data: tagsData } = useQuery({ queryKey: ["tags"], queryFn: tagsApi.listTags });
   const {
     data,
     isLoading,
     isError,
     refetch,
-  } = useQuery({ queryKey: ["recommendations"], queryFn: recommendationsService.listRecommendations });
+  } = useQuery({
+    queryKey: ["recommendations", filterTags],
+    queryFn: () => recommendationsService.listRecommendations(filterTags),
+  });
+
+  const tags = useMemo(() => tagsData?.tags ?? [], [tagsData]);
+
+  function toggleFilterTag(id: string) {
+    setFilterTags((current) => (current.includes(id) ? current.filter((t) => t !== id) : [...current, id]));
+  }
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleFormTag(id: string) {
+    setSelectedTagIds((current) => (current.includes(id) ? current.filter((t) => t !== id) : [...current, id]));
+  }
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -34,12 +53,14 @@ export default function RecommendationsList() {
         description: description || undefined,
         whatsapp: whatsapp || undefined,
         instagram: instagram || undefined,
+        tagIds: selectedTagIds,
       }),
     onSuccess: () => {
       setName("");
       setDescription("");
       setWhatsapp("");
       setInstagram("");
+      setSelectedTagIds([]);
       setShowForm(false);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["recommendations"] });
@@ -107,6 +128,28 @@ export default function RecommendationsList() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">Informe pelo menos um WhatsApp ou Instagram.</p>
+              {tags.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => toggleFormTag(tag.id)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs transition-colors",
+                          selectedTagIds.includes(tag.id)
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input bg-background text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {tag.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Enviando..." : "Cadastrar recomendação"}
@@ -114,6 +157,26 @@ export default function RecommendationsList() {
             </form>
           </CardContent>
         </Card>
+      )}
+
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => toggleFilterTag(tag.id)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs transition-colors",
+                filterTags.includes(tag.id)
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-input bg-background text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {tag.name}
+            </button>
+          ))}
+        </div>
       )}
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
@@ -142,6 +205,18 @@ export default function RecommendationsList() {
                     </span>
                   )}
                 </div>
+                {rec.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {rec.tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </Link>

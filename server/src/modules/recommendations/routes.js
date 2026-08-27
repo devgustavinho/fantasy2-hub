@@ -47,6 +47,7 @@ const recommendationSchema = z
     description: z.string().trim().max(1000).optional().nullable(),
     whatsapp: z.string().trim().max(30).optional().nullable(),
     instagram: z.string().trim().max(60).optional().nullable(),
+    tagIds: z.array(z.string()).max(20).optional(),
   })
   .refine((data) => Boolean(data.whatsapp) || Boolean(data.instagram), {
     message: "Informe pelo menos um WhatsApp ou uma rede social.",
@@ -109,6 +110,31 @@ const insertMedia = sqlite.prepare(`
 const getCommentById = sqlite.prepare("SELECT * FROM recommendation_comments WHERE id = ?");
 const deleteCommentById = sqlite.prepare("DELETE FROM recommendation_comments WHERE id = ?");
 
+// Mesmo vocabulário de tags dos serviços (`tags`, curado em `/admin/tags`) — só a associação é
+// própria da recomendação. Diferente de serviços (só admin atribui tag), aqui quem cadastrou a
+// recomendação escolhe as próprias tags: são muitas recomendações informais, não um único
+// anúncio por morador, então centralizar em admin geraria gargalo sem ganho real de consistência.
+const listTagsByRecommendation = sqlite.prepare(`
+  SELECT t.id, t.name FROM recommendation_tags rt JOIN tags t ON t.id = rt.tag_id
+  WHERE rt.recommendation_id = ? ORDER BY t.name ASC
+`);
+const deleteRecommendationTags = sqlite.prepare("DELETE FROM recommendation_tags WHERE recommendation_id = ?");
+const insertRecommendationTag = sqlite.prepare(
+  "INSERT OR IGNORE INTO recommendation_tags (recommendation_id, tag_id) VALUES (?, ?)",
+);
+const getTagById = sqlite.prepare("SELECT id FROM tags WHERE id = ?");
+
+const applyRecommendationTags = sqlite.transaction((recommendationId, tagIds) => {
+  deleteRecommendationTags.run(recommendationId);
+  for (const tagId of tagIds) insertRecommendationTag.run(recommendationId, tagId);
+});
+
+// Valida antes de tocar no banco — sem isso, uma tag inexistente no meio da lista deixaria a
+// recomendação já criada/editada mas com tags parcialmente aplicadas.
+function allTagsExist(tagIds) {
+  return tagIds.every((tagId) => Boolean(getTagById.get(tagId)));
+}
+
 const insertRecommendation = sqlite.prepare(`
   INSERT INTO recommendations (id, created_by, name, description, whatsapp, instagram)
   VALUES (@id, @created_by, @name, @description, @whatsapp, @instagram)
@@ -134,6 +160,7 @@ function serializeRecommendation(row) {
     ratingCount: row.ratingCount,
     avgRating: row.avgRating,
     commentCount: row.commentCount,
+    tags: listTagsByRecommendation.all(row.id),
   };
 }
 
@@ -168,7 +195,14 @@ export function recommendationsRoutes() {
   router.use(requireAuth, requireApproved);
 
   router.get("/", (req, res) => {
-    res.json({ recommendations: listRecommendationsBase.all().map(serializeRecommendation) });
+    const tagFilter = typeof req.query.tags === "string" ? req.query.tags.split(",").filter(Boolean) : [];
+
+    let recommendations = listRecommendationsBase.all().map(serializeRecommendation);
+    if (tagFilter.length > 0) {
+      recommendations = recommendations.filter((r) => r.tags.some((t) => tagFilter.includes(t.id)));
+    }
+
+    res.json({ recommendations });
   });
 
   router.get("/:id", (req, res) => {
@@ -188,6 +222,11 @@ export function recommendationsRoutes() {
       return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Dados inválidos." });
     }
 
+    const tagIds = parsed.data.tagIds ?? [];
+    if (!allTagsExist(tagIds)) {
+      return res.status(400).json({ message: "Tag inexistente." });
+    }
+
     const id = randomUUID();
     insertRecommendation.run({
       id,
@@ -197,6 +236,7 @@ export function recommendationsRoutes() {
       whatsapp: parsed.data.whatsapp || null,
       instagram: normalizeInstagram(parsed.data.instagram),
     });
+    if (tagIds.length > 0) applyRecommendationTags(id, tagIds);
 
     recordAudit({
       actorUserId: req.user.id,
@@ -222,6 +262,10 @@ export function recommendationsRoutes() {
       return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Dados inválidos." });
     }
 
+    if (parsed.data.tagIds && !allTagsExist(parsed.data.tagIds)) {
+      return res.status(400).json({ message: "Tag inexistente." });
+    }
+
     updateRecommendation.run({
       id: recommendation.id,
       name: parsed.data.name,
@@ -230,6 +274,8 @@ export function recommendationsRoutes() {
       instagram: normalizeInstagram(parsed.data.instagram),
       updated_at: nowIso(),
     });
+    // `tagIds` ausente = não mexe nas tags atuais; presente (mesmo vazio) = substitui tudo.
+    if (parsed.data.tagIds) applyRecommendationTags(recommendation.id, parsed.data.tagIds);
 
     recordAudit({
       actorUserId: req.user.id,

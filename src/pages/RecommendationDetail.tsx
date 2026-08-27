@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Instagram, MessageCircle, Trash2 } from "lucide-react";
@@ -10,8 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "@/components/StarRating";
 import { useAuth } from "@/contexts/AuthContext";
 import * as recommendationsService from "@/services/recommendations";
+import * as tagsApi from "@/services/tags";
 import { resolveMediaUrl } from "@/lib/api";
-import { buildInstagramLink, buildWhatsAppLink } from "@/lib/utils";
+import { buildInstagramLink, buildWhatsAppLink, cn } from "@/lib/utils";
 
 const MAX_MEDIA_PER_COMMENT = 4;
 
@@ -26,7 +27,15 @@ export default function RecommendationDetail() {
   const [editDescription, setEditDescription] = useState("");
   const [editWhatsapp, setEditWhatsapp] = useState("");
   const [editInstagram, setEditInstagram] = useState("");
+  const [editTagIds, setEditTagIds] = useState<string[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const { data: tagsData } = useQuery({ queryKey: ["tags"], queryFn: tagsApi.listTags });
+  const tags = useMemo(() => tagsData?.tags ?? [], [tagsData]);
+
+  function toggleEditTag(id: string) {
+    setEditTagIds((current) => (current.includes(id) ? current.filter((t) => t !== id) : [...current, id]));
+  }
 
   const [commentBody, setCommentBody] = useState("");
   const [commentFiles, setCommentFiles] = useState<File[]>([]);
@@ -55,6 +64,7 @@ export default function RecommendationDetail() {
         description: editDescription || undefined,
         whatsapp: editWhatsapp || undefined,
         instagram: editInstagram || undefined,
+        tagIds: editTagIds,
       }),
     onSuccess: () => {
       setIsEditing(false);
@@ -102,6 +112,7 @@ export default function RecommendationDetail() {
     setEditDescription(recommendation.description ?? "");
     setEditWhatsapp(recommendation.whatsapp ?? "");
     setEditInstagram(recommendation.instagram ?? "");
+    setEditTagIds(recommendation.tags.map((t) => t.id));
     setEditError(null);
     setIsEditing(true);
   }
@@ -204,6 +215,28 @@ export default function RecommendationDetail() {
                   />
                 </div>
               </div>
+              {tags.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => toggleEditTag(tag.id)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs transition-colors",
+                          editTagIds.includes(tag.id)
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input bg-background text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {tag.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {editError && <p className="text-sm text-destructive">{editError}</p>}
               <div className="flex gap-2">
                 <Button type="submit" size="sm" disabled={editMutation.isPending}>
@@ -220,6 +253,18 @@ export default function RecommendationDetail() {
                 <p className="whitespace-pre-wrap text-sm">{recommendation.description}</p>
               )}
               <p className="text-xs text-muted-foreground">Recomendado por {recommendation.createdBy.name}</p>
+              {recommendation.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {recommendation.tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </>
           )}
 

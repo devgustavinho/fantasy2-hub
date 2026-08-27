@@ -205,6 +205,7 @@ export interface Recommendation {
   ratingCount: number;
   avgRating: number | null;
   commentCount: number;
+  tags: Tag[];
 }
 
 export type RecommendationMediaType = "image" | "video";
