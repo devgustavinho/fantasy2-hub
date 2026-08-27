@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import multer from "multer";
-import sharp from "sharp";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
 import { requireAuth, requireApproved, requireAdmin } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
-import { deleteFromR2, uploadToR2 } from "../../lib/r2.js";
+import { deleteFromR2 } from "../../lib/r2.js";
+import { processAndSaveImage as processAndSaveImageShared } from "../../lib/media.js";
 
 const MAX_IMAGES_PER_ITEM = 5;
 
@@ -36,18 +36,8 @@ function handlePhotoUpload(req, res, next) {
   });
 }
 
-// Decodifica com o sharp (aceita JPEG/PNG/WebP/HEIC/HEIF e outros) e sempre regrava como JPEG
-// de até 1200px no lado maior — isso é o que garante a "miniatura" pedida, elimina qualquer
-// ambiguidade de mimetype vinda do celular, e evita guardar fotos de vários MB sem necessidade.
-// Sobe direto pro bucket público da Cloudflare R2 (nada fica no disco da VPS).
-async function processAndSaveImage(buffer) {
-  const key = `services/${randomUUID()}.jpg`;
-  const processed = await sharp(buffer)
-    .rotate()
-    .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 82 })
-    .toBuffer();
-  return uploadToR2(key, processed, "image/jpeg");
+function processAndSaveImage(buffer) {
+  return processAndSaveImageShared(buffer, "services");
 }
 
 function deleteImageFile(imagePath) {

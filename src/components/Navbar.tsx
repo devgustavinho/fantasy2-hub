@@ -1,5 +1,15 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Building2, ClipboardList, LayoutDashboard, ScrollText, ShoppingBag, Tag, User, Users } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  LayoutDashboard,
+  ScrollText,
+  ShoppingBag,
+  Star,
+  Tag,
+  User,
+  Users,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
@@ -59,6 +69,7 @@ export function BottomDock() {
   const items: FloatingDockItem[] = [
     { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/" },
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
+    { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
     ...(isStaff
       ? [{ title: "Administração", icon: <LayoutDashboard className="h-full w-full" />, href: "/admin" }]
       : []),

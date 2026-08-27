@@ -17,6 +17,8 @@ import MyService from "@/pages/MyService";
 import AuditLog from "@/pages/AuditLog";
 import ServiceTagsAdmin from "@/pages/ServiceTagsAdmin";
 import ApartmentMap from "@/pages/ApartmentMap";
+import RecommendationsList from "@/pages/RecommendationsList";
+import RecommendationDetail from "@/pages/RecommendationDetail";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -87,6 +89,22 @@ export default function App() {
                 element={
                   <AppLayout>
                     <ServiceDetail />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/recomendacoes"
+                element={
+                  <AppLayout>
+                    <RecommendationsList />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/recomendacoes/:id"
+                element={
+                  <AppLayout>
+                    <RecommendationDetail />
                   </AppLayout>
                 }
               />
