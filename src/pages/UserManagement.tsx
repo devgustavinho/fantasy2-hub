@@ -321,6 +321,7 @@ export default function UserManagement() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {roleBadge(u.role)}
+                  {u.householdRole === "family" && <Badge variant="secondary">Familiar</Badge>}
                   {approvalBadge(u.approvalStatus)}
                   {!isSelf && isAdmin && u.role === "admin" && (
                     <>

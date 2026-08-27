@@ -26,7 +26,7 @@ npm run dev
 - 3 cargos (`role`): `admin`, `sindico` e `morador`. O primeiro admin é criado via `scripts/create-admin.js` no servidor (nunca por API), mas **a partir daí qualquer admin pode promover outro usuário a admin** pela tela de Usuários — não é mais um cargo único fixo. Únicas travas continuam: ninguém altera o próprio cargo, e não dá pra rebaixar o último admin restante (`server/src/modules/users/routes.js`). `admin` e `sindico` **podem opcionalmente** ter `apartment_id` também (não são mutuamente exclusivos com "morar no condomínio").
 - Cadastro (`approval_status`: `pending`/`approved`/`rejected`): todo `POST /auth/register` nasce `pending` e só um admin aprova/recusa (`PATCH /users/:id/approve|reject`). Recusar libera o apartamento (`apartment_id = NULL`) automaticamente. Login sempre libera uma sessão de verdade (`establishSession`), mesmo pendente/recusado — é o `requireApproved` na camada de rota, não o login, que bloqueia as funcionalidades reais; o front mostra uma tela de status (`ApprovalGate`/`PendingApproval`) em vez do app enquanto não aprovado. Isso é proposital: deixa o cadastro pendente logado o bastante pra, por exemplo, ativar notificação push e escolher ser avisado quando for aprovado. Ao registrar, todos os admins recebem notificação (in-app + push) via `notifyAdmins`; ao aprovar, o próprio usuário recebe uma via `notifyUser`.
 - 2FA obrigatório pra admin (`src/auth/twoFactor.js`, TOTP via `otplib`, compatível com Google Authenticator): todo login de uma conta `admin` passa por `establishSession`, que só libera o cookie de sessão depois do código de 6 dígitos — na primeira vez, força o cadastro do 2FA (mostra QR code) antes de liberar. Vale tanto pra login por senha quanto por passkey.
-- Um apartamento só pode ter 1 morador vinculado — garantido por índice único parcial (`idx_users_apartment`, `WHERE apartment_id IS NOT NULL`), independente do cargo do usuário.
+- Um apartamento tem no máximo 2 usuários vinculados: 1 titular (`household_role = 'owner'`, o que se cadastrou pelo `/register`) e 1 familiar convidado por ele (`household_role = 'family'`) — garantido por índice único composto (`idx_users_apartment_household` em `(apartment_id, household_role)`, `WHERE apartment_id IS NOT NULL`). Ver seção "Família" abaixo.
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
 
@@ -34,7 +34,7 @@ npm run dev
 
 | Ação | morador | síndico | admin |
 |---|---|---|---|
-| Criar pauta, votar, comentar | ✅ | ✅ | ✅ |
+| Criar pauta, votar, comentar | ✅ (exceto votar, se `household_role='family'`) | ✅ | ✅ |
 | Editar título/descrição de uma pauta | só a própria | ✅ (qualquer) | ✅ (qualquer) |
 | Marcar/reabrir pauta como pautada, definir "atualização da administração" | ❌ | ✅ | ✅ |
 | Ver painel `/admin` (pautas por engajamento) | ❌ | ✅ | ✅ |
@@ -106,6 +106,27 @@ abre um painel estilo iFood (galeria de fotos, descrição, preço) com um botã
 - Todo mundo aprovado (`requireApproved`) pode ver a lista pública e cadastrar o próprio serviço — não
   tem restrição por cargo.
 - Auditado: `services.create/edit/delete`, `services.item_create/edit/delete`, `services.tags_set`.
+
+## Família (1 titular + 1 familiar por apartamento)
+
+`household_role` (`owner`/`family`) em `users`, ortogonal ao `role` (admin/sindico/morador) — um
+familiar continua `role: 'morador'`, só muda o `household_role`. Endpoints em
+`src/modules/auth/routes.js`:
+
+- `GET /auth/family-member` — o titular vê o familiar que convidou (ou `null`).
+- `POST /auth/family-member` — só o titular (`household_role === 'owner'` com `apartment_id`) pode
+  convidar, e só 1 por apartamento (índice único + checagem na rota). A conta do familiar já nasce
+  `approval_status: 'approved'` — o titular já é um morador verificado e está pessoalmente
+  respondendo por quem convida, não passa pela fila de aprovação do admin de novo.
+- Familiar tem login, WhatsApp e permissões normais de leitura/comentário, **mas não vota**:
+  `POST /topics/:id/vote` responde 403 pra `household_role === 'family'` — é assim que "um voto por
+  apartamento" é garantido (o titular sempre pode votar, o familiar nunca pode).
+- `GET /apartments` (pública, usada no cadastro) precisa considerar que um apartamento agora pode
+  ter até 2 linhas em `users` — a query usa `NOT EXISTS` em vez de `LEFT JOIN` direto, senão um
+  apartamento com titular+familiar apareceria duplicado na lista.
+- `GET /apartments/map?tower=` (admin) — mapa de apartamentos por torre pra administração não se
+  perder em meio a centenas de usuários: cada unidade com seus moradores (titular e familiar, se
+  houver). Página em `/admin/apartamentos`.
 
 ## Tags de serviço
 

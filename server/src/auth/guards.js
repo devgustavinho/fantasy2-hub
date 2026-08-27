@@ -2,7 +2,7 @@ import { sqlite } from "../db/client.js";
 import { SESSION_COOKIE, verifySession } from "./jwt.js";
 
 const getUserById = sqlite.prepare(
-  "SELECT id, apartment_id, name, email, role, approval_status, whatsapp, whatsapp_visible FROM users WHERE id = ?",
+  "SELECT id, apartment_id, name, email, role, approval_status, whatsapp, whatsapp_visible, household_role FROM users WHERE id = ?",
 );
 
 export function loadSession(req, _res, next) {

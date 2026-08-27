@@ -26,6 +26,7 @@ const listUsers = sqlite.prepare(`
   SELECT
     u.id, u.name, u.email, u.role, u.created_at AS createdAt,
     u.approval_status AS approvalStatus, u.whatsapp, u.whatsapp_visible AS whatsappVisible,
+    u.household_role AS householdRole,
     a.tower, a.code AS apartmentCode
   FROM users u
   LEFT JOIN apartments a ON a.id = u.apartment_id

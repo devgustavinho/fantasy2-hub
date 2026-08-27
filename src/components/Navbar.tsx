@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ClipboardList, LayoutDashboard, ScrollText, ShoppingBag, Tag, User, Users } from "lucide-react";
+import { Building2, ClipboardList, LayoutDashboard, ScrollText, ShoppingBag, Tag, User, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
@@ -67,6 +67,7 @@ export function BottomDock() {
       ? [
           { title: "Auditoria", icon: <ScrollText className="h-full w-full" />, href: "/admin/auditoria" },
           { title: "Tags", icon: <Tag className="h-full w-full" />, href: "/admin/tags" },
+          { title: "Apartamentos", icon: <Building2 className="h-full w-full" />, href: "/admin/apartamentos" },
         ]
       : []),
   ];

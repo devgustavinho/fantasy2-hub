@@ -240,22 +240,29 @@ export default function TopicDetail() {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <Button
-              variant={topic.myVote === "favor" ? "default" : "outline"}
-              onClick={() => voteMutation.mutate("favor")}
-              disabled={voteMutation.isPending}
-            >
-              👍 A favor ({topic.favorCount})
-            </Button>
-            <Button
-              variant={topic.myVote === "contra" ? "destructive" : "outline"}
-              onClick={() => voteMutation.mutate("contra")}
-              disabled={voteMutation.isPending}
-            >
-              👎 Contra ({topic.contraCount})
-            </Button>
-          </div>
+          {user?.householdRole === "family" ? (
+            <p className="text-sm text-muted-foreground">
+              👍 {topic.favorCount} · 👎 {topic.contraCount} — membros da família não votam (é um voto por
+              apartamento), mas podem comentar normalmente.
+            </p>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Button
+                variant={topic.myVote === "favor" ? "default" : "outline"}
+                onClick={() => voteMutation.mutate("favor")}
+                disabled={voteMutation.isPending}
+              >
+                👍 A favor ({topic.favorCount})
+              </Button>
+              <Button
+                variant={topic.myVote === "contra" ? "destructive" : "outline"}
+                onClick={() => voteMutation.mutate("contra")}
+                disabled={voteMutation.isPending}
+              >
+                👎 Contra ({topic.contraCount})
+              </Button>
+            </div>
+          )}
 
           {isStaff && (
             <div className="space-y-3 rounded-md border bg-muted/40 p-4">

@@ -1,5 +1,6 @@
 export type Role = "admin" | "sindico" | "morador";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
+export type HouseholdRole = "owner" | "family";
 
 export interface User {
   id: string;
@@ -10,6 +11,7 @@ export interface User {
   approvalStatus: ApprovalStatus;
   whatsapp: string | null;
   whatsappVisible: boolean;
+  householdRole: HouseholdRole;
 }
 
 export interface ManagedUser {
@@ -21,8 +23,28 @@ export interface ManagedUser {
   approvalStatus: ApprovalStatus;
   whatsapp: string | null;
   whatsappVisible: boolean;
+  householdRole: HouseholdRole;
   tower: number | null;
   apartmentCode: string | null;
+}
+
+export interface FamilyMember {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface ApartmentMapEntry {
+  id: string;
+  floor: number;
+  unitNumber: number;
+  code: string;
+  residents: {
+    id: string;
+    name: string;
+    householdRole: HouseholdRole;
+    approvalStatus: ApprovalStatus;
+  }[];
 }
 
 export interface Apartment {

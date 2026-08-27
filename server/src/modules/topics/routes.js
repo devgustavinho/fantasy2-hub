@@ -332,6 +332,12 @@ export function topicsRoutes() {
   });
 
   router.post("/:id/vote", (req, res) => {
+    if (req.user.household_role === "family") {
+      return res.status(403).json({
+        message: "Membros da família não podem votar — o voto é um por apartamento. Você pode comentar normalmente.",
+      });
+    }
+
     const topic = getTopic.get(req.params.id);
     if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
 

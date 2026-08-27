@@ -14,6 +14,7 @@ import Services from "@/pages/Services";
 import MyService from "@/pages/MyService";
 import AuditLog from "@/pages/AuditLog";
 import ServiceTagsAdmin from "@/pages/ServiceTagsAdmin";
+import ApartmentMap from "@/pages/ApartmentMap";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -116,6 +117,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <ServiceTagsAdmin />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/admin/apartamentos"
+                element={
+                  <AppLayout>
+                    <ApartmentMap />
                   </AppLayout>
                 }
               />

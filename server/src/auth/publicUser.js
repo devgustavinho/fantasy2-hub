@@ -10,5 +10,6 @@ export function toPublicUser(user) {
     approvalStatus: user.approval_status,
     whatsapp: user.whatsapp ?? null,
     whatsappVisible: Boolean(user.whatsapp_visible),
+    householdRole: user.household_role,
   };
 }

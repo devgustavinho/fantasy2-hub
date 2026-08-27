@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { LoginResult, User } from "@/lib/types";
+import type { FamilyMember, LoginResult, User } from "@/lib/types";
 
 export interface RegisterInput {
   apartmentId: string;
@@ -26,3 +26,8 @@ export const verifyTotp = (token: string, code: string) =>
 
 export const updateMyProfile = (data: { whatsapp?: string | null; whatsappVisible?: boolean }) =>
   api.patch<{ user: User }>("/auth/me", data);
+
+export const getFamilyMember = () => api.get<{ familyMember: FamilyMember | null }>("/auth/family-member");
+
+export const inviteFamilyMember = (data: { name: string; email: string; password: string }) =>
+  api.post<{ familyMember: FamilyMember }>("/auth/family-member", data);

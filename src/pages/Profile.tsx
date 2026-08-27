@@ -25,6 +25,29 @@ export default function Profile() {
   const [whatsappVisible, setWhatsappVisible] = useState(user?.whatsappVisible ?? false);
   const [whatsappSaved, setWhatsappSaved] = useState(false);
 
+  const canInviteFamily = user?.householdRole === "owner" && !!user.apartmentId;
+  const { data: familyData } = useQuery({
+    queryKey: ["family-member"],
+    queryFn: authService.getFamilyMember,
+    enabled: canInviteFamily,
+  });
+  const [familyName, setFamilyName] = useState("");
+  const [familyEmail, setFamilyEmail] = useState("");
+  const [familyPassword, setFamilyPassword] = useState("");
+  const [familyError, setFamilyError] = useState<string | null>(null);
+
+  const inviteFamilyMutation = useMutation({
+    mutationFn: () => authService.inviteFamilyMember({ name: familyName, email: familyEmail, password: familyPassword }),
+    onSuccess: () => {
+      setFamilyError(null);
+      setFamilyName("");
+      setFamilyEmail("");
+      setFamilyPassword("");
+      queryClient.invalidateQueries({ queryKey: ["family-member"] });
+    },
+    onError: (err) => setFamilyError(err instanceof Error ? err.message : "Erro ao convidar familiar."),
+  });
+
   const whatsappMutation = useMutation({
     mutationFn: () => authService.updateMyProfile({ whatsapp: whatsapp.trim() || null, whatsappVisible }),
     onSuccess: ({ user }) => {
@@ -98,9 +121,69 @@ export default function Profile() {
           </p>
           <p className="flex items-center gap-2">
             <span className="text-muted-foreground">Cargo:</span> <Badge variant="secondary">{roleLabel(user.role)}</Badge>
+            {user.householdRole === "family" && <Badge variant="secondary">Familiar</Badge>}
           </p>
         </CardContent>
       </Card>
+
+      {canInviteFamily && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Família</CardTitle>
+            <CardDescription>
+              Convide 1 familiar para ter o próprio login. Ele pode ver tudo e comentar, mas não vota —
+              o voto continua sendo 1 por apartamento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {familyData?.familyMember ? (
+              <div className="rounded-md border p-3 text-sm">
+                <p className="font-medium">{familyData.familyMember.name}</p>
+                <p className="text-muted-foreground">{familyData.familyMember.email}</p>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!familyName.trim() || !familyEmail.trim() || familyPassword.length < 8) {
+                    setFamilyError("Preencha nome, e-mail e uma senha com pelo menos 8 caracteres.");
+                    return;
+                  }
+                  inviteFamilyMutation.mutate();
+                }}
+                className="space-y-3"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="familyName">Nome</Label>
+                  <Input id="familyName" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="familyEmail">E-mail</Label>
+                  <Input
+                    id="familyEmail"
+                    type="email"
+                    value={familyEmail}
+                    onChange={(e) => setFamilyEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="familyPassword">Senha</Label>
+                  <Input
+                    id="familyPassword"
+                    type="password"
+                    value={familyPassword}
+                    onChange={(e) => setFamilyPassword(e.target.value)}
+                  />
+                </div>
+                {familyError && <p className="text-sm text-destructive">{familyError}</p>}
+                <Button type="submit" size="sm" disabled={inviteFamilyMutation.isPending}>
+                  {inviteFamilyMutation.isPending ? "Convidando..." : "Convidar familiar"}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
