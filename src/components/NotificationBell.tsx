@@ -28,10 +28,10 @@ export function NotificationBell() {
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unreadCount ?? 0;
 
-  function handleNotificationClick(id: string, topicId: string) {
+  function handleNotificationClick(id: string, linkUrl: string | null, topicId: string | null) {
     markReadMutation.mutate(id);
     setOpen(false);
-    navigate(`/topics/${topicId}`);
+    navigate(linkUrl ?? (topicId ? `/topics/${topicId}` : "/"));
   }
 
   return (
@@ -71,7 +71,7 @@ export function NotificationBell() {
               {notifications.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => handleNotificationClick(n.id, n.topicId)}
+                  onClick={() => handleNotificationClick(n.id, n.linkUrl, n.topicId)}
                   className={`block w-full border-b p-3 text-left text-sm last:border-b-0 hover:bg-accent/40 ${
                     n.readAt ? "text-muted-foreground" : "font-medium"
                   }`}

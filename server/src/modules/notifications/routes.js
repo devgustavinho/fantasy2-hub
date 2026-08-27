@@ -5,7 +5,7 @@ import { requireApproved, requireAuth } from "../../auth/guards.js";
 const nowIso = () => new Date().toISOString();
 
 const listMine = sqlite.prepare(`
-  SELECT n.id, n.topic_id AS topicId, t.title AS topicTitle, n.message,
+  SELECT n.id, n.topic_id AS topicId, t.title AS topicTitle, n.link_url AS linkUrl, n.message,
          n.read_at AS readAt, n.created_at AS createdAt
   FROM notifications n
   LEFT JOIN topics t ON t.id = n.topic_id

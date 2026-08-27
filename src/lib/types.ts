@@ -97,6 +97,7 @@ export interface Notification {
   id: string;
   topicId: string | null;
   topicTitle: string | null;
+  linkUrl: string | null;
   message: string;
   readAt: string | null;
   createdAt: string;
@@ -186,6 +187,40 @@ export interface AuditEntry {
   entityId: string | null;
   details: Record<string, unknown> | null;
   createdAt: string;
+}
+
+export interface RecommendationAuthor {
+  id: string;
+  name: string;
+}
+
+export interface Recommendation {
+  id: string;
+  name: string;
+  description: string | null;
+  whatsapp: string | null;
+  instagram: string | null;
+  createdAt: string;
+  createdBy: RecommendationAuthor;
+  ratingCount: number;
+  avgRating: number | null;
+  commentCount: number;
+}
+
+export type RecommendationMediaType = "image" | "video";
+
+export interface RecommendationMedia {
+  id: string;
+  mediaType: RecommendationMediaType;
+  path: string;
+}
+
+export interface RecommendationComment {
+  id: string;
+  body: string | null;
+  createdAt: string;
+  author: RecommendationAuthor;
+  media: RecommendationMedia[];
 }
 
 // Resultado de login (senha ou passkey) — o backend pode responder de 3 formas diferentes
