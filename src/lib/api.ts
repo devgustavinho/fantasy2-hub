@@ -15,15 +15,35 @@ export class ApiError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
+// Sem isso, um `fetch` que trava (observado em Safari/iOS com cookie cross-site — ver
+// sessionCookieOptions no backend) deixa a query do react-query pendurada pra sempre: nem
+// `isLoading` nem `isError` resolvem, e a tela fica presa em "Carregando..." sem chance de
+// retry. Isso limita qualquer request a no máximo 20s antes de virar um erro de verdade.
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: {
-      ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
-      ...options.headers,
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      credentials: "include",
+      signal: controller.signal,
+      headers: {
+        ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("A conexão demorou demais. Verifique sua internet e tente de novo.", 0);
+    }
+    throw new ApiError("Não foi possível conectar ao servidor. Verifique sua internet.", 0);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     let message = `Erro ${res.status}`;
