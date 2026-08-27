@@ -1,12 +1,18 @@
 import { sqlite } from "../db/client.js";
-import { SESSION_COOKIE, verifySession } from "./jwt.js";
+import { verifySession } from "./jwt.js";
 
 const getUserById = sqlite.prepare(
   "SELECT id, apartment_id, name, email, role, approval_status, whatsapp, whatsapp_visible, household_role FROM users WHERE id = ?",
 );
 
+// Token via header (não mais cookie) — cookie cross-site (front no Cloudflare Pages, API na
+// VPS, domínios diferentes) esbarra no bloqueio de cookie de terceiro do Safari por padrão,
+// mesmo com SameSite=None; Secure configurado certo. `Authorization: Bearer` não é cookie,
+// então nenhuma dessas regras de first/third-party se aplica — funciona igual em qualquer
+// navegador.
 export function loadSession(req, _res, next) {
-  const token = req.cookies?.[SESSION_COOKIE];
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (token) {
     const payload = verifySession(token);
     if (payload) {

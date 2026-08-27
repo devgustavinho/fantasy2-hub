@@ -238,6 +238,6 @@ export interface FaqEntry {
 // afeta o login em si — sempre libera sessão; quem bloqueia o app é o `ApprovalGate` no front,
 // usando `user.approvalStatus`.
 export type LoginResult =
-  | { status: "ok"; user: User }
+  | { status: "ok"; user: User; token: string }
   | { status: "totp-setup-required"; token: string; otpauthUrl: string; qrDataUrl: string }
   | { status: "totp-verify-required"; token: string };

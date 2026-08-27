@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import { env } from "./env.js";
 import { loadSession } from "./auth/guards.js";
@@ -19,9 +18,10 @@ import { faqRoutes } from "./modules/faq/routes.js";
 
 const app = express();
 
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+// Sessão vai por `Authorization: Bearer`, não cookie — não precisa de `credentials: true`
+// nem de cookie-parser (cookie cross-site esbarrava no bloqueio de terceiro do Safari).
+app.use(cors({ origin: env.CORS_ORIGIN }));
 app.use(express.json());
-app.use(cookieParser());
 app.use(loadSession);
 
 const authLimiter = rateLimit({

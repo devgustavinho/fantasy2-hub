@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import * as authService from "@/services/auth";
 import * as webauthnService from "@/services/webauthn";
+import { setToken } from "@/lib/api";
 import type { LoginResult } from "@/lib/types";
 
 type View =
@@ -37,6 +38,7 @@ export default function Login() {
 
   function handleResult(result: LoginResult) {
     if (result.status === "ok") {
+      setToken(result.token);
       setUser(result.user);
       navigate(redirectTo, { replace: true });
     } else if (result.status === "totp-setup-required") {

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { ApiError } from "@/lib/api";
+import { ApiError, getToken, setToken } from "@/lib/api";
 import type { User } from "@/lib/types";
 import * as authService from "@/services/auth";
 
@@ -17,6 +17,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Sem token guardado, nem vale bater no back — já cai direto pra tela de login.
+    if (!getToken()) {
+      setLoading(false);
+      return;
+    }
     authService
       .me()
       .then(({ user }) => setUser(user))
@@ -30,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await authService.logout();
+    setToken(null);
     setUser(null);
   }
 

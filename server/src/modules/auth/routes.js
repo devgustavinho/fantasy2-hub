@@ -3,7 +3,6 @@ import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
 import { hashPassword, verifyPassword } from "../../auth/password.js";
-import { SESSION_COOKIE } from "../../auth/jwt.js";
 import { requireAuth, requireApproved } from "../../auth/guards.js";
 import { toPublicUser } from "../../auth/publicUser.js";
 import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
@@ -127,14 +126,14 @@ export function authRoutes() {
     }
 
     recordAudit({ actorUserId: user.id, actorName: user.name, action: "auth.login", entityType: "user", entityId: user.id });
-    res.json(await establishSession(res, user));
+    res.json(await establishSession(user));
   });
 
   router.post("/2fa/setup/confirm", (req, res) => {
     const parsed = totpSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Informe o código de 6 dígitos." });
 
-    const result = confirmTotpSetup(res, parsed.data.token, parsed.data.code);
+    const result = confirmTotpSetup(parsed.data.token, parsed.data.code);
     if (result.error) return res.status(400).json({ message: result.error });
 
     recordAudit({
@@ -144,21 +143,23 @@ export function authRoutes() {
       entityType: "user",
       entityId: result.user.id,
     });
-    res.json({ status: "ok", user: result.user });
+    res.json({ status: "ok", user: result.user, token: result.token });
   });
 
   router.post("/2fa/verify", (req, res) => {
     const parsed = totpSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Informe o código de 6 dígitos." });
 
-    const result = verifyTotpLogin(res, parsed.data.token, parsed.data.code);
+    const result = verifyTotpLogin(parsed.data.token, parsed.data.code);
     if (result.error) return res.status(400).json({ message: result.error });
 
-    res.json({ status: "ok", user: result.user });
+    res.json({ status: "ok", user: result.user, token: result.token });
   });
 
+  // Sessão é um JWT stateless (sem cookie pra limpar) — o front só precisa esquecer o token
+  // guardado localmente. Endpoint mantido por compatibilidade e caso um dia vire necessário
+  // revogar tokens do lado do servidor (ex. blocklist).
   router.post("/logout", (_req, res) => {
-    res.clearCookie(SESSION_COOKIE, { path: "/" });
     res.status(204).end();
   });
 

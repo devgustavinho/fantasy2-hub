@@ -191,7 +191,7 @@ export function webauthnRoutes() {
     }
 
     updateCounter.run(verification.authenticationInfo.newCounter, credentialRow.id);
-    res.json(await establishSession(res, user));
+    res.json(await establishSession(user));
   });
 
   router.get("/credentials", requireAuth, (req, res) => {

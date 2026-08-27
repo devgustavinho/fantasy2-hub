@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
-import { env, isProd } from "../env.js";
+import { env } from "../env.js";
 
-export const SESSION_COOKIE = "fantasy2_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 180; // 180 dias — app do condomínio, não banco
 
 export function signSession(payload) {
@@ -15,14 +14,3 @@ export function verifySession(token) {
     return null;
   }
 }
-
-export const sessionCookieOptions = {
-  httpOnly: true,
-  secure: isProd,
-  // Front (Cloudflare Pages) e API (VPS) vivem em domínios diferentes, então o cookie
-  // precisa ser cross-site. SameSite=None exige Secure, por isso só em produção (HTTPS);
-  // em dev local (http://localhost) cai para "lax", que é o único valor aceito sem Secure.
-  sameSite: isProd ? "none" : "lax",
-  path: "/",
-  maxAge: SESSION_TTL_SECONDS * 1000,
-};

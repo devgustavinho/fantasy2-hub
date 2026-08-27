@@ -15,24 +15,41 @@ export class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = "fantasy2_token";
+
+// Sessão via `Authorization: Bearer`, guardada em localStorage — não cookie. Front (Cloudflare
+// Pages) e API (VPS) vivem em domínios diferentes; um cookie cross-site esbarra no bloqueio de
+// cookie de terceiro do Safari por padrão (mesmo com SameSite=None; Secure certinho — Chrome
+// ainda permite, por isso só iPhone reclamava). Bearer token não é cookie, não é afetado por
+// nenhuma dessas regras.
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string | null) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
 const REQUEST_TIMEOUT_MS = 20_000;
 
-// Sem isso, um `fetch` que trava (observado em Safari/iOS com cookie cross-site — ver
-// sessionCookieOptions no backend) deixa a query do react-query pendurada pra sempre: nem
-// `isLoading` nem `isError` resolvem, e a tela fica presa em "Carregando..." sem chance de
-// retry. Isso limita qualquer request a no máximo 20s antes de virar um erro de verdade.
+// Sem isso, um `fetch` que trava (rede ruim, servidor engasgado) deixa a query do react-query
+// pendurada pra sempre: nem `isLoading` nem `isError` resolvem, e a tela fica presa em
+// "Carregando..." sem chance de retry. Isso limita qualquer request a no máximo 20s antes de
+// virar um erro de verdade.
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const token = getToken();
 
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       ...options,
-      credentials: "include",
       signal: controller.signal,
       headers: {
         ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
     });
