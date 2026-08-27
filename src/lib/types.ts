@@ -224,6 +224,15 @@ export interface RecommendationComment {
   media: RecommendationMedia[];
 }
 
+export interface FaqEntry {
+  id: string;
+  question: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: RecommendationAuthor;
+}
+
 // Resultado de login (senha ou passkey) — o backend pode responder de 3 formas diferentes
 // dependendo do estado da conta (2FA obrigatório pra admin). Aprovação pendente/recusada não
 // afeta o login em si — sempre libera sessão; quem bloqueia o app é o `ApprovalGate` no front,

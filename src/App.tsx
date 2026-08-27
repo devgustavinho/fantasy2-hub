@@ -19,6 +19,7 @@ import ServiceTagsAdmin from "@/pages/ServiceTagsAdmin";
 import ApartmentMap from "@/pages/ApartmentMap";
 import RecommendationsList from "@/pages/RecommendationsList";
 import RecommendationDetail from "@/pages/RecommendationDetail";
+import Faq from "@/pages/Faq";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -105,6 +106,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <RecommendationDetail />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/faq"
+                element={
+                  <AppLayout>
+                    <Faq />
                   </AppLayout>
                 }
               />

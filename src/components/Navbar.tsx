@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Building2,
   ClipboardList,
+  HelpCircle,
   LayoutDashboard,
   ScrollText,
   ShoppingBag,
@@ -70,6 +71,7 @@ export function BottomDock() {
     { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/" },
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
     { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
+    { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },
     ...(isStaff
       ? [{ title: "Administração", icon: <LayoutDashboard className="h-full w-full" />, href: "/admin" }]
       : []),
