@@ -341,7 +341,10 @@ export function servicesRoutes() {
   });
 
   // WhatsApp e Instagram são opcionais: um serviço pode divulgar só um dos dois (ou os dois).
-  router.post("/", (req, res) => {
+  // Foto também é opcional aqui — antes só dava pra anexar depois de já ter criado o serviço
+  // (a tela de edição só aparece depois do cadastro), o que fazia parecer que a opção nem
+  // existia. `handlePhotoUpload` faz o multipart virar `req.body` (strings) + `req.file`.
+  router.post("/", handlePhotoUpload, async (req, res) => {
     if (getServiceByUser.get(req.user.id)) {
       return res.status(409).json({ message: "Você já tem um serviço cadastrado." });
     }
@@ -363,6 +366,11 @@ export function servicesRoutes() {
       description: parsed.data.description || null,
       instagram: normalizeInstagram(parsed.data.instagram),
     });
+
+    if (req.file) {
+      const imagePath = await processAndSaveImage(req.file.buffer);
+      setServiceImage.run({ id, image_path: imagePath, updated_at: nowIso() });
+    }
 
     recordAudit({
       actorUserId: req.user.id,

@@ -17,7 +17,15 @@ export interface ServiceSocialInput {
   instagram?: string;
 }
 
-export const createService = (data: ServiceSocialInput) => api.post<{ service: MyService }>("/services", data);
+export const createService = (data: ServiceSocialInput & { photo?: File }) => {
+  const form = new FormData();
+  form.set("name", data.name);
+  if (data.description) form.set("description", data.description);
+  if (data.whatsapp) form.set("whatsapp", data.whatsapp);
+  if (data.instagram) form.set("instagram", data.instagram);
+  if (data.photo) form.set("photo", data.photo);
+  return api.postForm<{ service: MyService }>("/services", form);
+};
 
 export const updateService = (data: ServiceSocialInput) =>
   api.patch<{ service: MyService }>("/services/mine", data);

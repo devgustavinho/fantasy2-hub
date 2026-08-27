@@ -193,6 +193,7 @@ export default function MyService() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [optionsItemId, setOptionsItemId] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [newServicePhoto, setNewServicePhoto] = useState<File | null>(null);
 
   const {
     data,
@@ -216,9 +217,17 @@ export default function MyService() {
   }
 
   const createMutation = useMutation({
-    mutationFn: () => servicesApi.createService({ name, description, whatsapp: whatsapp || undefined, instagram: instagram || undefined }),
+    mutationFn: () =>
+      servicesApi.createService({
+        name,
+        description,
+        whatsapp: whatsapp || undefined,
+        instagram: instagram || undefined,
+        photo: newServicePhoto ?? undefined,
+      }),
     onSuccess: () => {
       setError(null);
+      setNewServicePhoto(null);
       invalidate();
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Erro ao cadastrar serviço."),
@@ -347,6 +356,40 @@ export default function MyService() {
                   onChange={(e) => setInstagram(e.target.value)}
                   placeholder="@doces.da.maria"
                 />
+              </div>
+              <div className="space-y-1">
+                <Label>Foto do serviço (opcional)</Label>
+                {newServicePhoto ? (
+                  <div className="relative h-32 w-full max-w-xs overflow-hidden rounded-md border">
+                    <img
+                      src={URL.createObjectURL(newServicePhoto)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewServicePhoto(null)}
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                      aria-label="Remover foto"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex h-32 w-full max-w-xs cursor-pointer items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground hover:border-primary/50">
+                    + adicionar foto
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setNewServicePhoto(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={createMutation.isPending}>
