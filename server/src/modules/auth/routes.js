@@ -8,6 +8,7 @@ import { requireAuth } from "../../auth/guards.js";
 import { toPublicUser } from "../../auth/publicUser.js";
 import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
 import { recordAudit } from "../audit/service.js";
+import { notifyAdmins } from "../notifications/service.js";
 
 const registerSchema = z.object({
   apartmentId: z.string().min(1),
@@ -31,7 +32,7 @@ const meUpdateSchema = z.object({
   whatsappVisible: z.boolean().optional(),
 });
 
-const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
+const getApartment = sqlite.prepare("SELECT id, tower, code FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT * FROM users WHERE email = ?");
 const insertUser = sqlite.prepare(`
@@ -54,7 +55,8 @@ export function authRoutes() {
     }
     const { apartmentId, name, email, password } = parsed.data;
 
-    if (!getApartment.get(apartmentId)) {
+    const apartment = getApartment.get(apartmentId);
+    if (!apartment) {
       return res.status(404).json({ message: "Apartamento não encontrado." });
     }
     if (getApartmentOwner.get(apartmentId)) {
@@ -89,6 +91,11 @@ export function authRoutes() {
       entityType: "user",
       entityId: userId,
       details: { email, apartmentId },
+    });
+
+    notifyAdmins({
+      message: `${name} (apto ${apartment.code}, torre ${apartment.tower}) se cadastrou e está aguardando aprovação.`,
+      url: "/admin/usuarios",
     });
 
     res.status(201).json({ status: "pending" });

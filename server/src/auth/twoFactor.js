@@ -39,13 +39,12 @@ function setSessionCookie(res, userId) {
   res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
 }
 
-// Chamado por todo login bem-sucedido (senha ou passkey). Aplica, nessa ordem: aprovação de
-// cadastro → 2FA obrigatório pra admin → sessão de verdade.
+// Chamado por todo login bem-sucedido (senha ou passkey). Aplica o 2FA obrigatório pra
+// admin e, no fim, sempre libera uma sessão de verdade — mesmo pra cadastro pendente/
+// recusado (`requireApproved`, na camada de rota, é quem bloqueia as funcionalidades reais).
+// Isso deixa o usuário pendente logado o bastante pra, por exemplo, ativar notificação push
+// e ser avisado quando for aprovado.
 export async function establishSession(res, user) {
-  if (user.approval_status !== "approved") {
-    return { status: user.approval_status };
-  }
-
   if (user.role === "admin") {
     if (!user.totp_enabled) {
       const secret = authenticator.generateSecret();

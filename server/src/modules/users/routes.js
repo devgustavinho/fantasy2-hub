@@ -5,6 +5,7 @@ import { sqlite } from "../../db/client.js";
 import { hashPassword } from "../../auth/password.js";
 import { requireAdmin, requireStaff } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
+import { notifyUser } from "../notifications/service.js";
 
 function generateTempPassword() {
   return randomBytes(9).toString("base64url");
@@ -145,6 +146,11 @@ export function usersRoutes() {
       action: "users.approve",
       entityType: "user",
       entityId: target.id,
+    });
+    notifyUser({
+      userId: target.id,
+      topicId: null,
+      message: "Seu cadastro foi aprovado! Você já pode acessar o Fantasy 2 Hub.",
     });
     res.status(204).end();
   });

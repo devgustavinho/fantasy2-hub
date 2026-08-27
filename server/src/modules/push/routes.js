@@ -3,7 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
 import { env } from "../../env.js";
-import { requireApproved, requireAuth } from "../../auth/guards.js";
+import { requireAuth } from "../../auth/guards.js";
 
 const subscribeSchema = z.object({
   endpoint: z.string().url(),
@@ -32,7 +32,9 @@ export function pushRoutes() {
     res.json({ publicKey: env.VAPID_PUBLIC_KEY });
   });
 
-  router.post("/subscribe", requireAuth, requireApproved, (req, res) => {
+  // requireAuth só (não requireApproved): um cadastro pendente também precisa poder ativar
+  // push, pra ser avisado quando for aprovado.
+  router.post("/subscribe", requireAuth, (req, res) => {
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Inscrição inválida." });
 

@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { GradientBorderCard } from "@/components/ui/gradient-border-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PendingApproval } from "@/components/PendingApproval";
 import { useAuth } from "@/contexts/AuthContext";
 import * as authService from "@/services/auth";
 import * as webauthnService from "@/services/webauthn";
@@ -14,7 +13,6 @@ import type { LoginResult } from "@/lib/types";
 
 type View =
   | { name: "credentials" }
-  | { name: "pending"; status: "pending" | "rejected" }
   | { name: "totp-setup"; token: string; qrDataUrl: string }
   | { name: "totp-verify"; token: string };
 
@@ -34,8 +32,6 @@ export default function Login() {
     if (result.status === "ok") {
       setUser(result.user);
       navigate("/");
-    } else if (result.status === "pending" || result.status === "rejected") {
-      setView({ name: "pending", status: result.status });
     } else if (result.status === "totp-setup-required") {
       setView({ name: "totp-setup", token: result.token, qrDataUrl: result.qrDataUrl });
     } else if (result.status === "totp-verify-required") {
@@ -156,16 +152,6 @@ export default function Login() {
                   </p>
                 </CardContent>
               </>
-            )}
-
-            {view.name === "pending" && (
-              <CardContent className="pt-6">
-                <PendingApproval
-                  status={view.status}
-                  actionLabel="Voltar"
-                  onAction={() => setView({ name: "credentials" })}
-                />
-              </CardContent>
             )}
 
             {view.name === "totp-setup" && (

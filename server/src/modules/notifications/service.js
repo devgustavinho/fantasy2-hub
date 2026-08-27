@@ -44,3 +44,21 @@ export function notifyUser({ userId, topicId, message }) {
   insertNotification.run({ id: randomUUID(), user_id: userId, topic_id: topicId ?? null, message });
   sendPushToUser(userId, { title: "Fantasy 2 Hub", body: message, url: topicId ? `/topics/${topicId}` : "/" });
 }
+
+const getAdminIds = sqlite.prepare("SELECT id FROM users WHERE role = 'admin'");
+
+// Notifica todos os admins atuais (pode ser mais de um) — usado quando alguém tenta se
+// cadastrar, pra avisar que há uma aprovação pendente.
+export function notifyAdmins({ message, url }) {
+  const admins = getAdminIds.all();
+  const insertMany = sqlite.transaction((rows) => {
+    for (const row of rows) {
+      insertNotification.run({ id: randomUUID(), user_id: row.id, topic_id: null, message });
+    }
+  });
+  insertMany(admins);
+
+  for (const row of admins) {
+    sendPushToUser(row.id, { title: "Fantasy 2 Hub", body: message, url: url ?? "/admin/usuarios" });
+  }
+}

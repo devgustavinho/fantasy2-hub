@@ -89,10 +89,11 @@ export interface AuditEntry {
   createdAt: string;
 }
 
-// Resultado de login (senha ou passkey) — o backend pode responder de 4 formas diferentes
-// dependendo do estado da conta (aprovação pendente/recusada, 2FA obrigatório pra admin).
+// Resultado de login (senha ou passkey) — o backend pode responder de 3 formas diferentes
+// dependendo do estado da conta (2FA obrigatório pra admin). Aprovação pendente/recusada não
+// afeta o login em si — sempre libera sessão; quem bloqueia o app é o `ApprovalGate` no front,
+// usando `user.approvalStatus`.
 export type LoginResult =
   | { status: "ok"; user: User }
-  | { status: "pending" | "rejected" }
   | { status: "totp-setup-required"; token: string; otpauthUrl: string; qrDataUrl: string }
   | { status: "totp-verify-required"; token: string };
