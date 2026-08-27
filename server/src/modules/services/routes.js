@@ -18,12 +18,20 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024, files: MAX_IMAGES_PER_ITEM },
 });
+const uploadSingle = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
 
 // Multer/sharp erros vão pro `next(err)` do Express; sem esse wrapper, cairiam no error
 // handler genérico (500) em vez de virar um 400 com mensagem útil pro usuário.
 function handleImagesUpload(req, res, next) {
   upload.array("images", MAX_IMAGES_PER_ITEM)(req, res, (err) => {
     if (err) return res.status(400).json({ message: err.message || "Erro no upload das imagens." });
+    next();
+  });
+}
+
+function handlePhotoUpload(req, res, next) {
+  uploadSingle.single("photo")(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || "Erro no upload da foto." });
     next();
   });
 }
@@ -71,11 +79,24 @@ const serviceSchema = z.object({
 const itemSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).optional().nullable(),
-  price: z.coerce.number().min(0).max(1_000_000),
+  price: z.coerce.number().min(0).max(1_000_000).optional().default(0),
+  isNegotiable: z.coerce.boolean().optional().default(false),
   removeImageIds: z
     .union([z.string(), z.array(z.string())])
     .optional()
     .transform((v) => (v ? (Array.isArray(v) ? v : [v]) : [])),
+});
+
+const groupSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  selectionType: z.enum(["single", "multi"]),
+  maxSelections: z.coerce.number().int().min(1).max(20).optional().nullable(),
+  required: z.coerce.boolean().optional().default(false),
+});
+
+const optionSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  priceDeltaCents: z.coerce.number().int().min(-1_000_000).max(1_000_000).optional().default(0),
 });
 
 const tagsAssignSchema = z.object({ tagIds: z.array(z.string()).max(20) });
@@ -87,18 +108,25 @@ const setWhatsappVisible = sqlite.prepare(
 const getServiceByUser = sqlite.prepare("SELECT * FROM condo_services WHERE user_id = ?");
 const getServiceById = sqlite.prepare("SELECT * FROM condo_services WHERE id = ?");
 
-const listServicesBase = sqlite.prepare(`
-  SELECT s.id, s.name, s.description, s.instagram, s.created_at AS createdAt,
+const SERVICE_JOIN_SELECT = `
+  SELECT s.id, s.name, s.description, s.instagram, s.image_path AS imagePath, s.created_at AS createdAt,
          u.id AS ownerId, u.name AS ownerName, u.whatsapp AS ownerWhatsapp,
          a.tower, a.code AS apartmentCode
   FROM condo_services s
   JOIN users u ON u.id = s.user_id
   LEFT JOIN apartments a ON a.id = u.apartment_id
-  ORDER BY s.created_at DESC
-`);
+`;
+
+const listServicesBase = sqlite.prepare(`${SERVICE_JOIN_SELECT} ORDER BY s.created_at DESC`);
+
+// `getServiceById` (sem JOIN) serve pra achar a linha crua da tabela antes de um UPDATE/DELETE;
+// pra responder pro cliente (com dono/apartamento) sempre passa por essa, com o mesmo JOIN da
+// listagem — sem isso, `serializeService*` recebe uma linha sem os campos ownerId/ownerName/etc,
+// e o `owner` sai como `{}` no JSON.
+const getServiceWithOwnerById = sqlite.prepare(`${SERVICE_JOIN_SELECT} WHERE s.id = ?`);
 
 const listItemsByService = sqlite.prepare(`
-  SELECT id, name, description, price_cents AS priceCents, created_at AS createdAt
+  SELECT id, name, description, price_cents AS priceCents, is_negotiable AS isNegotiable, created_at AS createdAt
   FROM condo_service_items
   WHERE service_id = ?
   ORDER BY created_at ASC
@@ -135,18 +163,23 @@ const updateService = sqlite.prepare(`
   WHERE id = @id
 `);
 
+const setServiceImage = sqlite.prepare(
+  "UPDATE condo_services SET image_path = @image_path, updated_at = @updated_at WHERE id = @id",
+);
+
 const deleteServiceById = sqlite.prepare("DELETE FROM condo_services WHERE id = ?");
 
 const getItemById = sqlite.prepare("SELECT * FROM condo_service_items WHERE id = ?");
 
 const insertItem = sqlite.prepare(`
-  INSERT INTO condo_service_items (id, service_id, name, description, price_cents)
-  VALUES (@id, @service_id, @name, @description, @price_cents)
+  INSERT INTO condo_service_items (id, service_id, name, description, price_cents, is_negotiable)
+  VALUES (@id, @service_id, @name, @description, @price_cents, @is_negotiable)
 `);
 
 const updateItem = sqlite.prepare(`
   UPDATE condo_service_items
-  SET name = @name, description = @description, price_cents = @price_cents, updated_at = @updated_at
+  SET name = @name, description = @description, price_cents = @price_cents,
+      is_negotiable = @is_negotiable, updated_at = @updated_at
   WHERE id = @id
 `);
 
@@ -157,16 +190,77 @@ const insertServiceTag = sqlite.prepare(
 );
 const getTagById = sqlite.prepare("SELECT id FROM tags WHERE id = ?");
 
-function serializeItem(row) {
-  return { ...row, images: listImagesByItem.all(row.id) };
+// Configurador de item (grupos de opção + opções)
+const listGroupsByItem = sqlite.prepare(`
+  SELECT id, name, selection_type AS selectionType, max_selections AS maxSelections, required
+  FROM condo_service_item_option_groups WHERE item_id = ? ORDER BY position ASC, created_at ASC
+`);
+const getGroupById = sqlite.prepare("SELECT * FROM condo_service_item_option_groups WHERE id = ?");
+const countGroupsByItem = sqlite.prepare(
+  "SELECT COUNT(*) AS c FROM condo_service_item_option_groups WHERE item_id = ?",
+);
+const insertGroup = sqlite.prepare(`
+  INSERT INTO condo_service_item_option_groups (id, item_id, name, selection_type, max_selections, required, position)
+  VALUES (@id, @item_id, @name, @selection_type, @max_selections, @required, @position)
+`);
+const updateGroup = sqlite.prepare(`
+  UPDATE condo_service_item_option_groups
+  SET name = @name, selection_type = @selection_type, max_selections = @max_selections, required = @required
+  WHERE id = @id
+`);
+const deleteGroupById = sqlite.prepare("DELETE FROM condo_service_item_option_groups WHERE id = ?");
+
+const listOptionsByGroup = sqlite.prepare(`
+  SELECT id, name, price_delta_cents AS priceDeltaCents
+  FROM condo_service_item_options WHERE group_id = ? ORDER BY position ASC, created_at ASC
+`);
+const getOptionById = sqlite.prepare("SELECT * FROM condo_service_item_options WHERE id = ?");
+const countOptionsByGroup = sqlite.prepare(
+  "SELECT COUNT(*) AS c FROM condo_service_item_options WHERE group_id = ?",
+);
+const insertOption = sqlite.prepare(`
+  INSERT INTO condo_service_item_options (id, group_id, name, price_delta_cents, position)
+  VALUES (@id, @group_id, @name, @price_delta_cents, @position)
+`);
+const updateOption = sqlite.prepare(
+  "UPDATE condo_service_item_options SET name = @name, price_delta_cents = @price_delta_cents WHERE id = @id",
+);
+const deleteOptionById = sqlite.prepare("DELETE FROM condo_service_item_options WHERE id = ?");
+
+function serializeGroup(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    selectionType: row.selectionType,
+    maxSelections: row.maxSelections ?? null,
+    required: Boolean(row.required),
+    options: listOptionsByGroup.all(row.id),
+  };
 }
 
-function serializeService(row) {
+function serializeItem(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    priceCents: row.priceCents,
+    isNegotiable: Boolean(row.isNegotiable),
+    createdAt: row.createdAt,
+    images: listImagesByItem.all(row.id),
+    optionGroups: listGroupsByItem.all(row.id).map(serializeGroup),
+  };
+}
+
+// Listagem pública (`GET /services`) não traz os itens — só o suficiente pra escolher o
+// serviço; os itens (e as opções de cada um) só vêm no detalhe (`GET /services/:id`), que tem
+// seu próprio link dedicado no front.
+function serializeServiceSummary(row) {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
     instagram: row.instagram,
+    imagePath: row.imagePath,
     createdAt: row.createdAt,
     owner: {
       id: row.ownerId,
@@ -176,8 +270,11 @@ function serializeService(row) {
       apartmentCode: row.apartmentCode,
     },
     tags: listTagsByService.all(row.id),
-    items: listItemsByService.all(row.id).map(serializeItem),
   };
+}
+
+function serializeServiceDetail(row) {
+  return { ...serializeServiceSummary(row), items: listItemsByService.all(row.id).map(serializeItem) };
 }
 
 async function saveNewImages(itemId, files, startPosition) {
@@ -189,6 +286,22 @@ async function saveNewImages(itemId, files, startPosition) {
   }
 }
 
+function getOwnedItem(userId, itemId) {
+  const service = getServiceByUser.get(userId);
+  if (!service) return null;
+  const item = getItemById.get(itemId);
+  if (!item || item.service_id !== service.id) return null;
+  return item;
+}
+
+function getOwnedGroup(userId, itemId, groupId) {
+  const item = getOwnedItem(userId, itemId);
+  if (!item) return null;
+  const group = getGroupById.get(groupId);
+  if (!group || group.item_id !== item.id) return null;
+  return group;
+}
+
 export function servicesRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
@@ -196,7 +309,7 @@ export function servicesRoutes() {
   router.get("/", (req, res) => {
     const tagFilter = typeof req.query.tags === "string" ? req.query.tags.split(",").filter(Boolean) : [];
 
-    let services = listServicesBase.all().map(serializeService);
+    let services = listServicesBase.all().map(serializeServiceSummary);
     if (tagFilter.length > 0) {
       services = services.filter((s) => s.tags.some((t) => tagFilter.includes(t.id)));
     }
@@ -209,15 +322,18 @@ export function servicesRoutes() {
     if (!service) return res.json({ service: null });
     res.json({
       service: {
-        id: service.id,
-        name: service.name,
-        description: service.description,
-        instagram: service.instagram,
+        ...serializeServiceDetail(getServiceWithOwnerById.get(service.id)),
         whatsapp: req.user.whatsapp,
-        tags: listTagsByService.all(service.id),
-        items: listItemsByService.all(service.id).map(serializeItem),
       },
     });
+  });
+
+  // Link dedicado do serviço — mostra os itens (com fotos, preço/"a negociar" e as opções de
+  // configuração de cada um). Antes disso, a listagem pública não mostra nenhum item.
+  router.get("/:id", (req, res) => {
+    const service = getServiceWithOwnerById.get(req.params.id);
+    if (!service) return res.status(404).json({ message: "Serviço não encontrado." });
+    res.json({ service: serializeServiceDetail(service) });
   });
 
   // WhatsApp e Instagram são opcionais: um serviço pode divulgar só um dos dois (ou os dois).
@@ -253,17 +369,7 @@ export function servicesRoutes() {
       details: { name: parsed.data.name },
     });
 
-    const created = getServiceById.get(id);
-    res.status(201).json({
-      service: {
-        id: created.id,
-        name: created.name,
-        description: created.description,
-        instagram: created.instagram,
-        tags: [],
-        items: [],
-      },
-    });
+    res.status(201).json({ service: { ...serializeServiceDetail(getServiceWithOwnerById.get(id)) } });
   });
 
   router.patch("/mine", (req, res) => {
@@ -295,16 +401,10 @@ export function servicesRoutes() {
       entityId: service.id,
     });
 
-    const updated = getServiceById.get(service.id);
     res.json({
       service: {
-        id: updated.id,
-        name: updated.name,
-        description: updated.description,
-        instagram: updated.instagram,
+        ...serializeServiceDetail(getServiceWithOwnerById.get(service.id)),
         whatsapp: parsed.data.whatsapp || req.user.whatsapp,
-        tags: listTagsByService.all(updated.id),
-        items: listItemsByService.all(updated.id).map(serializeItem),
       },
     });
   });
@@ -313,6 +413,7 @@ export function servicesRoutes() {
     const service = getServiceByUser.get(req.user.id);
     if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
 
+    if (service.image_path) deleteImageFile(service.image_path);
     for (const item of listItemsByService.all(service.id)) {
       for (const image of listImagesByItem.all(item.id)) {
         deleteImageFile(image.path);
@@ -329,6 +430,39 @@ export function servicesRoutes() {
       details: { name: service.name },
     });
 
+    res.status(204).end();
+  });
+
+  // Foto do serviço (opcional, 1 só) — separada das fotos de item.
+  router.post("/mine/photo", handlePhotoUpload, async (req, res) => {
+    const service = getServiceByUser.get(req.user.id);
+    if (!service) return res.status(404).json({ message: "Cadastre seu serviço primeiro." });
+    if (!req.file) return res.status(400).json({ message: "Envie uma foto." });
+
+    const oldPath = service.image_path;
+    const imagePath = await processAndSaveImage(req.file.buffer);
+    setServiceImage.run({ id: service.id, image_path: imagePath, updated_at: nowIso() });
+    if (oldPath) deleteImageFile(oldPath);
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.photo_set",
+      entityType: "service",
+      entityId: service.id,
+    });
+
+    res.json({ imagePath });
+  });
+
+  router.delete("/mine/photo", (req, res) => {
+    const service = getServiceByUser.get(req.user.id);
+    if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
+
+    if (service.image_path) {
+      deleteImageFile(service.image_path);
+      setServiceImage.run({ id: service.id, image_path: null, updated_at: nowIso() });
+    }
     res.status(204).end();
   });
 
@@ -370,7 +504,7 @@ export function servicesRoutes() {
 
     const parsed = itemSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Preencha nome e preço do item." });
+      return res.status(400).json({ message: "Preencha nome do item." });
     }
 
     const files = req.files ?? [];
@@ -385,7 +519,8 @@ export function servicesRoutes() {
         service_id: service.id,
         name: parsed.data.name,
         description: parsed.data.description || null,
-        price_cents: Math.round(parsed.data.price * 100),
+        price_cents: parsed.data.isNegotiable ? 0 : Math.round(parsed.data.price * 100),
+        is_negotiable: parsed.data.isNegotiable ? 1 : 0,
       });
       await saveNewImages(id, files, 0);
     } catch (err) {
@@ -417,7 +552,7 @@ export function servicesRoutes() {
 
     const parsed = itemSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Preencha nome e preço do item." });
+      return res.status(400).json({ message: "Preencha nome do item." });
     }
 
     const files = req.files ?? [];
@@ -438,7 +573,8 @@ export function servicesRoutes() {
       id: item.id,
       name: parsed.data.name,
       description: parsed.data.description || null,
-      price_cents: Math.round(parsed.data.price * 100),
+      price_cents: parsed.data.isNegotiable ? 0 : Math.round(parsed.data.price * 100),
+      is_negotiable: parsed.data.isNegotiable ? 1 : 0,
       updated_at: nowIso(),
     });
 
@@ -483,6 +619,171 @@ export function servicesRoutes() {
     });
 
     res.status(204).end();
+  });
+
+  // --- Grupos de opção (configurador de item) ---
+
+  router.post("/mine/items/:itemId/groups", (req, res) => {
+    const item = getOwnedItem(req.user.id, req.params.itemId);
+    if (!item) return res.status(404).json({ message: "Item não encontrado." });
+
+    const parsed = groupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Preencha nome e tipo de seleção do grupo." });
+    if (parsed.data.selectionType === "multi" && !parsed.data.maxSelections) {
+      return res.status(400).json({ message: "Informe quantas opções o cliente pode escolher no máximo." });
+    }
+
+    const id = randomUUID();
+    insertGroup.run({
+      id,
+      item_id: item.id,
+      name: parsed.data.name,
+      selection_type: parsed.data.selectionType,
+      max_selections: parsed.data.selectionType === "multi" ? parsed.data.maxSelections : null,
+      required: parsed.data.required ? 1 : 0,
+      position: countGroupsByItem.get(item.id).c,
+    });
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.item_group_create",
+      entityType: "service_item_option_group",
+      entityId: id,
+      details: { itemId: item.id, name: parsed.data.name },
+    });
+
+    res.status(201).json({ item: serializeItem(getItemById.get(item.id)) });
+  });
+
+  router.patch("/mine/items/:itemId/groups/:groupId", (req, res) => {
+    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
+    if (!group) return res.status(404).json({ message: "Grupo não encontrado." });
+
+    const parsed = groupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Preencha nome e tipo de seleção do grupo." });
+    if (parsed.data.selectionType === "multi" && !parsed.data.maxSelections) {
+      return res.status(400).json({ message: "Informe quantas opções o cliente pode escolher no máximo." });
+    }
+
+    updateGroup.run({
+      id: group.id,
+      name: parsed.data.name,
+      selection_type: parsed.data.selectionType,
+      max_selections: parsed.data.selectionType === "multi" ? parsed.data.maxSelections : null,
+      required: parsed.data.required ? 1 : 0,
+    });
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.item_group_edit",
+      entityType: "service_item_option_group",
+      entityId: group.id,
+    });
+
+    res.json({ item: serializeItem(getItemById.get(group.item_id)) });
+  });
+
+  router.delete("/mine/items/:itemId/groups/:groupId", (req, res) => {
+    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
+    if (!group) return res.status(404).json({ message: "Grupo não encontrado." });
+
+    deleteGroupById.run(group.id);
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.item_group_delete",
+      entityType: "service_item_option_group",
+      entityId: group.id,
+      details: { name: group.name },
+    });
+
+    res.json({ item: serializeItem(getItemById.get(group.item_id)) });
+  });
+
+  // --- Opções dentro de um grupo ---
+
+  router.post("/mine/items/:itemId/groups/:groupId/options", (req, res) => {
+    const item = getOwnedItem(req.user.id, req.params.itemId);
+    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
+    if (!item || !group) return res.status(404).json({ message: "Grupo não encontrado." });
+
+    const parsed = optionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Preencha o nome da opção." });
+
+    // Item "a combinar" não tem preço-base pra somar/subtrair em cima — a opção existe (ex.
+    // escolher um sabor), só nunca pode alterar valor.
+    const priceDeltaCents = item.is_negotiable ? 0 : parsed.data.priceDeltaCents;
+
+    const id = randomUUID();
+    insertOption.run({
+      id,
+      group_id: group.id,
+      name: parsed.data.name,
+      price_delta_cents: priceDeltaCents,
+      position: countOptionsByGroup.get(group.id).c,
+    });
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.item_option_create",
+      entityType: "service_item_option",
+      entityId: id,
+      details: { groupId: group.id, name: parsed.data.name },
+    });
+
+    res.status(201).json({ item: serializeItem(getItemById.get(item.id)) });
+  });
+
+  router.patch("/mine/items/:itemId/groups/:groupId/options/:optionId", (req, res) => {
+    const item = getOwnedItem(req.user.id, req.params.itemId);
+    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
+    if (!item || !group) return res.status(404).json({ message: "Grupo não encontrado." });
+
+    const option = getOptionById.get(req.params.optionId);
+    if (!option || option.group_id !== group.id) return res.status(404).json({ message: "Opção não encontrada." });
+
+    const parsed = optionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Preencha o nome da opção." });
+
+    const priceDeltaCents = item.is_negotiable ? 0 : parsed.data.priceDeltaCents;
+
+    updateOption.run({ id: option.id, name: parsed.data.name, price_delta_cents: priceDeltaCents });
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.item_option_edit",
+      entityType: "service_item_option",
+      entityId: option.id,
+    });
+
+    res.json({ item: serializeItem(getItemById.get(item.id)) });
+  });
+
+  router.delete("/mine/items/:itemId/groups/:groupId/options/:optionId", (req, res) => {
+    const item = getOwnedItem(req.user.id, req.params.itemId);
+    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
+    if (!item || !group) return res.status(404).json({ message: "Grupo não encontrado." });
+
+    const option = getOptionById.get(req.params.optionId);
+    if (!option || option.group_id !== group.id) return res.status(404).json({ message: "Opção não encontrada." });
+
+    deleteOptionById.run(option.id);
+
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "services.item_option_delete",
+      entityType: "service_item_option",
+      entityId: option.id,
+      details: { name: option.name },
+    });
+
+    res.json({ item: serializeItem(getItemById.get(item.id)) });
   });
 
   return router;

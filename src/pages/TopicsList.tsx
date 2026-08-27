@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateOnly } from "@/lib/utils";
 import * as topicsService from "@/services/topics";
+import { QueryError } from "@/components/QueryError";
 
 function StatusBadge({ status, assemblyDate }: { status: string; assemblyDate: string | null }) {
   if (status === "scheduled") {
@@ -23,7 +24,12 @@ function StatusBadge({ status, assemblyDate }: { status: string; assemblyDate: s
 
 export default function TopicsList() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -85,6 +91,7 @@ export default function TopicsList() {
       )}
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
+      {isError && <QueryError onRetry={() => refetch()} />}
 
       <div className="space-y-3">
         {data?.topics.map((topic) => (

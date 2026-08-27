@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { QueryError } from "@/components/QueryError";
 import * as auditService from "@/services/audit";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -31,6 +32,13 @@ const ACTION_LABELS: Record<string, string> = {
   "services.item_edit": "Item de serviço editado",
   "services.item_delete": "Item de serviço excluído",
   "services.tags_set": "Tags do serviço atualizadas",
+  "services.photo_set": "Foto do serviço atualizada",
+  "services.item_group_create": "Grupo de opção criado",
+  "services.item_group_edit": "Grupo de opção editado",
+  "services.item_group_delete": "Grupo de opção excluído",
+  "services.item_option_create": "Opção criada",
+  "services.item_option_edit": "Opção editada",
+  "services.item_option_delete": "Opção excluída",
   "tags.create": "Tag criada",
   "tags.delete": "Tag excluída",
 };
@@ -52,7 +60,12 @@ export default function AuditLog() {
     queryFn: auditService.listAuditActors,
   });
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["audit", page, actorUserId],
     queryFn: () => auditService.listAudit({ page, pageSize: PAGE_SIZE, actorUserId: actorUserId || null }),
   });
@@ -101,6 +114,7 @@ export default function AuditLog() {
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
+          {isError && <QueryError onRetry={() => refetch()} />}
           {data?.entries.map((entry) => (
             <div key={entry.id} className="rounded-md border p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">

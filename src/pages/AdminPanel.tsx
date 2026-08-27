@@ -2,10 +2,16 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QueryError } from "@/components/QueryError";
 import * as topicsService from "@/services/topics";
 
 export default function AdminPanel() {
-  const { data, isLoading } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
 
   const sorted = [...(data?.topics ?? [])].sort((a, b) => {
     const balanceA = a.favorCount - a.contraCount;
@@ -23,6 +29,7 @@ export default function AdminPanel() {
       </div>
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
+      {isError && <QueryError onRetry={() => refetch()} />}
 
       <div className="space-y-3">
         {sorted.map((topic, index) => (

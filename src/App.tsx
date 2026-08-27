@@ -12,6 +12,7 @@ import AdminPanel from "@/pages/AdminPanel";
 import UserManagement from "@/pages/UserManagement";
 import Profile from "@/pages/Profile";
 import Services from "@/pages/Services";
+import ServiceDetail from "@/pages/ServiceDetail";
 import MyService from "@/pages/MyService";
 import AuditLog from "@/pages/AuditLog";
 import ServiceTagsAdmin from "@/pages/ServiceTagsAdmin";
@@ -78,6 +79,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <MyService />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/servicos/:id"
+                element={
+                  <AppLayout>
+                    <ServiceDetail />
                   </AppLayout>
                 }
               />

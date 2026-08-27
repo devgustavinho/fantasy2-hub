@@ -87,9 +87,27 @@ acontece (não tem trigger automático no banco).
 `src/modules/services/routes.js` (`/services`) — moradores anunciam um serviço/produto próprio
 (ex. "Doces da Maria") com itens (nome, descrição, preço, até 5 fotos). Um usuário só pode ter
 **um** serviço (`condo_services.user_id` é `UNIQUE`); os itens ficam em `condo_service_items`,
-apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído. Ao clicar num item, o front
-abre um painel estilo iFood (galeria de fotos, descrição, preço) com um botão
-**"Falar com {nome do serviço}"** que já abre o WhatsApp com uma mensagem de interesse pré-preenchida.
+apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
+
+- **`GET /services` (listagem pública) não traz os itens** — só o suficiente pra escolher o
+  serviço (nome, dono, foto, tags). Os itens só aparecem no link dedicado do serviço,
+  `GET /services/:id` (front: `/servicos/:id`) — é lá que o cliente monta o pedido.
+- Foto do serviço (`condo_services.image_path`, opcional, 1 só) é separada das fotos de item —
+  `POST/DELETE /services/mine/photo`, mesmo pipeline de processamento (sharp + R2) dos itens.
+- Preço do item pode ser fixo (`price_cents`, aceita centavos) ou **"a negociar"**
+  (`is_negotiable = 1` — nesse caso `price_cents` fica em 0 e o front sempre mostra "A combinar").
+- **Configurador de item** (`condo_service_item_option_groups` + `condo_service_item_options`):
+  cada item pode ter grupos de opção configuráveis pelo dono (ex. "Toppings" com até 3 escolhas,
+  "Cobertura" com 1 entre 2, "Sabor" obrigatório) — cada grupo tem `selectionType`
+  (`single`/`multi`), `maxSelections` (só pra `multi`) e `required`. Cada opção pode somar/subtrair
+  do preço do item (`price_delta_cents`) — **exceto se o item for "a negociar"**, onde todo delta é
+  forçado pra `0` na hora de salvar (não tem preço-base pra ajustar). CRUD só do dono do serviço,
+  aninhado em `/services/mine/items/:itemId/groups[/:groupId/options[/:optionId]]`.
+- No front (`ServiceDetail.tsx`), clicar num item abre um "montador" (galeria de fotos, descrição,
+  os grupos de opção como rádio/checkbox, total ao vivo) — "Adicionar ao pedido" bota numa lista
+  local (carrinho, só em memória, sem persistir no banco). "Finalizar pedido no WhatsApp" monta um
+  texto com todos os itens + opções escolhidas + subtotais + total e abre um link `wa.me` pro
+  WhatsApp do dono — nada disso passa pelo backend, é só formatação de texto + link.
 
 - Redes sociais do serviço: WhatsApp (`users.whatsapp`, compartilhado com o perfil) e Instagram
   (`condo_services.instagram`, só um handle normalizado — aceita `@handle`, link completo ou só o
@@ -111,7 +129,9 @@ abre um painel estilo iFood (galeria de fotos, descrição, preço) com um botã
   objeto do bucket também (best-effort, só loga em caso de falha).
 - Todo mundo aprovado (`requireApproved`) pode ver a lista pública e cadastrar o próprio serviço — não
   tem restrição por cargo.
-- Auditado: `services.create/edit/delete`, `services.item_create/edit/delete`, `services.tags_set`.
+- Auditado: `services.create/edit/delete`, `services.photo_set`, `services.item_create/edit/delete`,
+  `services.item_group_create/edit/delete`, `services.item_option_create/edit/delete`,
+  `services.tags_set`.
 
 ## Família (1 titular + 1 familiar por apartamento)
 

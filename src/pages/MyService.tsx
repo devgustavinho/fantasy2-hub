@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { OptionGroupsManager } from "@/components/OptionGroupsManager";
+import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import * as servicesApi from "@/services/services";
 import { resolveMediaUrl } from "@/lib/api";
@@ -26,6 +28,7 @@ function ItemForm({
     name: string;
     description: string;
     price: number;
+    isNegotiable: boolean;
     images: File[];
     removeImageIds: string[];
   }) => void;
@@ -34,7 +37,8 @@ function ItemForm({
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [price, setPrice] = useState(initial ? String(initial.priceCents / 100) : "");
+  const [price, setPrice] = useState(initial && !initial.isNegotiable ? String(initial.priceCents / 100) : "");
+  const [isNegotiable, setIsNegotiable] = useState(initial?.isNegotiable ?? false);
   const [existingImages, setExistingImages] = useState(initial?.images ?? []);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [newImages, setNewImages] = useState<File[]>([]);
@@ -58,12 +62,13 @@ function ItemForm({
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const priceNumber = Number(price.replace(",", "."));
+    const priceNumber = isNegotiable ? 0 : Number(price.replace(",", "."));
     if (!name.trim() || Number.isNaN(priceNumber)) return;
     onSubmit({
       name: name.trim(),
       description: description.trim(),
       price: priceNumber,
+      isNegotiable,
       images: newImages,
       removeImageIds: removedIds,
     });
@@ -83,10 +88,15 @@ function ItemForm({
             placeholder="0,00"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            required
+            disabled={isNegotiable}
+            required={!isNegotiable}
           />
         </div>
       </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={isNegotiable} onChange={(e) => setIsNegotiable(e.target.checked)} />
+        Preço "a negociar" (sem valor fixo)
+      </label>
       <div className="space-y-1">
         <Label>Descrição</Label>
         <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -161,8 +171,15 @@ export default function MyService() {
   const [error, setError] = useState<string | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [optionsItemId, setOptionsItemId] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ["my-service"], queryFn: servicesApi.getMyService });
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["my-service"], queryFn: servicesApi.getMyService });
 
   useEffect(() => {
     if (data?.service) {
@@ -198,6 +215,20 @@ export default function MyService() {
     onSuccess: invalidate,
   });
 
+  const setPhotoMutation = useMutation({
+    mutationFn: (file: File) => servicesApi.setServicePhoto(file),
+    onSuccess: () => {
+      setPhotoError(null);
+      invalidate();
+    },
+    onError: (err) => setPhotoError(err instanceof Error ? err.message : "Erro ao enviar foto."),
+  });
+
+  const removePhotoMutation = useMutation({
+    mutationFn: servicesApi.removeServicePhoto,
+    onSuccess: invalidate,
+  });
+
   const [itemError, setItemError] = useState<string | null>(null);
 
   const addItemMutation = useMutation({
@@ -227,6 +258,13 @@ export default function MyService() {
 
   if (isLoading) {
     return <p className="mx-auto max-w-2xl px-4 py-8 text-muted-foreground">Carregando...</p>;
+  }
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        <QueryError onRetry={() => refetch()} />
+      </div>
+    );
   }
 
   const service = data?.service ?? null;
@@ -314,7 +352,38 @@ export default function MyService() {
                 </div>
               )}
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Foto do serviço (opcional)</Label>
+                {service.imagePath ? (
+                  <div className="relative h-32 w-full max-w-xs overflow-hidden rounded-md border">
+                    <img src={resolveMediaUrl(service.imagePath)} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhotoMutation.mutate()}
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                      aria-label="Remover foto"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex h-32 w-full max-w-xs cursor-pointer items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground hover:border-primary/50">
+                    {setPhotoMutation.isPending ? "Enviando..." : "+ adicionar foto"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setPhotoMutation.mutate(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+                {photoError && <p className="text-xs text-destructive">{photoError}</p>}
+              </div>
               <form onSubmit={handleUpdate} className="space-y-3">
                 <div className="space-y-1">
                   <Label>Nome do serviço</Label>
@@ -377,36 +446,47 @@ export default function MyService() {
                     onSubmit={(input) => editItemMutation.mutate(input)}
                   />
                 ) : (
-                  <div key={item.id} className="flex items-center gap-3 rounded-md border p-2">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
-                      {item.images.length > 0 ? (
-                        <img
-                          src={resolveMediaUrl(item.images[0].path)}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">Sem foto</span>
-                      )}
+                  <div key={item.id} className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-3 rounded-md border p-2">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
+                        {item.images.length > 0 ? (
+                          <img
+                            src={resolveMediaUrl(item.images[0].path)}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Sem foto</span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.isNegotiable ? "A negociar" : formatCentsToBRL(item.priceCents)}
+                          {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
+                          {item.optionGroups.length > 0 ? ` · ${item.optionGroups.length} grupo(s) de opção` : ""}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setOptionsItemId(optionsItemId === item.id ? null : item.id)}
+                      >
+                        Opções
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={deleteItemMutation.isPending}
+                        onClick={() => deleteItemMutation.mutate(item.id)}
+                      >
+                        Excluir
+                      </Button>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatCentsToBRL(item.priceCents)}
-                        {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
-                      Editar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={deleteItemMutation.isPending}
-                      onClick={() => deleteItemMutation.mutate(item.id)}
-                    >
-                      Excluir
-                    </Button>
+                    {optionsItemId === item.id && <OptionGroupsManager item={item} />}
                   </div>
                 ),
               )}

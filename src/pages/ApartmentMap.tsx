@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { QueryError } from "@/components/QueryError";
 import * as apartmentsService from "@/services/apartments";
 import { cn } from "@/lib/utils";
 import type { HouseholdRole } from "@/lib/types";
@@ -19,7 +20,12 @@ function householdBadge(role: HouseholdRole) {
 
 export default function ApartmentMap() {
   const [tower, setTower] = useState(1);
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["apartment-map", tower],
     queryFn: () => apartmentsService.getApartmentMap(tower),
   });
@@ -54,6 +60,7 @@ export default function ApartmentMap() {
       </div>
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
+      {isError && <QueryError onRetry={() => refetch()} />}
 
       <div className="space-y-3">
         {floors.map((floor) => (

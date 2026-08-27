@@ -107,12 +107,31 @@ export interface ServiceItemImage {
   path: string;
 }
 
+export type SelectionType = "single" | "multi";
+
+export interface ServiceItemOption {
+  id: string;
+  name: string;
+  priceDeltaCents: number;
+}
+
+export interface ServiceItemOptionGroup {
+  id: string;
+  name: string;
+  selectionType: SelectionType;
+  maxSelections: number | null;
+  required: boolean;
+  options: ServiceItemOption[];
+}
+
 export interface ServiceItem {
   id: string;
   name: string;
   description: string | null;
   priceCents: number;
+  isNegotiable: boolean;
   images: ServiceItemImage[];
+  optionGroups: ServiceItemOptionGroup[];
   createdAt: string;
 }
 
@@ -129,14 +148,20 @@ export interface Tag {
   name: string;
 }
 
-export interface CondoService {
+// Listagem pública (`GET /services`) não traz os itens — só o suficiente pra escolher o
+// serviço e ir pro link dedicado (`GET /services/:id`, que é o `CondoService` com `items`).
+export interface ServiceSummary {
   id: string;
   name: string;
   description: string | null;
   instagram: string | null;
+  imagePath: string | null;
   createdAt: string;
   owner: ServiceOwner;
   tags: Tag[];
+}
+
+export interface CondoService extends ServiceSummary {
   items: ServiceItem[];
 }
 
@@ -145,6 +170,7 @@ export interface MyService {
   name: string;
   description: string | null;
   instagram: string | null;
+  imagePath: string | null;
   whatsapp: string | null;
   tags: Tag[];
   items: ServiceItem[];

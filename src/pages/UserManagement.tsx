@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { QueryError } from "@/components/QueryError";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import * as usersService from "@/services/users";
@@ -35,7 +36,12 @@ export default function UserManagement() {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["users"], queryFn: usersService.listUsers });
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({ queryKey: ["users"], queryFn: usersService.listUsers });
   const [resetResult, setResetResult] = useState<{ user: ManagedUser; password: string } | null>(null);
 
   const [name, setName] = useState("");
@@ -306,6 +312,7 @@ export default function UserManagement() {
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading && <p className="text-muted-foreground">Carregando...</p>}
+          {isError && <QueryError onRetry={() => refetch()} />}
           {roleError && <p className="text-sm text-destructive">{roleError}</p>}
           {data?.users.map((u) => {
             const isSelf = u.id === currentUser?.id;
