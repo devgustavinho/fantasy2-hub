@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Share2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
 import type { VoteValue } from "@/lib/types";
-import { cn, formatDateOnly } from "@/lib/utils";
+import { buildWhatsAppShareLink, cn, formatDateOnly } from "@/lib/utils";
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>();
@@ -103,6 +103,9 @@ export default function TopicDetail() {
   const isOwner = user?.id === topic.createdById;
   const canEdit = !!user && (isOwner || user.role === "admin" || user.role === "sindico");
   const canDelete = !!user && (isOwner || user.role === "admin");
+  const shareLink = buildWhatsAppShareLink(
+    `📋 Vote nesta pauta do condomínio: "${topic.title}"\n${window.location.origin}/topics/${topic.id}`,
+  );
 
   function handleDeleteOwn() {
     if (window.confirm("Tem certeza que deseja excluir esta pauta? Essa ação não pode ser desfeita.")) {
@@ -174,6 +177,12 @@ export default function TopicDetail() {
               ) : (
                 <Badge variant="secondary">Em aberto</Badge>
               )}
+              <Button variant="outline" size="sm" asChild>
+                <a href={shareLink} target="_blank" rel="noreferrer">
+                  <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                  Compartilhar
+                </a>
+              </Button>
               {canEdit && !isEditing && (
                 <Button variant="outline" size="sm" onClick={startEditing}>
                   Editar

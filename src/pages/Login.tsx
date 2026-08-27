@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { Fingerprint } from "lucide-react";
@@ -31,12 +31,14 @@ export default function Login() {
   const [view, setView] = useState<View>({ name: "email" });
   const { setUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = (location.state as { from?: string } | null)?.from || "/";
   const supportsBiometric = browserSupportsWebAuthn();
 
   function handleResult(result: LoginResult) {
     if (result.status === "ok") {
       setUser(result.user);
-      navigate("/");
+      navigate(redirectTo, { replace: true });
     } else if (result.status === "totp-setup-required") {
       setView({ name: "totp-setup", token: result.token, qrDataUrl: result.qrDataUrl });
     } else if (result.status === "totp-verify-required") {

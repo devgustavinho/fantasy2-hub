@@ -30,6 +30,13 @@ export function buildWhatsAppLink(phone: string, message: string) {
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 
+// Sem número — abre o WhatsApp (app ou web) com a mensagem pronta e deixa a pessoa escolher
+// pra quem/qual grupo enviar. É o formato certo pra "compartilhar", diferente de
+// `buildWhatsAppLink` (que já manda direto pra um contato específico).
+export function buildWhatsAppShareLink(message: string) {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
 export function buildInstagramLink(handle: string) {
   return `https://instagram.com/${handle.replace(/^@/, "")}`;
 }
