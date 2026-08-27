@@ -1,14 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import {
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useSpring,
-  useTransform,
-  type MotionValue,
-} from "framer-motion";
-import { Menu } from "lucide-react";
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export interface FloatingDockItem {
@@ -18,75 +10,15 @@ export interface FloatingDockItem {
   badge?: number;
 }
 
-export function FloatingDock({
-  items,
-  desktopClassName,
-  mobileClassName,
-}: {
-  items: FloatingDockItem[];
-  desktopClassName?: string;
-  mobileClassName?: string;
-}) {
-  return (
-    <>
-      <FloatingDockDesktop items={items} className={desktopClassName} />
-      <FloatingDockMobile items={items} className={mobileClassName} />
-    </>
-  );
-}
-
-function FloatingDockMobile({ items, className }: { items: FloatingDockItem[]; className?: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={cn("relative block md:hidden", className)}>
-      <AnimatePresence>
-        {open && (
-          <motion.div layoutId="nav" className="absolute inset-x-0 bottom-full mb-2 flex flex-col gap-2">
-            {items.map((item, idx) => (
-              <motion.div
-                key={item.title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10, transition: { delay: idx * 0.05 } }}
-                transition={{ delay: (items.length - 1 - idx) * 0.05 }}
-              >
-                <Link
-                  to={item.href}
-                  onClick={() => setOpen(false)}
-                  className="relative flex h-11 w-11 items-center justify-center rounded-full bg-brand-navy text-white shadow-md"
-                >
-                  <div className="h-5 w-5">{item.icon}</div>
-                  {!!item.badge && (
-                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-navy text-white shadow-md"
-        aria-label="Abrir menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-    </div>
-  );
-}
-
-function FloatingDockDesktop({ items, className }: { items: FloatingDockItem[]; className?: string }) {
+// Sempre horizontal e aberto (mesmo no celular) — nada de esconder atrás de um botão de menu.
+export function FloatingDock({ items, className }: { items: FloatingDockItem[]; className?: string }) {
   const mouseX = useMotionValue(Infinity);
   return (
     <motion.div
       onMouseMove={(e) => mouseX.set(e.pageX)}
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
-        "mx-auto hidden h-14 items-end gap-3 rounded-2xl bg-brand-navy/95 px-3 pb-2 backdrop-blur md:flex",
+        "mx-auto flex h-14 items-end gap-2 rounded-2xl bg-brand-navy/95 px-3 pb-2 backdrop-blur sm:gap-3",
         className,
       )}
     >

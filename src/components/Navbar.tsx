@@ -24,8 +24,13 @@ export function TopBar() {
         </Link>
         <div className="flex items-center gap-3 text-sm">
           <NotificationBell />
-          <Link to="/perfil" className="hidden text-white/70 transition-colors hover:text-brand-gold sm:inline">
-            {user.name}
+          <Link
+            to="/perfil"
+            aria-label="Perfil"
+            className="flex items-center gap-1.5 text-white/70 transition-colors hover:text-brand-gold"
+          >
+            <User className="h-5 w-5 sm:hidden" />
+            <span className="hidden sm:inline">{user.name}</span>
           </Link>
           <button
             onClick={handleLogout}
@@ -64,7 +69,6 @@ export function BottomDock() {
           { title: "Tags", icon: <Tag className="h-full w-full" />, href: "/admin/tags" },
         ]
       : []),
-    { title: "Perfil", icon: <User className="h-full w-full" />, href: "/perfil" },
   ];
 
   return (
