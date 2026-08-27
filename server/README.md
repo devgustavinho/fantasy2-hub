@@ -103,9 +103,12 @@ abre um painel estilo iFood (galeria de fotos, descrição, preço) com um botã
   iPhones usam por padrão e que alguns navegadores reportam com mimetype inconsistente), corrige
   orientação EXIF, redimensiona pro lado maior ter no máximo 1200px e regrava sempre como
   `.jpg`. Isso é o que garante a "miniatura" de verdade (em vez de guardar a foto original de
-  10+MP direto do celular) e evita qualquer bug de formato/mimetype no upload. Arquivos são salvos em
-  `data/uploads/services/`, servidos estaticamente em `/uploads/services/<arquivo>`, e apagados do
-  disco ao remover a foto, editar o item ou excluir o item/serviço.
+  10+MP direto do celular) e evita qualquer bug de formato/mimetype no upload. O arquivo processado
+  vai direto pro bucket `fantasy2-hub-public` da Cloudflare R2 (`src/lib/r2.js`, `@aws-sdk/client-s3`
+  — R2 é compatível com a API do S3, só muda o endpoint) — nada fica no disco da VPS. `path` na
+  tabela `condo_service_item_images` guarda a URL pública completa (`R2_PUBLIC_URL/services/<uuid>.jpg`),
+  não mais um caminho relativo. Apagar a foto, editar o item ou excluir o item/serviço apaga o
+  objeto do bucket também (best-effort, só loga em caso de falha).
 - Todo mundo aprovado (`requireApproved`) pode ver a lista pública e cadastrar o próprio serviço — não
   tem restrição por cargo.
 - Auditado: `services.create/edit/delete`, `services.item_create/edit/delete`, `services.tags_set`.

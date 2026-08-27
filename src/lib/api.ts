@@ -1,5 +1,12 @@
 export const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:3100").replace(/\/+$/, "");
 
+// Imagens de serviço vêm como URL pública completa do R2 desde a migração pro bucket da
+// Cloudflare. O `startsWith` cobre só a janela de transição (linhas que ainda não passaram
+// pelo script de migração no deploy do backend).
+export function resolveMediaUrl(path: string) {
+  return path.startsWith("http") ? path : `${API_URL}${path}`;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {

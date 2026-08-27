@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import * as servicesApi from "@/services/services";
 import * as tagsApi from "@/services/tags";
-import { API_URL } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/api";
 import { buildInstagramLink, buildWhatsAppLink, cn, formatCentsToBRL } from "@/lib/utils";
 import type { CondoService, ServiceItem } from "@/lib/types";
 
@@ -34,7 +34,7 @@ function ItemDetail({
         <div className="relative aspect-square bg-muted/40">
           {item.images.length > 0 ? (
             <img
-              src={`${API_URL}${item.images[activeImage].path}`}
+              src={resolveMediaUrl(item.images[activeImage].path)}
               alt={item.name}
               className="h-full w-full object-cover"
             />
@@ -204,7 +204,7 @@ export default function Services() {
                       <div className="flex aspect-square items-center justify-center bg-muted/40">
                         {item.images.length > 0 ? (
                           <img
-                            src={`${API_URL}${item.images[0].path}`}
+                            src={resolveMediaUrl(item.images[0].path)}
                             alt={item.name}
                             className="h-full w-full object-cover"
                           />

@@ -72,14 +72,21 @@ CORS_ORIGIN=https://fantasy2.gcsolutions-devs.com.br
 VAPID_PUBLIC_KEY=<gere com: npx web-push generate-vapid-keys>
 VAPID_PRIVATE_KEY=<idem>
 VAPID_SUBJECT=mailto:seu-email@example.com
+R2_ACCOUNT_ID=<Cloudflare dashboard > R2 > Overview>
+R2_ACCESS_KEY_ID=<R2 > Manage R2 API Tokens > Create, permissão Object Read & Write>
+R2_SECRET_ACCESS_KEY=<idem>
+R2_BUCKET_NAME=fantasy2-hub-public
+R2_PUBLIC_URL=<Public Development URL do bucket, ativado nas Settings do bucket>
 ```
 
 ⚠️ Toda vez que uma env var nova se tornar **obrigatória** em `src/env.js` (como aconteceu com as
-`VAPID_*` — feature de push), o deploy automático quebra no passo de migration (o processo sai com
-`process.exit(1)` antes de chegar no `systemctl restart`) até você adicionar a variável no `.env` da
-VPS. É uma falha segura (o serviço antigo continua rodando), mas o deploy fica "parado no meio" — depois
-de adicionar a env var, complete manualmente via SSH: `node --env-file=.env src/db/migrate.js && node
---env-file=.env src/db/seed-apartments.js && sudo systemctl restart fantasy2-hub`.
+`VAPID_*` — feature de push — e depois com as `R2_*` — fotos de serviço migradas pra Cloudflare R2),
+o deploy automático quebra no passo de migration (o processo sai com `process.exit(1)` antes de
+chegar no `systemctl restart`) até você adicionar a variável no `.env` da VPS. É uma falha segura (o
+serviço antigo continua rodando), mas o deploy fica "parado no meio" — depois de adicionar a env var,
+complete manualmente via SSH: `node --env-file=.env src/db/migrate.js && node --env-file=.env
+src/db/seed-apartments.js && node --env-file=.env scripts/migrate-uploads-to-r2.js && sudo systemctl
+restart fantasy2-hub`.
 
 Rode as migrations, o seed e crie o primeiro admin:
 

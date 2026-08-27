@@ -39,6 +39,7 @@ jobs:
           npm ci --omit=dev
           node --env-file=.env src/db/migrate.js
           node --env-file=.env src/db/seed-apartments.js
+          node --env-file=.env scripts/migrate-uploads-to-r2.js
           sudo -n systemctl restart "$SERVICE_NAME"
           sleep 2
           sudo -n systemctl is-active "$SERVICE_NAME"

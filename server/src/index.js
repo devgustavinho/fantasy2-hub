@@ -1,4 +1,3 @@
-import path from "node:path";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -31,8 +30,6 @@ const authLimiter = rateLimit({
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
-
-app.use("/uploads", express.static(path.resolve("data/uploads")));
 
 app.use("/auth", authLimiter, authRoutes());
 app.use("/apartments", apartmentsRoutes());

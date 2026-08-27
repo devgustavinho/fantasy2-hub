@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import * as servicesApi from "@/services/services";
-import { API_URL } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/api";
 import { formatCentsToBRL } from "@/lib/utils";
 import type { ServiceItem } from "@/lib/types";
 
@@ -96,7 +96,7 @@ function ItemForm({
         <div className="flex flex-wrap gap-2">
           {existingImages.map((img) => (
             <div key={img.id} className="relative h-16 w-16 overflow-hidden rounded border">
-              <img src={`${API_URL}${img.path}`} alt="" className="h-full w-full object-cover" />
+              <img src={resolveMediaUrl(img.path)} alt="" className="h-full w-full object-cover" />
               <button
                 type="button"
                 onClick={() => removeExisting(img.id)}
@@ -381,7 +381,7 @@ export default function MyService() {
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
                       {item.images.length > 0 ? (
                         <img
-                          src={`${API_URL}${item.images[0].path}`}
+                          src={resolveMediaUrl(item.images[0].path)}
                           alt={item.name}
                           className="h-full w-full object-cover"
                         />
