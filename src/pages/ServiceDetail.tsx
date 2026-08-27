@@ -296,7 +296,7 @@ export default function ServiceDetail() {
             ? ` · Torre ${service.owner.tower} - ${service.owner.apartmentCode}`
             : ""}
         </p>
-        {service.description && <p className="mt-1 text-sm text-muted-foreground">{service.description}</p>}
+        {service.description && <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line">{service.description}</p>}
         {service.instagram && (
           <a
             href={buildInstagramLink(service.instagram)}
