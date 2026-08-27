@@ -91,9 +91,12 @@ apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído. Ao cli
 abre um painel estilo iFood (galeria de fotos, descrição, preço) com um botão
 **"Falar com {nome do serviço}"** que já abre o WhatsApp com uma mensagem de interesse pré-preenchida.
 
-- Cadastrar um serviço (`POST /services`) **exige** um WhatsApp e automaticamente marca
-  `whatsapp_visible = 1` — é assim que outros moradores entram em contato. Não dá pra esconder o
-  WhatsApp de novo enquanto o serviço existir sem apagar o serviço.
+- Redes sociais do serviço: WhatsApp (`users.whatsapp`, compartilhado com o perfil) e Instagram
+  (`condo_services.instagram`, só um handle normalizado — aceita `@handle`, link completo ou só o
+  handle, tudo vira o mesmo formato salvo). **Ambos opcionais**, independentes um do outro — um
+  serviço pode divulgar só um dos dois. Se o WhatsApp for preenchido (na criação ou depois, editando
+  o serviço), marca `whatsapp_visible = 1` automaticamente — é assim que os outros moradores
+  conseguem falar com o dono. Preencher o Instagram não mexe no WhatsApp do perfil.
 - Fotos de item (até 5, `condo_service_item_images`, ordenadas por `position`): upload via
   `multipart/form-data` (`multer`, `memoryStorage`), **sempre processadas pelo `sharp`** antes de
   salvar — decodifica qualquer formato de entrada (JPEG/PNG/WebP/**HEIC/HEIF**, o formato que

@@ -133,6 +133,7 @@ export interface CondoService {
   id: string;
   name: string;
   description: string | null;
+  instagram: string | null;
   createdAt: string;
   owner: ServiceOwner;
   tags: Tag[];
@@ -143,6 +144,8 @@ export interface MyService {
   id: string;
   name: string;
   description: string | null;
+  instagram: string | null;
+  whatsapp: string | null;
   tags: Tag[];
   items: ServiceItem[];
 }

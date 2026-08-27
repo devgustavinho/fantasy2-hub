@@ -8,10 +8,16 @@ export const listServices = (tagIds: string[] = []) => {
 
 export const getMyService = () => api.get<{ service: MyService | null }>("/services/mine");
 
-export const createService = (data: { name: string; description?: string; whatsapp: string }) =>
-  api.post<{ service: MyService }>("/services", data);
+export interface ServiceSocialInput {
+  name: string;
+  description?: string;
+  whatsapp?: string;
+  instagram?: string;
+}
 
-export const updateService = (data: { name: string; description?: string }) =>
+export const createService = (data: ServiceSocialInput) => api.post<{ service: MyService }>("/services", data);
+
+export const updateService = (data: ServiceSocialInput) =>
   api.patch<{ service: MyService }>("/services/mine", data);
 
 export const deleteService = () => api.delete<void>("/services/mine");

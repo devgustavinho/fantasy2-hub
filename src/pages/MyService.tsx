@@ -157,6 +157,7 @@ export default function MyService() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [whatsapp, setWhatsapp] = useState(user?.whatsapp ?? "");
+  const [instagram, setInstagram] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -167,6 +168,8 @@ export default function MyService() {
     if (data?.service) {
       setName(data.service.name);
       setDescription(data.service.description ?? "");
+      setInstagram(data.service.instagram ?? "");
+      setWhatsapp(data.service.whatsapp ?? "");
     }
   }, [data?.service]);
 
@@ -176,7 +179,7 @@ export default function MyService() {
   }
 
   const createMutation = useMutation({
-    mutationFn: () => servicesApi.createService({ name, description, whatsapp }),
+    mutationFn: () => servicesApi.createService({ name, description, whatsapp: whatsapp || undefined, instagram: instagram || undefined }),
     onSuccess: () => {
       setError(null);
       invalidate();
@@ -185,7 +188,8 @@ export default function MyService() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => servicesApi.updateService({ name, description }),
+    mutationFn: () =>
+      servicesApi.updateService({ name, description, whatsapp: whatsapp || undefined, instagram: instagram || undefined }),
     onSuccess: invalidate,
   });
 
@@ -229,8 +233,8 @@ export default function MyService() {
 
   function handleCreate(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !whatsapp.trim()) {
-      setError("Preencha o nome do serviço e um WhatsApp válido.");
+    if (!name.trim()) {
+      setError("Preencha o nome do serviço.");
       return;
     }
     createMutation.mutate();
@@ -256,8 +260,8 @@ export default function MyService() {
           <CardHeader>
             <CardTitle className="text-base">Cadastrar serviço</CardTitle>
             <CardDescription>
-              Ao cadastrar um serviço, seu WhatsApp fica visível para os outros moradores — é assim que
-              eles entram em contato para comprar ou contratar.
+              WhatsApp e Instagram são opcionais — informe pelo menos um pra outros moradores
+              conseguirem te encontrar. Se preencher o WhatsApp, ele fica visível pros outros moradores.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -271,12 +275,19 @@ export default function MyService() {
                 <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label>WhatsApp</Label>
+                <Label>WhatsApp (opcional)</Label>
                 <Input
                   value={whatsapp}
                   onChange={(e) => setWhatsapp(e.target.value)}
                   placeholder="(11) 91234-5678"
-                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Instagram (opcional)</Label>
+                <Input
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
+                  placeholder="@doces.da.maria"
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
@@ -312,6 +323,22 @@ export default function MyService() {
                 <div className="space-y-1">
                   <Label>Descrição</Label>
                   <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>WhatsApp (opcional)</Label>
+                  <Input
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="(11) 91234-5678"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Instagram (opcional)</Label>
+                  <Input
+                    value={instagram}
+                    onChange={(e) => setInstagram(e.target.value)}
+                    placeholder="@doces.da.maria"
+                  />
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" size="sm" disabled={updateMutation.isPending}>

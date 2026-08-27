@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Instagram, MessageCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import * as servicesApi from "@/services/services";
 import * as tagsApi from "@/services/tags";
 import { API_URL } from "@/lib/api";
-import { buildWhatsAppLink, cn, formatCentsToBRL } from "@/lib/utils";
+import { buildInstagramLink, buildWhatsAppLink, cn, formatCentsToBRL } from "@/lib/utils";
 import type { CondoService, ServiceItem } from "@/lib/types";
 
 function ItemDetail({
@@ -20,9 +20,10 @@ function ItemDetail({
   onClose: () => void;
 }) {
   const [activeImage, setActiveImage] = useState(0);
-  const link = service.owner.whatsapp
+  const whatsappLink = service.owner.whatsapp
     ? buildWhatsAppLink(service.owner.whatsapp, `Olá! Tenho interesse em "${item.name}" (${service.name}).`)
     : null;
+  const instagramLink = service.instagram ? buildInstagramLink(service.instagram) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -73,11 +74,28 @@ function ItemDetail({
             <p className="text-sm font-medium text-primary">{formatCentsToBRL(item.priceCents)}</p>
           </div>
           {item.description && <p className="text-sm text-muted-foreground">{item.description}</p>}
-          <Button asChild className="w-full" disabled={!link}>
-            <a href={link ?? undefined} target="_blank" rel="noreferrer">
-              Falar com {service.name}
-            </a>
-          </Button>
+          <div className="space-y-2">
+            {whatsappLink && (
+              <Button asChild className="w-full">
+                <a href={whatsappLink} target="_blank" rel="noreferrer">
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Falar com {service.name}
+                </a>
+              </Button>
+            )}
+            {instagramLink && (
+              <Button asChild variant="outline" className="w-full">
+                <a href={instagramLink} target="_blank" rel="noreferrer">
+                  <Instagram className="mr-2 h-4 w-4" />@{service.instagram}
+                </a>
+              </Button>
+            )}
+            {!whatsappLink && !instagramLink && (
+              <p className="text-center text-sm text-muted-foreground">
+                Este serviço ainda não informou um contato.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -148,6 +166,16 @@ export default function Services() {
                   : ""}
               </p>
               {service.description && <p className="text-sm text-muted-foreground">{service.description}</p>}
+              {service.instagram && (
+                <a
+                  href={buildInstagramLink(service.instagram)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                >
+                  <Instagram className="h-3.5 w-3.5" />@{service.instagram}
+                </a>
+              )}
               {service.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {service.tags.map((tag) => (

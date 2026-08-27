@@ -29,3 +29,7 @@ export function buildWhatsAppLink(phone: string, message: string) {
   const number = normalizeWhatsApp(phone);
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
+
+export function buildInstagramLink(handle: string) {
+  return `https://instagram.com/${handle.replace(/^@/, "")}`;
+}

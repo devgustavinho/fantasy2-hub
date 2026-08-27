@@ -54,10 +54,23 @@ function deleteImageFile(imagePath) {
 
 const nowIso = () => new Date().toISOString();
 
+// Aceita "@handle", link completo (https://instagram.com/handle) ou só o handle — sempre
+// guarda só o handle puro, a URL é remontada no front na hora de exibir.
+function normalizeInstagram(value) {
+  if (!value) return null;
+  const cleaned = value
+    .trim()
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/^@/, "")
+    .replace(/\/+$/, "");
+  return cleaned || null;
+}
+
 const serviceSchema = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(1000).optional().nullable(),
-  whatsapp: z.string().trim().min(8, "Informe um número de WhatsApp válido.").max(30),
+  whatsapp: z.string().trim().max(30).optional().nullable(),
+  instagram: z.string().trim().max(60).optional().nullable(),
 });
 
 const itemSchema = z.object({
@@ -80,7 +93,7 @@ const getServiceByUser = sqlite.prepare("SELECT * FROM condo_services WHERE user
 const getServiceById = sqlite.prepare("SELECT * FROM condo_services WHERE id = ?");
 
 const listServicesBase = sqlite.prepare(`
-  SELECT s.id, s.name, s.description, s.created_at AS createdAt,
+  SELECT s.id, s.name, s.description, s.instagram, s.created_at AS createdAt,
          u.id AS ownerId, u.name AS ownerName, u.whatsapp AS ownerWhatsapp,
          a.tower, a.code AS apartmentCode
   FROM condo_services s
@@ -118,12 +131,12 @@ const listTagsByService = sqlite.prepare(`
 `);
 
 const insertService = sqlite.prepare(`
-  INSERT INTO condo_services (id, user_id, name, description)
-  VALUES (@id, @user_id, @name, @description)
+  INSERT INTO condo_services (id, user_id, name, description, instagram)
+  VALUES (@id, @user_id, @name, @description, @instagram)
 `);
 
 const updateService = sqlite.prepare(`
-  UPDATE condo_services SET name = @name, description = @description, updated_at = @updated_at
+  UPDATE condo_services SET name = @name, description = @description, instagram = @instagram, updated_at = @updated_at
   WHERE id = @id
 `);
 
@@ -158,6 +171,7 @@ function serializeService(row) {
     id: row.id,
     name: row.name,
     description: row.description,
+    instagram: row.instagram,
     createdAt: row.createdAt,
     owner: {
       id: row.ownerId,
@@ -203,12 +217,15 @@ export function servicesRoutes() {
         id: service.id,
         name: service.name,
         description: service.description,
+        instagram: service.instagram,
+        whatsapp: req.user.whatsapp,
         tags: listTagsByService.all(service.id),
         items: listItemsByService.all(service.id).map(serializeItem),
       },
     });
   });
 
+  // WhatsApp e Instagram são opcionais: um serviço pode divulgar só um dos dois (ou os dois).
   router.post("/", (req, res) => {
     if (getServiceByUser.get(req.user.id)) {
       return res.status(409).json({ message: "Você já tem um serviço cadastrado." });
@@ -216,10 +233,12 @@ export function servicesRoutes() {
 
     const parsed = serviceSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Preencha nome do serviço e um WhatsApp válido." });
+      return res.status(400).json({ message: "Preencha ao menos o nome do serviço." });
     }
 
-    setWhatsappVisible.run(parsed.data.whatsapp, req.user.id);
+    if (parsed.data.whatsapp) {
+      setWhatsappVisible.run(parsed.data.whatsapp, req.user.id);
+    }
 
     const id = randomUUID();
     insertService.run({
@@ -227,6 +246,7 @@ export function servicesRoutes() {
       user_id: req.user.id,
       name: parsed.data.name,
       description: parsed.data.description || null,
+      instagram: normalizeInstagram(parsed.data.instagram),
     });
 
     recordAudit({
@@ -240,7 +260,14 @@ export function servicesRoutes() {
 
     const created = getServiceById.get(id);
     res.status(201).json({
-      service: { id: created.id, name: created.name, description: created.description, tags: [], items: [] },
+      service: {
+        id: created.id,
+        name: created.name,
+        description: created.description,
+        instagram: created.instagram,
+        tags: [],
+        items: [],
+      },
     });
   });
 
@@ -248,15 +275,20 @@ export function servicesRoutes() {
     const service = getServiceByUser.get(req.user.id);
     if (!service) return res.status(404).json({ message: "Cadastre seu serviço primeiro." });
 
-    const parsed = serviceSchema.pick({ name: true, description: true }).safeParse(req.body);
+    const parsed = serviceSchema.pick({ name: true, description: true, whatsapp: true, instagram: true }).safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Preencha o nome do serviço." });
+    }
+
+    if (parsed.data.whatsapp) {
+      setWhatsappVisible.run(parsed.data.whatsapp, req.user.id);
     }
 
     updateService.run({
       id: service.id,
       name: parsed.data.name,
       description: parsed.data.description || null,
+      instagram: normalizeInstagram(parsed.data.instagram),
       updated_at: nowIso(),
     });
 
@@ -274,6 +306,8 @@ export function servicesRoutes() {
         id: updated.id,
         name: updated.name,
         description: updated.description,
+        instagram: updated.instagram,
+        whatsapp: parsed.data.whatsapp || req.user.whatsapp,
         tags: listTagsByService.all(updated.id),
         items: listItemsByService.all(updated.id).map(serializeItem),
       },
