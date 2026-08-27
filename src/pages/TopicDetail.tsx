@@ -28,6 +28,8 @@ export default function TopicDetail() {
   const [editError, setEditError] = useState<string | null>(null);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentBody, setEditingCommentBody] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["topic", id],
@@ -49,6 +51,14 @@ export default function TopicDetail() {
     mutationFn: () => topicsService.commentOnTopic(id!, commentBody),
     onSuccess: () => {
       setCommentBody("");
+      invalidate();
+    },
+  });
+
+  const editCommentMutation = useMutation({
+    mutationFn: () => topicsService.editComment(id!, editingCommentId!, editingCommentBody),
+    onSuccess: () => {
+      setEditingCommentId(null);
       invalidate();
     },
   });
@@ -110,6 +120,17 @@ export default function TopicDetail() {
     e.preventDefault();
     if (!commentBody.trim()) return;
     commentMutation.mutate();
+  }
+
+  function startEditingComment(comment: { id: string; body: string }) {
+    setEditingCommentId(comment.id);
+    setEditingCommentBody(comment.body);
+  }
+
+  function handleEditComment(e: FormEvent) {
+    e.preventDefault();
+    if (!editingCommentBody.trim()) return;
+    editCommentMutation.mutate();
   }
 
   function startEditing() {
@@ -372,6 +393,8 @@ export default function TopicDetail() {
           <div className="space-y-3">
             {comments.map((comment) => {
               const isOfficial = comment.authorRole === "sindico";
+              const canEditComment = !!user && (user.id === comment.authorId || isStaff);
+              const isEditingThis = editingCommentId === comment.id;
               return (
                 <div
                   key={comment.id}
@@ -385,10 +408,48 @@ export default function TopicDetail() {
                       Resposta oficial
                     </Badge>
                   )}
-                  <p>{comment.body}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {comment.authorName} · {new Date(comment.createdAt).toLocaleString("pt-BR")}
-                  </p>
+                  {isEditingThis ? (
+                    <form onSubmit={handleEditComment} className="space-y-2">
+                      <Textarea
+                        value={editingCommentBody}
+                        onChange={(e) => setEditingCommentBody(e.target.value)}
+                        rows={2}
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <Button type="submit" size="sm" disabled={editCommentMutation.isPending}>
+                          Salvar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingCommentId(null)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <p>{comment.body}</p>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>
+                          {comment.authorName} · {new Date(comment.createdAt).toLocaleString("pt-BR")}
+                          {comment.updatedAt && " · editado"}
+                        </span>
+                        {canEditComment && (
+                          <button
+                            type="button"
+                            className="ml-auto underline hover:text-foreground"
+                            onClick={() => startEditingComment(comment)}
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}

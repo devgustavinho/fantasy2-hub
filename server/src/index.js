@@ -1,3 +1,4 @@
+import path from "node:path";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -12,6 +13,7 @@ import { webauthnRoutes } from "./modules/webauthn/routes.js";
 import { notificationsRoutes } from "./modules/notifications/routes.js";
 import { pushRoutes } from "./modules/push/routes.js";
 import { auditRoutes } from "./modules/audit/routes.js";
+import { servicesRoutes } from "./modules/services/routes.js";
 
 const app = express();
 
@@ -29,6 +31,8 @@ const authLimiter = rateLimit({
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+app.use("/uploads", express.static(path.resolve("data/uploads")));
+
 app.use("/auth", authLimiter, authRoutes());
 app.use("/apartments", apartmentsRoutes());
 app.use("/topics", topicsRoutes());
@@ -37,6 +41,7 @@ app.use("/webauthn", authLimiter, webauthnRoutes());
 app.use("/notifications", notificationsRoutes());
 app.use("/push", pushRoutes());
 app.use("/audit", auditRoutes());
+app.use("/services", servicesRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });

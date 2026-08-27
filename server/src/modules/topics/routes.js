@@ -72,12 +72,16 @@ const getVoteCounts = sqlite.prepare(`
 const getMyVote = sqlite.prepare("SELECT value FROM votes WHERE topic_id = ? AND user_id = ?");
 
 const listComments = sqlite.prepare(`
-  SELECT c.id, c.body, c.created_at AS createdAt, u.name AS authorName, u.role AS authorRole
+  SELECT c.id, c.body, c.created_at AS createdAt, c.updated_at AS updatedAt,
+         c.user_id AS authorId, u.name AS authorName, u.role AS authorRole
   FROM comments c
   JOIN users u ON u.id = c.user_id
   WHERE c.topic_id = ?
   ORDER BY c.created_at ASC
 `);
+
+const getCommentById = sqlite.prepare("SELECT id, topic_id, user_id FROM comments WHERE id = ?");
+const updateComment = sqlite.prepare("UPDATE comments SET body = @body, updated_at = @updated_at WHERE id = @id");
 
 const listEvents = sqlite.prepare(`
   SELECT e.id, e.message, e.created_at AS createdAt
@@ -343,6 +347,14 @@ export function topicsRoutes() {
       value: parsed.data.value,
       updated_at: nowIso(),
     });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "topics.vote",
+      entityType: "topic",
+      entityId: topic.id,
+      details: { value: parsed.data.value },
+    });
 
     const counts = getVoteCounts.get(topic.id);
     res.json({
@@ -368,7 +380,49 @@ export function topicsRoutes() {
       actorUserId: req.user.id,
       message: `${req.user.name} comentou em "${topic.title}"`,
     });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "comments.create",
+      entityType: "comment",
+      entityId: id,
+      details: { topicId: topic.id },
+    });
     res.status(201).json({ comments: listComments.all(topic.id) });
+  });
+
+  router.patch("/:id/comments/:commentId", (req, res) => {
+    const topic = getTopic.get(req.params.id);
+    if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+
+    const comment = getCommentById.get(req.params.commentId);
+    if (!comment || comment.topic_id !== topic.id) {
+      return res.status(404).json({ message: "Comentário não encontrado." });
+    }
+
+    const isAuthor = comment.user_id === req.user.id;
+    const isStaff = req.user.role === "admin" || req.user.role === "sindico";
+    if (!isAuthor && !isStaff) {
+      return res.status(403).json({
+        message: "Só quem escreveu o comentário (ou a administração) pode editá-lo.",
+      });
+    }
+
+    const parsed = commentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Escreva um comentário." });
+    }
+
+    updateComment.run({ id: comment.id, body: parsed.data.body, updated_at: nowIso() });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "comments.edit",
+      entityType: "comment",
+      entityId: comment.id,
+      details: { topicId: topic.id },
+    });
+    res.json({ comments: listComments.all(topic.id) });
   });
 
   return router;

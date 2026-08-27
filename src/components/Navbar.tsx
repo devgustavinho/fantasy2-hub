@@ -23,6 +23,9 @@ export function Navbar() {
             <Link to="/" className="text-white/70 transition-colors hover:text-white">
               Pautas
             </Link>
+            <Link to="/servicos" className="text-white/70 transition-colors hover:text-white">
+              Serviços
+            </Link>
             {(user.role === "admin" || user.role === "sindico") && (
               <Link to="/admin" className="text-white/70 transition-colors hover:text-white">
                 Administração

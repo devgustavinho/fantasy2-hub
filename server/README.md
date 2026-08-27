@@ -44,9 +44,12 @@ npm run dev
 | Criar conta de síndico | ❌ | ❌ | ✅ |
 | Promover/rebaixar cargo (incl. promover a admin) | ❌ | ❌ | ✅ (exceto o próprio cargo e o último admin) |
 | Aprovar/recusar cadastro pendente | ❌ | ❌ | ✅ |
+| Editar o próprio comentário | ✅ | ✅ | ✅ |
+| Editar comentário de outra pessoa | ❌ | ✅ | ✅ |
 | Excluir a própria pauta | ✅ | ✅ | ✅ |
 | Excluir pauta de outra pessoa (com motivo ≥ 10 caracteres) | ❌ | ❌ | ✅ |
 | Ver página de auditoria (`/admin/auditoria`) | ❌ | ❌ | ✅ |
+| Cadastrar/gerenciar o próprio serviço no `/servicos` | ✅ | ✅ | ✅ |
 
 Reforçado em `src/auth/guards.js` (`requireAuth` < `requireApproved` < `requireStaff` < `requireAdmin`)
 e em checagens específicas dentro das rotas (ex. dono da pauta em `PATCH /topics/:id/content` e
@@ -69,12 +72,33 @@ e em checagens específicas dentro das rotas (ex. dono da pauta em `PATCH /topic
 ## Auditoria
 
 `server/src/modules/audit/service.js` → `recordAudit(...)`, tabela `audit_log`, exposta em
-`GET /audit` (só admin). Registra ações administrativas/de segurança e mudanças de conteúdo — login,
-cadastro, 2FA ativado, criar/promover/aprovar/recusar/resetar senha de usuário,
-criar/editar/excluir/agendar pauta, atualização de status. **Não** registra ações triviais (voto,
-marcar notificação como lida, inscrição de push) — encheria o log sem valor de auditoria real. Se um
-novo tipo de ação precisar de auditoria, chame `recordAudit` no mesmo lugar onde a ação acontece (não
-tem trigger automático no banco).
+`GET /audit` (só admin) — **paginada** (`?page=&pageSize=`, default 50/página) e filtrável por pessoa
+(`?actorUserId=`; `GET /audit/actors` lista quem já apareceu no log, pro front montar o filtro).
+Registra ações administrativas/de segurança e de conteúdo — login, cadastro, 2FA ativado,
+criar/promover/aprovar/recusar/resetar senha de usuário, criar/editar/excluir/agendar/votar/comentar
+pauta (incl. edição de comentário), criar/editar/excluir serviço e item de serviço. **Não** registra
+ações puramente de UI (marcar notificação como lida, inscrição de push) — não têm valor de auditoria
+real. Se um novo tipo de ação precisar de auditoria, chame `recordAudit` no mesmo lugar onde a ação
+acontece (não tem trigger automático no banco).
+
+## Serviços do condomínio
+
+`src/modules/services/routes.js` (`/services`) — moradores anunciam um serviço/produto próprio
+(ex. "Doces da Maria") com itens (nome, descrição, preço, foto opcional). Um usuário só pode ter
+**um** serviço (`condo_services.user_id` é `UNIQUE`); os itens ficam em `condo_service_items`,
+apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
+
+- Cadastrar um serviço (`POST /services`) **exige** um WhatsApp e automaticamente marca
+  `whatsapp_visible = 1` — é assim que outros moradores entram em contato (o item, ao ser clicado no
+  front, já abre um link `wa.me` com uma mensagem de interesse pré-preenchida). Não dá pra esconder o
+  WhatsApp de novo enquanto o serviço existir sem apagar o serviço.
+- Fotos de item: upload via `multipart/form-data` (`multer`), salvas em `data/uploads/services/`
+  (fora do banco, só o caminho relativo fica em `image_path`), servidas estaticamente em
+  `/uploads/services/<arquivo>`. Limite de 3MB, apenas JPG/PNG/WebP. Arquivo antigo é apagado do disco
+  ao trocar a foto de um item ou excluir o item/serviço.
+- Todo mundo aprovado (`requireApproved`) pode ver a lista pública e cadastrar o próprio serviço — não
+  tem restrição por cargo.
+- Auditado: `services.create/edit/delete` e `services.item_create/edit/delete`.
 
 ## Adicionando uma nova migration
 

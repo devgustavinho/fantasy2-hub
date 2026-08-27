@@ -59,6 +59,8 @@ export interface Comment {
   id: string;
   body: string;
   createdAt: string;
+  updatedAt: string | null;
+  authorId: string;
   authorName: string;
   authorRole: Role;
 }
@@ -76,6 +78,39 @@ export interface Notification {
   message: string;
   readAt: string | null;
   createdAt: string;
+}
+
+export interface ServiceItem {
+  id: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  imagePath: string | null;
+  createdAt: string;
+}
+
+export interface ServiceOwner {
+  id: string;
+  name: string;
+  whatsapp: string | null;
+  tower: number | null;
+  apartmentCode: string | null;
+}
+
+export interface CondoService {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  owner: ServiceOwner;
+  items: ServiceItem[];
+}
+
+export interface MyService {
+  id: string;
+  name: string;
+  description: string | null;
+  items: ServiceItem[];
 }
 
 export interface AuditEntry {

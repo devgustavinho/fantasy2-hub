@@ -10,6 +10,8 @@ import TopicDetail from "@/pages/TopicDetail";
 import AdminPanel from "@/pages/AdminPanel";
 import UserManagement from "@/pages/UserManagement";
 import Profile from "@/pages/Profile";
+import Services from "@/pages/Services";
+import MyService from "@/pages/MyService";
 import AuditLog from "@/pages/AuditLog";
 import NotFound from "@/pages/NotFound";
 
@@ -55,6 +57,22 @@ export default function App() {
                 element={
                   <AppLayout>
                     <Profile />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/servicos"
+                element={
+                  <AppLayout>
+                    <Services />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/servicos/meu"
+                element={
+                  <AppLayout>
+                    <MyService />
                   </AppLayout>
                 }
               />

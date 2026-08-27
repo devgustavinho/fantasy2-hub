@@ -8,9 +8,9 @@ export default function AdminPanel() {
   const { data, isLoading } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
 
   const sorted = [...(data?.topics ?? [])].sort((a, b) => {
-    const engagementA = a.favorCount + a.contraCount + (a.commentCount ?? 0);
-    const engagementB = b.favorCount + b.contraCount + (b.commentCount ?? 0);
-    return engagementB - engagementA;
+    const balanceA = a.favorCount - a.contraCount;
+    const balanceB = b.favorCount - b.contraCount;
+    return balanceB - balanceA;
   });
 
   return (
@@ -18,7 +18,7 @@ export default function AdminPanel() {
       <div>
         <h1 className="text-2xl font-semibold">Administração — reclamações mais relevantes</h1>
         <p className="text-sm text-muted-foreground">
-          Ordenado por engajamento (votos + comentários) para ajudar a montar a pauta da próxima assembleia.
+          Ordenado por saldo de votos (favor − contra) para ajudar a montar a pauta da próxima assembleia.
         </p>
       </div>
 
@@ -42,6 +42,10 @@ export default function AdminPanel() {
                 </div>
               </CardHeader>
               <CardContent className="flex items-center gap-4 pt-0 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  saldo {topic.favorCount - topic.contraCount >= 0 ? "+" : ""}
+                  {topic.favorCount - topic.contraCount}
+                </span>
                 <span>👍 {topic.favorCount}</span>
                 <span>👎 {topic.contraCount}</span>
                 <span>💬 {topic.commentCount ?? 0}</span>

@@ -1,4 +1,4 @@
-const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:3100").replace(/\/+$/, "");
+export const API_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:3100").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -13,7 +13,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     credentials: "include",
     headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },
   });
@@ -41,4 +41,6 @@ export const api = {
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
+  postForm: <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form }),
+  patchForm: <T>(path: string, form: FormData) => request<T>(path, { method: "PATCH", body: form }),
 };

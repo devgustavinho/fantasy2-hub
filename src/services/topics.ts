@@ -17,6 +17,9 @@ export const voteOnTopic = (id: string, value: VoteValue) =>
 export const commentOnTopic = (id: string, body: string) =>
   api.post<{ comments: Comment[] }>(`/topics/${id}/comments`, { body });
 
+export const editComment = (topicId: string, commentId: string, body: string) =>
+  api.patch<{ comments: Comment[] }>(`/topics/${topicId}/comments/${commentId}`, { body });
+
 export const scheduleTopic = (id: string, assemblyDate: string | null) =>
   api.patch<{ topic: Topic }>(`/topics/${id}`, { assemblyDate });
 
