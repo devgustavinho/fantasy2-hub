@@ -9,8 +9,81 @@ import { QueryError } from "@/components/QueryError";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import * as usersService from "@/services/users";
+import * as servicesApi from "@/services/services";
 import { listApartmentsByTower } from "@/services/apartments";
 import type { Apartment, ManagedUser, Role } from "@/lib/types";
+
+// Deixa o admin cadastrar um serviço em nome de um morador (ex. alguém sem prática/tempo de
+// mexer no app sozinho) — depois de criado, o próprio morador edita tudo em "Meu serviço".
+function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      servicesApi.createService({
+        name,
+        whatsapp: whatsapp || undefined,
+        instagram: instagram || undefined,
+        userId: user.id,
+      }),
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      onDone();
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Erro ao cadastrar serviço."),
+  });
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Preencha o nome do serviço.");
+      return;
+    }
+    createMutation.mutate();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded-md border bg-muted/20 p-3">
+      <p className="text-xs text-muted-foreground">
+        {user.name} vai poder editar tudo depois em "Meu serviço" (itens, fotos, opções...).
+      </p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Input
+          placeholder="Nome do serviço"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-8 text-sm"
+        />
+        <Input
+          placeholder="WhatsApp (opcional)"
+          value={whatsapp}
+          onChange={(e) => setWhatsapp(e.target.value)}
+          className="h-8 text-sm"
+        />
+        <Input
+          placeholder="Instagram (opcional)"
+          value={instagram}
+          onChange={(e) => setInstagram(e.target.value)}
+          className="h-8 text-sm"
+        />
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={createMutation.isPending}>
+          {createMutation.isPending ? "Criando..." : "Criar serviço"}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onDone}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 const TOWERS = [1, 2, 3, 4, 5];
 
@@ -43,6 +116,7 @@ export default function UserManagement() {
     refetch,
   } = useQuery({ queryKey: ["users"], queryFn: usersService.listUsers });
   const [resetResult, setResetResult] = useState<{ user: ManagedUser; password: string } | null>(null);
+  const [serviceFormUserId, setServiceFormUserId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -317,7 +391,8 @@ export default function UserManagement() {
           {data?.users.map((u) => {
             const isSelf = u.id === currentUser?.id;
             return (
-              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <div key={u.id} className="rounded-md border p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-medium">
                     {u.name} <span className="font-normal text-muted-foreground">· {u.email}</span>
@@ -400,7 +475,20 @@ export default function UserManagement() {
                       Resetar senha
                     </Button>
                   )}
+                  {!isSelf && isAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setServiceFormUserId(serviceFormUserId === u.id ? null : u.id)}
+                    >
+                      Criar serviço
+                    </Button>
+                  )}
                 </div>
+              </div>
+              {serviceFormUserId === u.id && (
+                <CreateServiceForUserForm user={u} onDone={() => setServiceFormUserId(null)} />
+              )}
               </div>
             );
           })}

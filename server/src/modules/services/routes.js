@@ -89,24 +89,30 @@ const itemSchema = z.object({
     .transform((v) => (v ? (Array.isArray(v) ? v : [v]) : [])),
 });
 
-const groupSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  selectionType: z.enum(["single", "multi"]),
-  maxSelections: z.coerce.number().int().min(1).max(20).optional().nullable(),
-  required: booleanInput.optional().default(false),
-});
+const tagsAssignSchema = z.object({ tagIds: z.array(z.string()).max(20) });
 
-const optionSchema = z.object({
+// Configurador do item inteiro (grupos + opções) de uma vez só — substitui tudo que o item
+// tinha antes. Existe pra permitir editar tudo localmente no front (sem uma chamada de rede
+// por grupo/opção) e mandar de uma vez só no fim, em vez do fluxo antigo de "salva, espera
+// salvar, prossegue" pra cada grupo/opção.
+const optionInGroupSchema = z.object({
   name: z.string().trim().min(1).max(80),
   priceDeltaCents: z.coerce.number().int().min(-1_000_000).max(1_000_000).optional().default(0),
 });
-
-const tagsAssignSchema = z.object({ tagIds: z.array(z.string()).max(20) });
+const groupBulkSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  selectionType: z.enum(["single", "multi"]),
+  maxSelections: z.coerce.number().int().min(1).max(20).optional().nullable(),
+  required: z.boolean().optional().default(false),
+  options: z.array(optionInGroupSchema).max(50).optional().default([]),
+});
+const groupsBulkSchema = z.object({ groups: z.array(groupBulkSchema).max(20) });
 
 const setWhatsappVisible = sqlite.prepare(
   "UPDATE users SET whatsapp = ?, whatsapp_visible = 1 WHERE id = ?",
 );
 
+const getUserForOwnership = sqlite.prepare("SELECT id, name FROM users WHERE id = ?");
 const getServiceByUser = sqlite.prepare("SELECT * FROM condo_services WHERE user_id = ?");
 const getServiceById = sqlite.prepare("SELECT * FROM condo_services WHERE id = ?");
 
@@ -198,37 +204,20 @@ const listGroupsByItem = sqlite.prepare(`
   SELECT id, name, selection_type AS selectionType, max_selections AS maxSelections, required
   FROM condo_service_item_option_groups WHERE item_id = ? ORDER BY position ASC, created_at ASC
 `);
-const getGroupById = sqlite.prepare("SELECT * FROM condo_service_item_option_groups WHERE id = ?");
-const countGroupsByItem = sqlite.prepare(
-  "SELECT COUNT(*) AS c FROM condo_service_item_option_groups WHERE item_id = ?",
-);
 const insertGroup = sqlite.prepare(`
   INSERT INTO condo_service_item_option_groups (id, item_id, name, selection_type, max_selections, required, position)
   VALUES (@id, @item_id, @name, @selection_type, @max_selections, @required, @position)
 `);
-const updateGroup = sqlite.prepare(`
-  UPDATE condo_service_item_option_groups
-  SET name = @name, selection_type = @selection_type, max_selections = @max_selections, required = @required
-  WHERE id = @id
-`);
-const deleteGroupById = sqlite.prepare("DELETE FROM condo_service_item_option_groups WHERE id = ?");
+const deleteGroupsByItem = sqlite.prepare("DELETE FROM condo_service_item_option_groups WHERE item_id = ?");
 
 const listOptionsByGroup = sqlite.prepare(`
   SELECT id, name, price_delta_cents AS priceDeltaCents
   FROM condo_service_item_options WHERE group_id = ? ORDER BY position ASC, created_at ASC
 `);
-const getOptionById = sqlite.prepare("SELECT * FROM condo_service_item_options WHERE id = ?");
-const countOptionsByGroup = sqlite.prepare(
-  "SELECT COUNT(*) AS c FROM condo_service_item_options WHERE group_id = ?",
-);
 const insertOption = sqlite.prepare(`
   INSERT INTO condo_service_item_options (id, group_id, name, price_delta_cents, position)
   VALUES (@id, @group_id, @name, @price_delta_cents, @position)
 `);
-const updateOption = sqlite.prepare(
-  "UPDATE condo_service_item_options SET name = @name, price_delta_cents = @price_delta_cents WHERE id = @id",
-);
-const deleteOptionById = sqlite.prepare("DELETE FROM condo_service_item_options WHERE id = ?");
 
 function serializeGroup(row) {
   return {
@@ -298,14 +287,6 @@ function getOwnedItem(userId, itemId) {
   return item;
 }
 
-function getOwnedGroup(userId, itemId, groupId) {
-  const item = getOwnedItem(userId, itemId);
-  if (!item) return null;
-  const group = getGroupById.get(groupId);
-  if (!group || group.item_id !== item.id) return null;
-  return group;
-}
-
 export function servicesRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
@@ -344,9 +325,26 @@ export function servicesRoutes() {
   // Foto também é opcional aqui — antes só dava pra anexar depois de já ter criado o serviço
   // (a tela de edição só aparece depois do cadastro), o que fazia parecer que a opção nem
   // existia. `handlePhotoUpload` faz o multipart virar `req.body` (strings) + `req.file`.
+  //
+  // `userId` no corpo é opcional e só um admin pode usá-lo — deixa o admin cadastrar o serviço
+  // em nome de um morador que não tem prática/tempo de fazer sozinho. Depois de criado, o dono
+  // (o morador, não o admin) já enxerga e edita normalmente em "Meu serviço" — a rota não muda,
+  // é só `condo_services.user_id` apontando pra outra pessoa.
   router.post("/", handlePhotoUpload, async (req, res) => {
-    if (getServiceByUser.get(req.user.id)) {
-      return res.status(409).json({ message: "Você já tem um serviço cadastrado." });
+    let ownerId = req.user.id;
+    if (req.body.userId && req.body.userId !== req.user.id) {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Só o administrador pode cadastrar serviço para outro morador." });
+      }
+      const targetUser = getUserForOwnership.get(req.body.userId);
+      if (!targetUser) return res.status(404).json({ message: "Morador não encontrado." });
+      ownerId = targetUser.id;
+    }
+
+    if (getServiceByUser.get(ownerId)) {
+      return res.status(409).json({
+        message: ownerId === req.user.id ? "Você já tem um serviço cadastrado." : "Esse morador já tem um serviço cadastrado.",
+      });
     }
 
     const parsed = serviceSchema.safeParse(req.body);
@@ -355,13 +353,13 @@ export function servicesRoutes() {
     }
 
     if (parsed.data.whatsapp) {
-      setWhatsappVisible.run(parsed.data.whatsapp, req.user.id);
+      setWhatsappVisible.run(parsed.data.whatsapp, ownerId);
     }
 
     const id = randomUUID();
     insertService.run({
       id,
-      user_id: req.user.id,
+      user_id: ownerId,
       name: parsed.data.name,
       description: parsed.data.description || null,
       instagram: normalizeInstagram(parsed.data.instagram),
@@ -378,7 +376,7 @@ export function servicesRoutes() {
       action: "services.create",
       entityType: "service",
       entityId: id,
-      details: { name: parsed.data.name },
+      details: { name: parsed.data.name, ...(ownerId !== req.user.id ? { forUserId: ownerId } : {}) },
     });
 
     res.status(201).json({ service: { ...serializeServiceDetail(getServiceWithOwnerById.get(id)) } });
@@ -551,7 +549,7 @@ export function servicesRoutes() {
       details: { serviceId: service.id, name: parsed.data.name },
     });
 
-    res.status(201).json({ items: listItemsByService.all(service.id).map(serializeItem) });
+    res.status(201).json({ itemId: id, items: listItemsByService.all(service.id).map(serializeItem) });
   });
 
   router.patch("/mine/items/:itemId", handleImagesUpload, async (req, res) => {
@@ -637,164 +635,59 @@ export function servicesRoutes() {
 
   // --- Grupos de opção (configurador de item) ---
 
-  router.post("/mine/items/:itemId/groups", (req, res) => {
+  // Substitui TODOS os grupos/opções do item de uma vez (apaga tudo e recria) — pensado pra
+  // um front que edita o configurador inteiro localmente (sem chamada de rede por grupo/opção)
+  // e só sincroniza no fim. Seguro porque nada mais referencia group_id/option_id de forma
+  // persistente (o carrinho do checkout é montado no front na hora, não fica salvo).
+  router.put("/mine/items/:itemId/option-groups", (req, res) => {
     const item = getOwnedItem(req.user.id, req.params.itemId);
     if (!item) return res.status(404).json({ message: "Item não encontrado." });
 
-    const parsed = groupSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Preencha nome e tipo de seleção do grupo." });
-    if (parsed.data.selectionType === "multi" && !parsed.data.maxSelections) {
-      return res.status(400).json({ message: "Informe quantas opções o cliente pode escolher no máximo." });
+    const parsed = groupsBulkSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Configuração de opções inválida." });
     }
 
-    const id = randomUUID();
-    insertGroup.run({
-      id,
-      item_id: item.id,
-      name: parsed.data.name,
-      selection_type: parsed.data.selectionType,
-      max_selections: parsed.data.selectionType === "multi" ? parsed.data.maxSelections : null,
-      required: parsed.data.required ? 1 : 0,
-      position: countGroupsByItem.get(item.id).c,
-    });
-
-    recordAudit({
-      actorUserId: req.user.id,
-      actorName: req.user.name,
-      action: "services.item_group_create",
-      entityType: "service_item_option_group",
-      entityId: id,
-      details: { itemId: item.id, name: parsed.data.name },
-    });
-
-    res.status(201).json({ item: serializeItem(getItemById.get(item.id)) });
-  });
-
-  router.patch("/mine/items/:itemId/groups/:groupId", (req, res) => {
-    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
-    if (!group) return res.status(404).json({ message: "Grupo não encontrado." });
-
-    const parsed = groupSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Preencha nome e tipo de seleção do grupo." });
-    if (parsed.data.selectionType === "multi" && !parsed.data.maxSelections) {
-      return res.status(400).json({ message: "Informe quantas opções o cliente pode escolher no máximo." });
+    for (const group of parsed.data.groups) {
+      if (group.selectionType === "multi" && !group.maxSelections) {
+        return res.status(400).json({ message: `Informe o máximo de opções pro grupo "${group.name}".` });
+      }
     }
 
-    updateGroup.run({
-      id: group.id,
-      name: parsed.data.name,
-      selection_type: parsed.data.selectionType,
-      max_selections: parsed.data.selectionType === "multi" ? parsed.data.maxSelections : null,
-      required: parsed.data.required ? 1 : 0,
+    const replaceAll = sqlite.transaction((groups) => {
+      deleteGroupsByItem.run(item.id);
+      groups.forEach((group, groupPosition) => {
+        const groupId = randomUUID();
+        insertGroup.run({
+          id: groupId,
+          item_id: item.id,
+          name: group.name,
+          selection_type: group.selectionType,
+          max_selections: group.selectionType === "multi" ? group.maxSelections : null,
+          required: group.required ? 1 : 0,
+          position: groupPosition,
+        });
+        group.options.forEach((option, optionPosition) => {
+          insertOption.run({
+            id: randomUUID(),
+            group_id: groupId,
+            name: option.name,
+            // Item "a combinar" não tem preço-base pra somar/subtrair em cima.
+            price_delta_cents: item.is_negotiable ? 0 : option.priceDeltaCents,
+            position: optionPosition,
+          });
+        });
+      });
     });
+    replaceAll(parsed.data.groups);
 
     recordAudit({
       actorUserId: req.user.id,
       actorName: req.user.name,
-      action: "services.item_group_edit",
-      entityType: "service_item_option_group",
-      entityId: group.id,
-    });
-
-    res.json({ item: serializeItem(getItemById.get(group.item_id)) });
-  });
-
-  router.delete("/mine/items/:itemId/groups/:groupId", (req, res) => {
-    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
-    if (!group) return res.status(404).json({ message: "Grupo não encontrado." });
-
-    deleteGroupById.run(group.id);
-
-    recordAudit({
-      actorUserId: req.user.id,
-      actorName: req.user.name,
-      action: "services.item_group_delete",
-      entityType: "service_item_option_group",
-      entityId: group.id,
-      details: { name: group.name },
-    });
-
-    res.json({ item: serializeItem(getItemById.get(group.item_id)) });
-  });
-
-  // --- Opções dentro de um grupo ---
-
-  router.post("/mine/items/:itemId/groups/:groupId/options", (req, res) => {
-    const item = getOwnedItem(req.user.id, req.params.itemId);
-    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
-    if (!item || !group) return res.status(404).json({ message: "Grupo não encontrado." });
-
-    const parsed = optionSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Preencha o nome da opção." });
-
-    // Item "a combinar" não tem preço-base pra somar/subtrair em cima — a opção existe (ex.
-    // escolher um sabor), só nunca pode alterar valor.
-    const priceDeltaCents = item.is_negotiable ? 0 : parsed.data.priceDeltaCents;
-
-    const id = randomUUID();
-    insertOption.run({
-      id,
-      group_id: group.id,
-      name: parsed.data.name,
-      price_delta_cents: priceDeltaCents,
-      position: countOptionsByGroup.get(group.id).c,
-    });
-
-    recordAudit({
-      actorUserId: req.user.id,
-      actorName: req.user.name,
-      action: "services.item_option_create",
-      entityType: "service_item_option",
-      entityId: id,
-      details: { groupId: group.id, name: parsed.data.name },
-    });
-
-    res.status(201).json({ item: serializeItem(getItemById.get(item.id)) });
-  });
-
-  router.patch("/mine/items/:itemId/groups/:groupId/options/:optionId", (req, res) => {
-    const item = getOwnedItem(req.user.id, req.params.itemId);
-    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
-    if (!item || !group) return res.status(404).json({ message: "Grupo não encontrado." });
-
-    const option = getOptionById.get(req.params.optionId);
-    if (!option || option.group_id !== group.id) return res.status(404).json({ message: "Opção não encontrada." });
-
-    const parsed = optionSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Preencha o nome da opção." });
-
-    const priceDeltaCents = item.is_negotiable ? 0 : parsed.data.priceDeltaCents;
-
-    updateOption.run({ id: option.id, name: parsed.data.name, price_delta_cents: priceDeltaCents });
-
-    recordAudit({
-      actorUserId: req.user.id,
-      actorName: req.user.name,
-      action: "services.item_option_edit",
-      entityType: "service_item_option",
-      entityId: option.id,
-    });
-
-    res.json({ item: serializeItem(getItemById.get(item.id)) });
-  });
-
-  router.delete("/mine/items/:itemId/groups/:groupId/options/:optionId", (req, res) => {
-    const item = getOwnedItem(req.user.id, req.params.itemId);
-    const group = getOwnedGroup(req.user.id, req.params.itemId, req.params.groupId);
-    if (!item || !group) return res.status(404).json({ message: "Grupo não encontrado." });
-
-    const option = getOptionById.get(req.params.optionId);
-    if (!option || option.group_id !== group.id) return res.status(404).json({ message: "Opção não encontrada." });
-
-    deleteOptionById.run(option.id);
-
-    recordAudit({
-      actorUserId: req.user.id,
-      actorName: req.user.name,
-      action: "services.item_option_delete",
-      entityType: "service_item_option",
-      entityId: option.id,
-      details: { name: option.name },
+      action: "services.item_option_groups_replace",
+      entityType: "service_item",
+      entityId: item.id,
+      details: { groupCount: parsed.data.groups.length },
     });
 
     res.json({ item: serializeItem(getItemById.get(item.id)) });

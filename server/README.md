@@ -89,6 +89,12 @@ acontece (não tem trigger automático no banco).
 **um** serviço (`condo_services.user_id` é `UNIQUE`); os itens ficam em `condo_service_items`,
 apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
 
+- `POST /services` aceita um `userId` opcional no corpo — **só é respeitado se quem chama for
+  admin** (senão 403). Deixa o admin cadastrar o serviço em nome de um morador (ex. alguém sem
+  prática/tempo de mexer no app sozinho); depois de criado, o dono de verdade (`user_id` aponta pra
+  ele, não pro admin) já enxerga e edita tudo normalmente em "Meu serviço" — nenhuma outra rota
+  precisa saber que foi um admin quem criou.
+
 - **`GET /services` (listagem pública) não traz os itens** — só o suficiente pra escolher o
   serviço (nome, dono, foto, tags). Os itens só aparecem no link dedicado do serviço,
   `GET /services/:id` (front: `/servicos/:id`) — é lá que o cliente monta o pedido.
@@ -108,8 +114,15 @@ apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
   "Cobertura" com 1 entre 2, "Sabor" obrigatório) — cada grupo tem `selectionType`
   (`single`/`multi`), `maxSelections` (só pra `multi`) e `required`. Cada opção pode somar/subtrair
   do preço do item (`price_delta_cents`) — **exceto se o item for "a negociar"**, onde todo delta é
-  forçado pra `0` na hora de salvar (não tem preço-base pra ajustar). CRUD só do dono do serviço,
-  aninhado em `/services/mine/items/:itemId/groups[/:groupId/options[/:optionId]]`.
+  forçado pra `0` na hora de salvar (não tem preço-base pra ajustar). Só o dono do serviço mexe,
+  via `PUT /services/mine/items/:itemId/option-groups` — **substitui TODOS os grupos/opções do
+  item numa chamada só** (apaga tudo e recria, com posição = índice do array), em vez de um CRUD
+  por grupo/opção. Existe assim de propósito: o front (`ItemEditor.tsx`) edita o configurador
+  inteiro em memória local (persistido em `localStorage` a cada mudança, pra sobreviver se a aba
+  fechar/recarregar no meio) e só sincroniza com o backend quando salva o item — antes disso, cada
+  grupo/opção era uma chamada de rede imediata, o que tornava montar um configurador com vários
+  grupos dolorosamente lento. Seguro fazer replace total porque nada mais referencia
+  `group_id`/`option_id` de forma persistente (o carrinho do checkout é montado no front na hora).
 - No front (`ServiceDetail.tsx`), clicar num item abre um "montador" (galeria de fotos, descrição,
   os grupos de opção como rádio/checkbox, total ao vivo) — "Adicionar ao pedido" bota numa lista
   local (carrinho, só em memória, sem persistir no banco). "Finalizar pedido no WhatsApp" monta um
@@ -135,10 +148,9 @@ apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
   não mais um caminho relativo. Apagar a foto, editar o item ou excluir o item/serviço apaga o
   objeto do bucket também (best-effort, só loga em caso de falha).
 - Todo mundo aprovado (`requireApproved`) pode ver a lista pública e cadastrar o próprio serviço — não
-  tem restrição por cargo.
+  tem restrição por cargo. Admin também pode cadastrar em nome de outro morador (ver `userId` acima).
 - Auditado: `services.create/edit/delete`, `services.photo_set`, `services.item_create/edit/delete`,
-  `services.item_group_create/edit/delete`, `services.item_option_create/edit/delete`,
-  `services.tags_set`.
+  `services.item_option_groups_replace`, `services.tags_set`.
 
 ## Família (1 titular + 1 familiar por apartamento)
 

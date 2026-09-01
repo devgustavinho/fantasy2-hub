@@ -17,13 +17,16 @@ export interface ServiceSocialInput {
   instagram?: string;
 }
 
-export const createService = (data: ServiceSocialInput & { photo?: File }) => {
+// `userId` só é aceito pelo back se quem chama for admin — deixa o admin cadastrar o serviço
+// em nome de um morador (ex. alguém sem prática/tempo de mexer no app sozinho).
+export const createService = (data: ServiceSocialInput & { photo?: File; userId?: string }) => {
   const form = new FormData();
   form.set("name", data.name);
   if (data.description) form.set("description", data.description);
   if (data.whatsapp) form.set("whatsapp", data.whatsapp);
   if (data.instagram) form.set("instagram", data.instagram);
   if (data.photo) form.set("photo", data.photo);
+  if (data.userId) form.set("userId", data.userId);
   return api.postForm<{ service: MyService }>("/services", form);
 };
 
@@ -66,39 +69,27 @@ function toFormData(data: ServiceItemInput) {
 }
 
 export const addServiceItem = (data: ServiceItemInput) =>
-  api.postForm<{ items: ServiceItem[] }>("/services/mine/items", toFormData(data));
+  api.postForm<{ itemId: string; items: ServiceItem[] }>("/services/mine/items", toFormData(data));
 
 export const editServiceItem = (itemId: string, data: ServiceItemInput) =>
   api.patchForm<{ items: ServiceItem[] }>(`/services/mine/items/${itemId}`, toFormData(data));
 
 export const deleteServiceItem = (itemId: string) => api.delete<void>(`/services/mine/items/${itemId}`);
 
+export interface OptionInput {
+  name: string;
+  priceDeltaCents: number;
+}
+
 export interface OptionGroupInput {
   name: string;
   selectionType: SelectionType;
   maxSelections?: number | null;
   required?: boolean;
+  options: OptionInput[];
 }
 
-export const addOptionGroup = (itemId: string, data: OptionGroupInput) =>
-  api.post<{ item: ServiceItem }>(`/services/mine/items/${itemId}/groups`, data);
-
-export const editOptionGroup = (itemId: string, groupId: string, data: OptionGroupInput) =>
-  api.patch<{ item: ServiceItem }>(`/services/mine/items/${itemId}/groups/${groupId}`, data);
-
-export const deleteOptionGroup = (itemId: string, groupId: string) =>
-  api.delete<{ item: ServiceItem }>(`/services/mine/items/${itemId}/groups/${groupId}`);
-
-export interface OptionInput {
-  name: string;
-  priceDeltaCents?: number;
-}
-
-export const addOption = (itemId: string, groupId: string, data: OptionInput) =>
-  api.post<{ item: ServiceItem }>(`/services/mine/items/${itemId}/groups/${groupId}/options`, data);
-
-export const editOption = (itemId: string, groupId: string, optionId: string, data: OptionInput) =>
-  api.patch<{ item: ServiceItem }>(`/services/mine/items/${itemId}/groups/${groupId}/options/${optionId}`, data);
-
-export const deleteOption = (itemId: string, groupId: string, optionId: string) =>
-  api.delete<{ item: ServiceItem }>(`/services/mine/items/${itemId}/groups/${groupId}/options/${optionId}`);
+// Substitui TODOS os grupos/opções do item numa chamada só — o front edita o configurador
+// inteiro localmente (sem chamada de rede por grupo/opção) e só sincroniza aqui, no fim.
+export const replaceOptionGroups = (itemId: string, groups: OptionGroupInput[]) =>
+  api.put<{ item: ServiceItem }>(`/services/mine/items/${itemId}/option-groups`, { groups });

@@ -7,179 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { OptionGroupsManager } from "@/components/OptionGroupsManager";
+import { ItemEditor } from "@/components/ItemEditor";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import * as servicesApi from "@/services/services";
 import { resolveMediaUrl } from "@/lib/api";
 import { formatCentsToBRL } from "@/lib/utils";
-import type { ServiceItem } from "@/lib/types";
-
-const MAX_IMAGES = 5;
-
-function ItemForm({
-  initial,
-  onSubmit,
-  onCancel,
-  pending,
-}: {
-  initial?: ServiceItem;
-  onSubmit: (data: {
-    name: string;
-    description: string;
-    price: number;
-    isNegotiable: boolean;
-    maxQuantity: number | null;
-    images: File[];
-    removeImageIds: string[];
-  }) => void;
-  onCancel?: () => void;
-  pending: boolean;
-}) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [price, setPrice] = useState(initial && !initial.isNegotiable ? String(initial.priceCents / 100) : "");
-  const [isNegotiable, setIsNegotiable] = useState(initial?.isNegotiable ?? false);
-  const [multipliable, setMultipliable] = useState(!!initial?.maxQuantity);
-  const [maxQuantity, setMaxQuantity] = useState(initial?.maxQuantity ? String(initial.maxQuantity) : "5");
-  const [existingImages, setExistingImages] = useState(initial?.images ?? []);
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
-  const [newImages, setNewImages] = useState<File[]>([]);
-
-  const remainingSlots = MAX_IMAGES - existingImages.length - newImages.length;
-
-  function handleFiles(files: FileList | null) {
-    if (!files) return;
-    const picked = Array.from(files).slice(0, Math.max(0, remainingSlots));
-    setNewImages((current) => [...current, ...picked]);
-  }
-
-  function removeExisting(id: string) {
-    setExistingImages((current) => current.filter((img) => img.id !== id));
-    setRemovedIds((current) => [...current, id]);
-  }
-
-  function removeNew(index: number) {
-    setNewImages((current) => current.filter((_, i) => i !== index));
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const priceNumber = isNegotiable ? 0 : Number(price.replace(",", "."));
-    if (!name.trim() || Number.isNaN(priceNumber)) return;
-    onSubmit({
-      name: name.trim(),
-      description: description.trim(),
-      price: priceNumber,
-      isNegotiable,
-      maxQuantity: multipliable ? Number(maxQuantity) || 1 : null,
-      images: newImages,
-      removeImageIds: removedIds,
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2 rounded-md border p-3">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label>Nome do item</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div className="space-y-1">
-          <Label>Preço (R$)</Label>
-          <Input
-            inputMode="decimal"
-            placeholder="0,00"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            disabled={isNegotiable}
-            required={!isNegotiable}
-          />
-        </div>
-      </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={isNegotiable} onChange={(e) => setIsNegotiable(e.target.checked)} />
-        Preço "a negociar" (sem valor fixo)
-      </label>
-      <div className="flex items-center gap-2">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={multipliable} onChange={(e) => setMultipliable(e.target.checked)} />
-          Cliente pode pedir mais de 1
-        </label>
-        {multipliable && (
-          <Input
-            type="number"
-            min={2}
-            max={99}
-            className="h-8 w-20"
-            value={maxQuantity}
-            onChange={(e) => setMaxQuantity(e.target.value)}
-          />
-        )}
-      </div>
-      <div className="space-y-1">
-        <Label>Descrição</Label>
-        <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-      </div>
-      <div className="space-y-1">
-        <Label>Fotos (até {MAX_IMAGES})</Label>
-        <div className="flex flex-wrap gap-2">
-          {existingImages.map((img) => (
-            <div key={img.id} className="relative h-16 w-16 overflow-hidden rounded border">
-              <img src={resolveMediaUrl(img.path)} alt="" className="h-full w-full object-cover" />
-              <button
-                type="button"
-                onClick={() => removeExisting(img.id)}
-                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
-                aria-label="Remover foto"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-          {newImages.map((file, idx) => (
-            <div key={idx} className="relative h-16 w-16 overflow-hidden rounded border">
-              <img src={URL.createObjectURL(file)} alt="" className="h-full w-full object-cover" />
-              <button
-                type="button"
-                onClick={() => removeNew(idx)}
-                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
-                aria-label="Remover foto"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-          {remainingSlots > 0 && (
-            <label className="flex h-16 w-16 cursor-pointer items-center justify-center rounded border border-dashed text-[10px] text-muted-foreground hover:border-primary/50">
-              + foto
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  handleFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          )}
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? "Salvando..." : "Salvar item"}
-        </Button>
-        {onCancel && (
-          <Button type="button" size="sm" variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
-        )}
-      </div>
-    </form>
-  );
-}
 
 export default function MyService() {
   const { user } = useAuth();
@@ -191,7 +24,6 @@ export default function MyService() {
   const [error, setError] = useState<string | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [optionsItemId, setOptionsItemId] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [newServicePhoto, setNewServicePhoto] = useState<File | null>(null);
 
@@ -256,28 +88,6 @@ export default function MyService() {
   const removePhotoMutation = useMutation({
     mutationFn: servicesApi.removeServicePhoto,
     onSuccess: invalidate,
-  });
-
-  const [itemError, setItemError] = useState<string | null>(null);
-
-  const addItemMutation = useMutation({
-    mutationFn: (input: servicesApi.ServiceItemInput) => servicesApi.addServiceItem(input),
-    onSuccess: () => {
-      setItemError(null);
-      setAddingItem(false);
-      invalidate();
-    },
-    onError: (err) => setItemError(err instanceof Error ? err.message : "Erro ao salvar item."),
-  });
-
-  const editItemMutation = useMutation({
-    mutationFn: (input: servicesApi.ServiceItemInput) => servicesApi.editServiceItem(editingItemId!, input),
-    onSuccess: () => {
-      setItemError(null);
-      setEditingItemId(null);
-      invalidate();
-    },
-    onError: (err) => setItemError(err instanceof Error ? err.message : "Erro ao salvar item."),
   });
 
   const deleteItemMutation = useMutation({
@@ -498,58 +308,47 @@ export default function MyService() {
               <CardTitle className="text-base">Itens ({service.items.length})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {itemError && <p className="text-sm text-destructive">{itemError}</p>}
               {service.items.map((item) =>
                 editingItemId === item.id ? (
-                  <ItemForm
+                  <ItemEditor
                     key={item.id}
+                    serviceId={service.id}
                     initial={item}
-                    pending={editItemMutation.isPending}
                     onCancel={() => setEditingItemId(null)}
-                    onSubmit={(input) => editItemMutation.mutate(input)}
+                    onSaved={() => setEditingItemId(null)}
                   />
                 ) : (
-                  <div key={item.id} className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-3 rounded-md border p-2">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
-                        {item.images.length > 0 ? (
-                          <img
-                            src={resolveMediaUrl(item.images[0].path)}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">Sem foto</span>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.isNegotiable ? "A negociar" : formatCentsToBRL(item.priceCents)}
-                          {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
-                          {item.optionGroups.length > 0 ? ` · ${item.optionGroups.length} grupo(s) de opção` : ""}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setOptionsItemId(optionsItemId === item.id ? null : item.id)}
-                      >
-                        Opções
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
-                        Editar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={deleteItemMutation.isPending}
-                        onClick={() => deleteItemMutation.mutate(item.id)}
-                      >
-                        Excluir
-                      </Button>
+                  <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-md border p-2">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
+                      {item.images.length > 0 ? (
+                        <img
+                          src={resolveMediaUrl(item.images[0].path)}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">Sem foto</span>
+                      )}
                     </div>
-                    {optionsItemId === item.id && <OptionGroupsManager item={item} />}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.isNegotiable ? "A negociar" : formatCentsToBRL(item.priceCents)}
+                        {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
+                        {item.optionGroups.length > 0 ? ` · ${item.optionGroups.length} grupo(s) de opção` : ""}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
+                      Editar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={deleteItemMutation.isPending}
+                      onClick={() => deleteItemMutation.mutate(item.id)}
+                    >
+                      Excluir
+                    </Button>
                   </div>
                 ),
               )}
@@ -558,10 +357,10 @@ export default function MyService() {
               )}
 
               {addingItem ? (
-                <ItemForm
-                  pending={addItemMutation.isPending}
+                <ItemEditor
+                  serviceId={service.id}
                   onCancel={() => setAddingItem(false)}
-                  onSubmit={(input) => addItemMutation.mutate(input)}
+                  onSaved={() => setAddingItem(false)}
                 />
               ) : (
                 <Button size="sm" variant="outline" onClick={() => setAddingItem(true)}>
