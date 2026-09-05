@@ -115,7 +115,7 @@ export default function UserManagement() {
     isError,
     refetch,
   } = useQuery({ queryKey: ["users"], queryFn: usersService.listUsers });
-  const [resetResult, setResetResult] = useState<{ user: ManagedUser; password: string } | null>(null);
+  const [resetSentFor, setResetSentFor] = useState<ManagedUser | null>(null);
   const [serviceFormUserId, setServiceFormUserId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
@@ -176,7 +176,7 @@ export default function UserManagement() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: (target: ManagedUser) => usersService.resetUserPassword(target.id),
-    onSuccess: (result, target) => setResetResult({ user: target, password: result.newPassword }),
+    onSuccess: (_result, target) => setResetSentFor(target),
   });
 
   const approveMutation = useMutation({
@@ -203,17 +203,14 @@ export default function UserManagement() {
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-semibold">Usuários</h1>
 
-      {resetResult && (
+      {resetSentFor && (
         <Card className="border-brand-gold/50 bg-brand-gold/10">
           <CardContent className="space-y-2 pt-6">
             <p className="text-sm">
-              Nova senha gerada para <strong>{resetResult.user.name}</strong> — repasse por fora (não
-              fica salva em lugar nenhum além desta tela):
+              E-mail de redefinição enviado para <strong>{resetSentFor.name}</strong> ({resetSentFor.email}).
+              O link vale por 1 hora e a pessoa escolhe a própria senha nova.
             </p>
-            <p className="rounded-md border bg-card px-3 py-2 font-mono text-sm">
-              {resetResult.password}
-            </p>
-            <Button size="sm" variant="outline" onClick={() => setResetResult(null)}>
+            <Button size="sm" variant="outline" onClick={() => setResetSentFor(null)}>
               Fechar
             </Button>
           </CardContent>

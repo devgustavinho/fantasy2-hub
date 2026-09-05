@@ -6,6 +6,7 @@ import { TopBar, BottomDock } from "@/components/Navbar";
 import { OnboardingBanner } from "@/components/OnboardingBanner";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import ResetPassword from "@/pages/ResetPassword";
 import TopicsList from "@/pages/TopicsList";
 import TopicDetail from "@/pages/TopicDetail";
 import AdminPanel from "@/pages/AdminPanel";
@@ -43,6 +44,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/redefinir-senha" element={<ResetPassword />} />
 
             <Route element={<ProtectedRoute />}>
               <Route

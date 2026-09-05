@@ -1,17 +1,15 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
+import { env } from "../../env.js";
 import { hashPassword } from "../../auth/password.js";
 import { requireAdmin, requireStaff } from "../../auth/guards.js";
+import { createPasswordResetToken } from "../auth/passwordReset.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyUser } from "../notifications/service.js";
 import { sendEmail } from "../../lib/email.js";
 import { passwordResetEmail } from "../../lib/emailTemplates.js";
-
-function generateTempPassword() {
-  return randomBytes(9).toString("base64url");
-}
 
 const createSindicoSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -37,7 +35,6 @@ const listUsers = sqlite.prepare(`
 
 const getUserById = sqlite.prepare("SELECT id, name, email, role, apartment_id FROM users WHERE id = ?");
 const countAdmins = sqlite.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
-const updatePasswordHash = sqlite.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT id FROM users WHERE email = ?");
@@ -175,9 +172,10 @@ export function usersRoutes() {
   });
 
   // Reset assistido: sindico só reseta senha de morador; admin reseta sindico ou morador;
-  // ninguém reseta o admin. A senha nova só existe em texto plano nesta resposta — quem
-  // resetou precisa repassar ao dono da conta por fora (whatsapp, telefone, pessoalmente).
-  router.patch("/:id/reset-password", requireStaff, async (req, res) => {
+  // ninguém reseta o admin. Não gera mais senha nenhuma aqui — só um token de uso único (1h),
+  // mandado por e-mail num link pra pessoa escolher a própria senha nova
+  // (POST /auth/reset-password, ver server/src/modules/auth/passwordReset.js).
+  router.patch("/:id/reset-password", requireStaff, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
     if (target.role === "admin") {
@@ -187,9 +185,8 @@ export function usersRoutes() {
       return res.status(403).json({ message: "Síndico só pode resetar a senha de moradores." });
     }
 
-    const newPassword = generateTempPassword();
-    const passwordHash = await hashPassword(newPassword);
-    updatePasswordHash.run(passwordHash, target.id);
+    const token = createPasswordResetToken(target.id);
+    const resetUrl = `${env.CORS_ORIGIN}/redefinir-senha?token=${token}`;
 
     recordAudit({
       actorUserId: req.user.id,
@@ -198,8 +195,8 @@ export function usersRoutes() {
       entityType: "user",
       entityId: target.id,
     });
-    sendEmail({ to: target.email, ...passwordResetEmail({ name: target.name, newPassword }) });
-    res.json({ newPassword });
+    sendEmail({ to: target.email, ...passwordResetEmail({ name: target.name, resetUrl }) });
+    res.status(204).end();
   });
 
   return router;

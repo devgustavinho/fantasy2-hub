@@ -13,8 +13,7 @@ export const createSindico = (data: {
 export const changeUserRole = (id: string, role: Role) =>
   api.patch<{ user: { id: string; role: Role } }>(`/users/${id}/role`, { role });
 
-export const resetUserPassword = (id: string) =>
-  api.patch<{ newPassword: string }>(`/users/${id}/reset-password`);
+export const resetUserPassword = (id: string) => api.patch<void>(`/users/${id}/reset-password`);
 
 export const approveUser = (id: string) => api.patch<void>(`/users/${id}/approve`);
 export const rejectUser = (id: string) => api.patch<void>(`/users/${id}/reject`);

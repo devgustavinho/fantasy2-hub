@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from "../../auth/password.js";
 import { requireAuth, requireApproved } from "../../auth/guards.js";
 import { toPublicUser } from "../../auth/publicUser.js";
 import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
+import { consumePasswordResetToken } from "./passwordReset.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyAdmins } from "../notifications/service.js";
 
@@ -37,6 +38,11 @@ const familyMemberSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8).max(200),
+});
+
 const getApartment = sqlite.prepare("SELECT id, tower, code FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT * FROM users WHERE email = ?");
@@ -54,6 +60,7 @@ const insertFamilyMember = sqlite.prepare(`
   INSERT INTO users (id, apartment_id, name, email, password_hash, role, household_role, approval_status, invited_by)
   VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador', 'family', 'approved', @invited_by)
 `);
+const updatePasswordHash = sqlite.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
 
 export { toPublicUser };
 
@@ -160,6 +167,35 @@ export function authRoutes() {
   // guardado localmente. Endpoint mantido por compatibilidade e caso um dia vire necessário
   // revogar tokens do lado do servidor (ex. blocklist).
   router.post("/logout", (_req, res) => {
+    res.status(204).end();
+  });
+
+  // Completa o reset de senha assistido (PATCH /users/:id/reset-password gera o token e manda
+  // o link por e-mail) — pública porque quem chega aqui ainda não tem sessão. Token é de uso
+  // único: `consumePasswordResetToken` já marca como usado antes de devolver, então uma segunda
+  // tentativa com o mesmo link (replay, aba duplicada) cai no mesmo erro de "inválido ou
+  // expirado" de um link vencido — não dá pra distinguir os dois casos por fora, de propósito.
+  router.post("/reset-password", async (req, res) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Informe uma senha com pelo menos 8 caracteres." });
+    }
+
+    const result = consumePasswordResetToken(parsed.data.token);
+    if (!result) {
+      return res.status(400).json({ message: "Link inválido ou expirado. Peça um novo reset pra administração." });
+    }
+
+    const passwordHash = await hashPassword(parsed.data.password);
+    updatePasswordHash.run(passwordHash, result.userId);
+
+    recordAudit({
+      actorUserId: result.userId,
+      actorName: result.userName,
+      action: "auth.password_reset_complete",
+      entityType: "user",
+      entityId: result.userId,
+    });
     res.status(204).end();
   });
 
