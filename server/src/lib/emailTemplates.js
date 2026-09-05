@@ -1,10 +1,12 @@
 import { env } from "../env.js";
 
-// Layout único e simples (inline CSS — e-mail não pode depender de stylesheet externo).
+// Layout único e simples (inline CSS — e-mail não pode depender de stylesheet externo). Cores
+// tiradas do tema real do app (`src/index.css` no front: --primary é o rosa da logo, --brand-navy
+// o cabeçalho escuro) em vez de uma cor genérica, pra parecer que veio do Fantasy 2 Hub mesmo.
 function layout({ heading, bodyHtml, ctaText, ctaUrl }) {
   const cta = ctaText && ctaUrl
     ? `<tr><td style="padding:24px 0 0">
-        <a href="${ctaUrl}" style="background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;display:inline-block">${ctaText}</a>
+        <a href="${ctaUrl}" style="background:#ec1349;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;display:inline-block">${ctaText}</a>
       </td></tr>`
     : "";
 
@@ -16,8 +18,11 @@ function layout({ heading, bodyHtml, ctaText, ctaUrl }) {
         <td align="center">
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden">
             <tr>
-              <td style="background:#4f46e5;padding:20px 32px">
-                <span style="color:#ffffff;font-size:18px;font-weight:700">Fantasy 2 Hub</span>
+              <td style="background:#01323c;padding:16px 32px;border-top:3px solid #ec1349">
+                <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                  <td style="padding-right:10px"><img src="${frontUrl("/logo.png")}" width="32" height="32" alt="" style="border-radius:999px;display:block"/></td>
+                  <td style="color:#ffad33;font-size:18px;font-weight:700">Fantasy 2 Hub</td>
+                </tr></table>
               </td>
             </tr>
             <tr>
