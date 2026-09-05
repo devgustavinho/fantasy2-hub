@@ -86,7 +86,15 @@ R2_ACCESS_KEY_ID=<R2 > Manage R2 API Tokens > Create, permissão Object Read & W
 R2_SECRET_ACCESS_KEY=<idem>
 R2_BUCKET_NAME=fantasy2-hub-public
 R2_PUBLIC_URL=<Public Development URL do bucket, ativado nas Settings do bucket>
+RESEND_API_KEY=<resend.com/api-keys>
+EMAIL_FROM=Fantasy 2 Hub <nao-responda@gcsolutions-devs.com.br>
 ```
+
+⚠️ `EMAIL_FROM` só funciona depois de verificar o domínio `gcsolutions-devs.com.br` no Resend
+(dashboard → Domains → Add Domain) e adicionar os registros DNS (SPF/DKIM, às vezes DMARC) que o
+Resend gerar no painel do Registro.br — mesmo lugar onde já está o registro `A` da API (ver seção
+7). Sem o domínio verificado, o Resend rejeita o envio (fica só logado no servidor, não derruba a
+rota do reset de senha).
 
 ⚠️ Toda vez que uma env var nova se tornar **obrigatória** em `src/env.js` (como aconteceu com as
 `VAPID_*` — feature de push — e depois com as `R2_*` — fotos de serviço migradas pra Cloudflare R2),

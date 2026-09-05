@@ -62,6 +62,13 @@ e em checagens específicas dentro das rotas (ex. dono da pauta em `PATCH /topic
   comentou numa pauta (exceto quem disparou a ação) sempre que: alguém comenta, a pauta é
   agendada/reaberta, ou a administração adiciona/edita a "atualização da administração"
   (`topics.status_note`). Só notificação dentro do site (tabela `notifications`) — sem e-mail.
+- Reset de senha (`PATCH /users/:id/reset-password`) manda a senha temporária por e-mail (Resend,
+  `src/lib/email.js` + `src/lib/emailTemplates.js`) direto pro dono da conta, além de devolver em
+  texto plano na resposta pra quem resetou. **É o único ponto do backend que manda e-mail hoje** —
+  de propósito: as demais notificações (`notifyUser`/`notifyTopicWatchers`/`notifyAdmins`) seguem só
+  in-app + push, sem duplicar em e-mail. Falha do Resend (chave inválida, domínio remetente não
+  verificado) só loga no servidor, não derruba a rota — mesmo padrão "fire and forget" do
+  `sendPushToUser`.
 - `topic_events` guarda o histórico estrutural de cada pauta (criada, editada, agendada/reaberta,
   atualização da administração) — comentários já aparecem na própria seção de comentários, não são
   duplicados no histórico.

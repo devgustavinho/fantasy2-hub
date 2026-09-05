@@ -15,6 +15,12 @@ const schema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET_NAME: z.string().min(1),
   R2_PUBLIC_URL: z.string().url(),
+
+  // E-mail transacional (Resend) — RESEND_API_KEY: resend.com/api-keys. EMAIL_FROM precisa ser um
+  // endereço de um domínio verificado na conta Resend (resend.com/domains), formato
+  // "Nome <remetente@dominio>".
+  RESEND_API_KEY: z.string().min(1),
+  EMAIL_FROM: z.string().min(1),
 });
 
 const parsed = schema.safeParse(process.env);

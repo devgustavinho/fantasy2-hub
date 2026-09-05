@@ -6,6 +6,8 @@ import { hashPassword } from "../../auth/password.js";
 import { requireAdmin, requireStaff } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyUser } from "../notifications/service.js";
+import { sendEmail } from "../../lib/email.js";
+import { passwordResetEmail } from "../../lib/emailTemplates.js";
 
 function generateTempPassword() {
   return randomBytes(9).toString("base64url");
@@ -33,7 +35,7 @@ const listUsers = sqlite.prepare(`
   ORDER BY u.created_at ASC
 `);
 
-const getUserById = sqlite.prepare("SELECT id, name, role, apartment_id FROM users WHERE id = ?");
+const getUserById = sqlite.prepare("SELECT id, name, email, role, apartment_id FROM users WHERE id = ?");
 const countAdmins = sqlite.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
 const updatePasswordHash = sqlite.prepare("UPDATE users SET password_hash = ? WHERE id = ?");
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
@@ -196,6 +198,7 @@ export function usersRoutes() {
       entityType: "user",
       entityId: target.id,
     });
+    sendEmail({ to: target.email, ...passwordResetEmail({ name: target.name, newPassword }) });
     res.json({ newPassword });
   });
 
