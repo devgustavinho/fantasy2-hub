@@ -35,7 +35,10 @@ function layout({ heading, bodyHtml, ctaText, ctaUrl }) {
               </td>
             </tr>
           </table>
-          <p style="font-size:12px;color:#a1a1aa;margin-top:16px">Hub do condomínio Fantasy 2</p>
+          <p style="font-size:12px;line-height:1.5;color:#a1a1aa;margin-top:16px;max-width:480px">
+            Site independente, mantido pela comunidade de moradores do condomínio Fantasy 2 — sem
+            nenhuma relação com a construtora Fan Construções, nem com as marcas Fan ou Fantasy.
+          </p>
         </td>
       </tr>
     </table>

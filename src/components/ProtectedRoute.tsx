@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { PendingApproval } from "@/components/PendingApproval";
 import { useAuth } from "@/contexts/AuthContext";
+import Landing from "@/pages/Landing";
 
 function ApprovalGate() {
   const { user, logout } = useAuth();
@@ -27,9 +28,15 @@ function useLoginRedirect() {
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth();
+  const location = useLocation();
   const redirect = useLoginRedirect();
   if (loading) return null;
-  if (!user) return redirect;
+  if (!user) {
+    // "/" sem sessão mostra a landing page (explica o que é o site) em vez de já cair direto no
+    // login sem contexto nenhum — as demais rotas protegidas continuam indo pro /login normal.
+    if (location.pathname === "/") return <Landing />;
+    return redirect;
+  }
   return <ApprovalGate />;
 }
 
