@@ -21,6 +21,8 @@ import ApartmentMap from "@/pages/ApartmentMap";
 import RecommendationsList from "@/pages/RecommendationsList";
 import RecommendationDetail from "@/pages/RecommendationDetail";
 import Faq from "@/pages/Faq";
+import Welcome from "@/pages/Welcome";
+import WelcomeAdmin from "@/pages/WelcomeAdmin";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +47,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/redefinir-senha" element={<ResetPassword />} />
+            <Route path="/boas-vindas" element={<Welcome />} />
 
             <Route element={<ProtectedRoute />}>
               <Route
@@ -165,6 +168,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <ApartmentMap />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/admin/boas-vindas"
+                element={
+                  <AppLayout>
+                    <WelcomeAdmin />
                   </AppLayout>
                 }
               />

@@ -224,6 +224,17 @@ export interface RecommendationComment {
   media: RecommendationMedia[];
 }
 
+export interface WelcomePage {
+  title: string;
+  body: string;
+  updatedAt: string;
+}
+
+export interface WelcomeQr {
+  url: string;
+  dataUrl: string;
+}
+
 export interface FaqEntry {
   id: string;
   question: string;

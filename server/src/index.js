@@ -15,6 +15,7 @@ import { servicesRoutes } from "./modules/services/routes.js";
 import { tagsRoutes } from "./modules/tags/routes.js";
 import { recommendationsRoutes } from "./modules/recommendations/routes.js";
 import { faqRoutes } from "./modules/faq/routes.js";
+import { welcomeRoutes } from "./modules/welcome/routes.js";
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/services", servicesRoutes());
 app.use("/tags", tagsRoutes());
 app.use("/recommendations", recommendationsRoutes());
 app.use("/faq", faqRoutes());
+app.use("/welcome", welcomeRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });

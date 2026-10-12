@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QueryError } from "@/components/QueryError";
+import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
 
 export default function AdminPanel() {
+  const { user } = useAuth();
   const {
     data,
     isLoading,
@@ -21,11 +24,18 @@ export default function AdminPanel() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Administração — reclamações mais relevantes</h1>
-        <p className="text-sm text-muted-foreground">
-          Ordenado por saldo de votos (favor − contra) para ajudar a montar a pauta da próxima assembleia.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Administração — reclamações mais relevantes</h1>
+          <p className="text-sm text-muted-foreground">
+            Ordenado por saldo de votos (favor − contra) para ajudar a montar a pauta da próxima assembleia.
+          </p>
+        </div>
+        {user?.role === "admin" && (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/admin/boas-vindas">Página de boas-vindas</Link>
+          </Button>
+        )}
       </div>
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
