@@ -21,6 +21,8 @@ import ApartmentMap from "@/pages/ApartmentMap";
 import RecommendationsList from "@/pages/RecommendationsList";
 import RecommendationDetail from "@/pages/RecommendationDetail";
 import Faq from "@/pages/Faq";
+import ClimateList from "@/pages/ClimateList";
+import ClimateDetail from "@/pages/ClimateDetail";
 import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
 import NotFound from "@/pages/NotFound";
@@ -119,6 +121,22 @@ export default function App() {
                 element={
                   <AppLayout>
                     <Faq />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/clima"
+                element={
+                  <AppLayout>
+                    <ClimateList />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/clima/:id"
+                element={
+                  <AppLayout>
+                    <ClimateDetail />
                   </AppLayout>
                 }
               />

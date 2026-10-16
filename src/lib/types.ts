@@ -235,6 +235,58 @@ export interface WelcomeQr {
   dataUrl: string;
 }
 
+export type ClimateSurveyStatus = "open" | "closed";
+
+export interface ClimateSurveySummary {
+  id: string;
+  title: string;
+  description: string | null;
+  allowComments: boolean;
+  status: ClimateSurveyStatus;
+  createdAt: string;
+  createdByName: string;
+  responseCount: number;
+}
+
+export interface ClimateOption {
+  id: string;
+  label: string;
+  count: number;
+  percent: number;
+  selected: boolean;
+}
+
+export interface ClimateQuestion {
+  id: string;
+  prompt: string;
+  options: ClimateOption[];
+}
+
+export interface ClimateComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  authorName: string;
+  tower: number;
+  apartmentCode: string;
+}
+
+export interface ClimateSurvey extends ClimateSurveySummary {
+  canVote: boolean;
+  voted: boolean;
+  voteMessage: string | null;
+  myComment: string | null;
+  questions: ClimateQuestion[];
+  comments: ClimateComment[];
+}
+
+export interface CreateClimateSurvey {
+  title: string;
+  description: string;
+  allowComments: boolean;
+  questions: { prompt: string; options: string[] }[];
+}
+
 export interface FaqEntry {
   id: string;
   question: string;

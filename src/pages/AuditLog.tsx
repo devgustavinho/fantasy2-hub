@@ -39,6 +39,10 @@ const ACTION_LABELS: Record<string, string> = {
   "services.item_option_create": "Opção criada",
   "services.item_option_edit": "Opção editada",
   "services.item_option_delete": "Opção excluída",
+  "climate.create": "Pesquisa de clima criada",
+  "climate.close": "Pesquisa de clima encerrada",
+  "climate.reopen": "Pesquisa de clima reaberta",
+  "climate.delete": "Pesquisa de clima excluída",
   "tags.create": "Tag criada",
   "tags.delete": "Tag excluída",
 };

@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Building2,
   ClipboardList,
+  Gauge,
   HelpCircle,
   LayoutDashboard,
   ScrollText,
@@ -72,6 +73,7 @@ export function BottomDock() {
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
     { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
     { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },
+    { title: "Clima", icon: <Gauge className="h-full w-full" />, href: "/clima" },
     ...(isStaff
       ? [{ title: "Administração", icon: <LayoutDashboard className="h-full w-full" />, href: "/admin" }]
       : []),

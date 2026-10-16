@@ -16,6 +16,7 @@ import { tagsRoutes } from "./modules/tags/routes.js";
 import { recommendationsRoutes } from "./modules/recommendations/routes.js";
 import { faqRoutes } from "./modules/faq/routes.js";
 import { welcomeRoutes } from "./modules/welcome/routes.js";
+import { climateRoutes } from "./modules/climate/routes.js";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/tags", tagsRoutes());
 app.use("/recommendations", recommendationsRoutes());
 app.use("/faq", faqRoutes());
 app.use("/welcome", welcomeRoutes());
+app.use("/climate", climateRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });

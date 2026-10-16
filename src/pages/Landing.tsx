@@ -19,7 +19,7 @@ export default function Landing() {
           <h1 className="text-2xl font-bold text-brand-gold">Fantasy 2 Hub</h1>
           <p className="text-white/80">
             Espaço da comunidade de moradores do condomínio Fantasy 2: pautas de assembleia,
-            recomendações de serviços entre vizinhos e avisos da administração.
+            pesquisas de clima, recomendações de serviços entre vizinhos e avisos da administração.
           </p>
         </div>
 
