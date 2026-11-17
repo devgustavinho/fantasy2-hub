@@ -11,6 +11,7 @@ import { sqlite } from "../../db/client.js";
 import { webauthn } from "../../env.js";
 import { requireAuth } from "../../auth/guards.js";
 import { establishSession } from "../../auth/twoFactor.js";
+import { recordAudit } from "../audit/service.js";
 
 const CHALLENGE_TTL_MS = 2 * 60 * 1000;
 
@@ -191,6 +192,14 @@ export function webauthnRoutes() {
     }
 
     updateCounter.run(verification.authenticationInfo.newCounter, credentialRow.id);
+    recordAudit({
+      actorUserId: user.id,
+      actorName: user.name,
+      action: "auth.login",
+      entityType: "user",
+      entityId: user.id,
+      details: { method: "webauthn" },
+    });
     res.json(await establishSession(user));
   });
 

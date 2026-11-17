@@ -62,3 +62,20 @@ export function passwordResetEmail({ name, resetUrl }) {
     }),
   };
 }
+
+export function emailChangedEmail({ name, oldEmail, newEmail }) {
+  return {
+    subject: "Seu e-mail foi atualizado",
+    html: layout({
+      heading: `Olá, ${name}`,
+      bodyHtml:
+        "A administração do Fantasy 2 Hub alterou o e-mail da sua conta.<br/><br/>" +
+        `<strong>Anterior:</strong> ${oldEmail}<br/>` +
+        `<strong>Novo:</strong> ${newEmail}<br/><br/>` +
+        "A partir de agora, use o e-mail novo para entrar. Se você não reconhece essa mudança, " +
+        "fale com a administração do condomínio.",
+      ctaText: "Entrar no Fantasy 2 Hub",
+      ctaUrl: frontUrl("/login"),
+    }),
+  };
+}

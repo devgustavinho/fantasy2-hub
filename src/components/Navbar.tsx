@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Gauge,
   HelpCircle,
+  Home,
   LayoutDashboard,
   ScrollText,
   ShoppingBag,
@@ -69,7 +70,8 @@ export function BottomDock() {
   const isStaff = user.role === "admin" || user.role === "sindico";
 
   const items: FloatingDockItem[] = [
-    { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/" },
+    { title: "Início", icon: <Home className="h-full w-full" />, href: "/" },
+    { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/pautas" },
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
     { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
     { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },

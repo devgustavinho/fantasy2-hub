@@ -11,6 +11,14 @@ const PURPOSE_TOKEN_TTL_SECONDS = 10 * 60; // 10 min
 const saveTotpSecret = sqlite.prepare("UPDATE users SET totp_secret = ? WHERE id = ?");
 const enableTotp = sqlite.prepare("UPDATE users SET totp_enabled = 1 WHERE id = ?");
 const getUserById = sqlite.prepare("SELECT * FROM users WHERE id = ?");
+const touchLastLogin = sqlite.prepare(
+  "UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+);
+
+// Chamado só quando uma sessão JWT de verdade é emitida (não no desafio 2FA).
+export function markUserLoggedIn(userId) {
+  touchLastLogin.run(userId);
+}
 
 export function signPurposeToken(purpose, userId) {
   return jwt.sign({ purpose, sub: userId }, env.JWT_SECRET, { expiresIn: PURPOSE_TOKEN_TTL_SECONDS });
@@ -60,6 +68,7 @@ export async function establishSession(user) {
     return { status: "totp-verify-required", token: signPurposeToken("totp-verify", user.id) };
   }
 
+  markUserLoggedIn(user.id);
   return { status: "ok", user: toPublicUser(user), token: signSession({ sub: user.id }) };
 }
 
@@ -72,6 +81,7 @@ export function confirmTotpSetup(token, code) {
   if (!verifyTotpCode(user.totp_secret, code)) return { error: "Código inválido." };
 
   enableTotp.run(user.id);
+  markUserLoggedIn(user.id);
   return { user: toPublicUser({ ...user, totp_enabled: 1 }), token: signSession({ sub: user.id }) };
 }
 
@@ -83,6 +93,7 @@ export function verifyTotpLogin(token, code) {
   if (!user || !user.totp_enabled) return { error: "2FA não configurado para esta conta." };
   if (!verifyTotpCode(user.totp_secret, code)) return { error: "Código inválido." };
 
+  markUserLoggedIn(user.id);
   return { user: toPublicUser(user), token: signSession({ sub: user.id }) };
 }
 

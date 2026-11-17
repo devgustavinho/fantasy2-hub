@@ -2,19 +2,39 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
+import * as statsService from "@/services/stats";
+
+// Polling a cada 30 minutos — o contador é barato (COUNT em SQLite) e o requisito do produto
+// é atualizar a visão admin nesse intervalo, sem cron/cache no servidor.
+const ADMIN_LOGIN_REFETCH_MS = 30 * 60 * 1000;
 
 export default function AdminPanel() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const {
     data,
     isLoading,
     isError,
     refetch,
   } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
+
+  const {
+    data: loginStats,
+    isLoading: loginLoading,
+    isError: loginError,
+    dataUpdatedAt,
+    refetch: refetchLogins,
+  } = useQuery({
+    queryKey: ["admin-login-stats"],
+    queryFn: statsService.getAdminLoginStats,
+    enabled: isAdmin,
+    refetchInterval: ADMIN_LOGIN_REFETCH_MS,
+    refetchIntervalInBackground: false,
+  });
 
   const sorted = [...(data?.topics ?? [])].sort((a, b) => {
     const balanceA = a.favorCount - a.contraCount;
@@ -31,12 +51,58 @@ export default function AdminPanel() {
             Ordenado por saldo de votos (favor − contra) para ajudar a montar a pauta da próxima assembleia.
           </p>
         </div>
-        {user?.role === "admin" && (
+        {isAdmin && (
           <Button asChild variant="outline" size="sm">
             <Link to="/admin/boas-vindas">Página de boas-vindas</Link>
           </Button>
         )}
       </div>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Acessos nas últimas 24 horas</CardDescription>
+            <CardTitle className="text-4xl tabular-nums">
+              {loginLoading ? "…" : (loginStats?.loginsLast24h ?? "—")}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Atualiza automaticamente a cada 30 minutos
+              {dataUpdatedAt
+                ? ` · última atualização ${new Date(dataUpdatedAt).toLocaleTimeString("pt-BR")}`
+                : ""}
+              .
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {loginError && <QueryError onRetry={() => refetchLogins()} />}
+            {loginStats && loginStats.users.length === 0 && (
+              <p className="text-sm text-muted-foreground">Ninguém entrou nas últimas 24 horas.</p>
+            )}
+            {loginStats?.users.slice(0, 8).map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-2 text-sm">
+                <span>
+                  {u.name}
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : u.role}
+                  </span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(u.lastLoginAt).toLocaleString("pt-BR")}
+                </span>
+              </div>
+            ))}
+            {loginStats && loginStats.users.length > 8 && (
+              <p className="text-xs text-muted-foreground">
+                +{loginStats.users.length - 8} outros acessos no período.
+              </p>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => refetchLogins()}>
+              Atualizar agora
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
       {isError && <QueryError onRetry={() => refetch()} />}
