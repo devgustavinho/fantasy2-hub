@@ -1,11 +1,15 @@
 import { api } from "@/lib/api";
+import type { TopicSort } from "@/lib/topicSort";
 import type { Comment, Topic, TopicEvent, VoteValue } from "@/lib/types";
 
 export type TopicListStatus = "open" | "scheduled";
 
-export const listTopics = (status?: TopicListStatus) => {
-  const qs = status ? `?status=${status}` : "";
-  return api.get<{ topics: Topic[] }>(`/topics${qs}`);
+export const listTopics = (status?: TopicListStatus, sort?: TopicSort) => {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (sort) params.set("sort", sort);
+  const qs = params.toString();
+  return api.get<{ topics: Topic[] }>(`/topics${qs ? `?${qs}` : ""}`);
 };
 
 export const createTopic = (data: { title: string; description: string }) =>
