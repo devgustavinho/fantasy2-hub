@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,19 +8,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import * as topicsService from "@/services/topics";
+import { TopicSortControl } from "@/components/TopicSortControl";
 import { QueryError } from "@/components/QueryError";
+import { DEFAULT_TOPIC_SORT, parseTopicSort } from "@/lib/topicSort";
+import * as topicsService from "@/services/topics";
 
 export default function TopicsList() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sort = parseTopicSort(searchParams.get("sort"));
+
   const {
     data,
     isLoading,
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["topics", "open"],
-    queryFn: () => topicsService.listTopics("open"),
+    queryKey: ["topics", "open", sort],
+    queryFn: () => topicsService.listTopics("open", sort),
   });
 
   const [showForm, setShowForm] = useState(false);
@@ -45,6 +50,18 @@ export default function TopicsList() {
     createMutation.mutate();
   }
 
+  function handleSortChange(next: typeof sort) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === DEFAULT_TOPIC_SORT) params.delete("sort");
+        else params.set("sort", next);
+        return params;
+      },
+      { replace: true },
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -62,6 +79,8 @@ export default function TopicsList() {
           <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancelar" : "Nova pauta"}</Button>
         </div>
       </div>
+
+      <TopicSortControl value={sort} onChange={handleSortChange} />
 
       {showForm && (
         <Card>

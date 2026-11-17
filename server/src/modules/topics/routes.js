@@ -49,22 +49,32 @@ const topicListSelect = `
   LEFT JOIN votes v ON v.topic_id = t.id
 `;
 
-const listTopics = sqlite.prepare(`
-  ${topicListSelect}
-  GROUP BY t.id
-  ORDER BY t.created_at DESC
-`);
+// Whitelist de ORDER BY — nunca interpolar input cru.
+const TOPIC_SORT_ORDER = {
+  vote_balance:
+    "(favorCount - contraCount) DESC, commentCount DESC, t.created_at DESC",
+  oldest: "t.created_at ASC",
+  newest: "t.created_at DESC",
+  most_comments: "commentCount DESC, t.created_at DESC",
+  least_comments: "commentCount ASC, t.created_at DESC",
+};
 
-// Lista filtrada por status: open = em aberto; scheduled = pautada (histórico).
-const listTopicsByStatus = sqlite.prepare(`
-  ${topicListSelect}
-  WHERE t.status = ?
-  GROUP BY t.id
-  ORDER BY
-    CASE WHEN t.status = 'scheduled' THEN t.assembly_date END DESC,
-    t.updated_at DESC,
-    t.created_at DESC
-`);
+const DEFAULT_STATUS_ORDER = `
+  CASE WHEN t.status = 'scheduled' THEN t.assembly_date END DESC,
+  t.updated_at DESC,
+  t.created_at DESC
+`;
+
+function prepareTopicList({ status, sort }) {
+  const orderBy = sort ? TOPIC_SORT_ORDER[sort] : status ? DEFAULT_STATUS_ORDER : "t.created_at DESC";
+  const where = status ? "WHERE t.status = ?" : "";
+  return sqlite.prepare(`
+    ${topicListSelect}
+    ${where}
+    GROUP BY t.id
+    ORDER BY ${orderBy}
+  `);
+}
 
 const getTopic = sqlite.prepare(`
   SELECT
@@ -169,7 +179,15 @@ export function topicsRoutes() {
     if (status && status !== "open" && status !== "scheduled") {
       return res.status(400).json({ message: "Status inválido. Use open ou scheduled." });
     }
-    const raw = status ? listTopicsByStatus.all(status) : listTopics.all();
+    const sort = typeof req.query.sort === "string" ? req.query.sort : undefined;
+    if (sort && !(sort in TOPIC_SORT_ORDER)) {
+      return res.status(400).json({
+        message:
+          "Ordenação inválida. Use vote_balance, oldest, newest, most_comments ou least_comments.",
+      });
+    }
+    const stmt = prepareTopicList({ status, sort });
+    const raw = status ? stmt.all(status) : stmt.all();
     const rows = raw.map((row) => ({
       ...row,
       favorCount: Number(row.favorCount),

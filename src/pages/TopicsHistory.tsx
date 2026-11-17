@@ -1,18 +1,35 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TopicSortControl } from "@/components/TopicSortControl";
 import { QueryError } from "@/components/QueryError";
+import { DEFAULT_TOPIC_SORT, parseTopicSort } from "@/lib/topicSort";
 import { formatDateOnly } from "@/lib/utils";
 import * as topicsService from "@/services/topics";
 
 export default function TopicsHistory() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sort = parseTopicSort(searchParams.get("sort"));
+
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["topics", "scheduled"],
-    queryFn: () => topicsService.listTopics("scheduled"),
+    queryKey: ["topics", "scheduled", sort],
+    queryFn: () => topicsService.listTopics("scheduled", sort),
   });
+
+  function handleSortChange(next: typeof sort) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === DEFAULT_TOPIC_SORT) params.delete("sort");
+        else params.set("sort", next);
+        return params;
+      },
+      { replace: true },
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -30,6 +47,8 @@ export default function TopicsHistory() {
           </Link>
         </Button>
       </div>
+
+      <TopicSortControl value={sort} onChange={handleSortChange} />
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
       {isError && <QueryError onRetry={() => refetch()} />}
