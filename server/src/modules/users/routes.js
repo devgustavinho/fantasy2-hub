@@ -24,7 +24,7 @@ const createSindicoSchema = z.object({
 });
 
 const changeRoleSchema = z.object({
-  role: z.enum(["admin", "sindico", "morador"]),
+  role: z.enum(["admin", "sindico", "conselheiro", "morador"]),
 });
 
 const changeEmailSchema = z.object({
@@ -350,17 +350,21 @@ export function usersRoutes() {
     res.json({ user: { id: target.id, email: newEmail } });
   });
 
-  // Reset assistido: sindico só reseta senha de morador; admin reseta sindico ou morador;
-  // ninguém reseta o admin. Não gera mais senha nenhuma aqui — só um token de uso único (1h),
-  // mandado por e-mail num link pra pessoa escolher a própria senha nova
-  // (POST /auth/reset-password, ver server/src/modules/auth/passwordReset.js).
+  // Reset assistido: sindico só reseta senha de morador/conselheiro; admin reseta síndico,
+  // conselheiro ou morador; ninguém reseta o admin. Não gera mais senha nenhuma aqui — só um
+  // token de uso único (1h), mandado por e-mail num link pra pessoa escolher a própria senha
+  // nova (POST /auth/reset-password, ver server/src/modules/auth/passwordReset.js).
   router.patch("/:id/reset-password", requireStaff, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
     if (target.role === "admin") {
       return res.status(400).json({ message: "Não é possível resetar a senha do administrador." });
     }
-    if (req.user.role === "sindico" && target.role !== "morador") {
+    if (
+      req.user.role === "sindico" &&
+      target.role !== "morador" &&
+      target.role !== "conselheiro"
+    ) {
       return res.status(403).json({ message: "Síndico só pode resetar a senha de moradores." });
     }
 

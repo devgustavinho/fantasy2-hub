@@ -8,6 +8,18 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#01333d" />
     <title>Fantasy 2 Hub</title>
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem("fantasy2-theme") === "dark") {
+            document.documentElement.classList.add("dark");
+            document.documentElement.style.colorScheme = "dark";
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute("content", "#071416");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
