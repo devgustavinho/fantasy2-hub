@@ -20,7 +20,10 @@ export default function AdminPanel() {
     isLoading,
     isError,
     refetch,
-  } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
+  } = useQuery({
+    queryKey: ["topics", "open"],
+    queryFn: () => topicsService.listTopics("open"),
+  });
 
   const {
     data: loginStats,
@@ -117,11 +120,7 @@ export default function AdminPanel() {
                     <span className="mr-2 text-muted-foreground">#{index + 1}</span>
                     {topic.title}
                   </CardTitle>
-                  {topic.status === "scheduled" ? (
-                    <Badge variant="success">Pautada</Badge>
-                  ) : (
-                    <Badge variant="secondary">Em aberto</Badge>
-                  )}
+                  <Badge variant="secondary">Em aberto</Badge>
                 </div>
               </CardHeader>
               <CardContent className="flex items-center gap-4 pt-0 text-sm text-muted-foreground">
@@ -138,7 +137,7 @@ export default function AdminPanel() {
           </Link>
         ))}
         {data && data.topics.length === 0 && (
-          <p className="text-muted-foreground">Nenhuma pauta cadastrada ainda.</p>
+          <p className="text-muted-foreground">Nenhuma pauta em aberto no momento.</p>
         )}
       </div>
     </div>
