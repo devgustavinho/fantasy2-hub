@@ -12,6 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
 import * as authService from "@/services/auth";
+import { McpConnectCard } from "@/components/McpConnectCard";
 import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
@@ -186,6 +187,8 @@ export default function Profile() {
           </div>
         </CardContent>
       </Card>
+
+      <McpConnectCard />
 
       {!standalone && (
         <Card>
