@@ -19,13 +19,14 @@ import { welcomeRoutes } from "./modules/welcome/routes.js";
 import { climateRoutes } from "./modules/climate/routes.js";
 import { statsRoutes } from "./modules/stats/routes.js";
 import { improvementsRoutes } from "./modules/improvements/routes.js";
+import { mcpRoutes } from "./modules/mcp/routes.js";
 
 const app = express();
 
 // Sessão vai por `Authorization: Bearer`, não cookie — não precisa de `credentials: true`
 // nem de cookie-parser (cookie cross-site esbarrava no bloqueio de terceiro do Safari).
 app.use(cors({ origin: env.CORS_ORIGIN }));
-app.use(express.json());
+app.use(express.json({ limit: "4mb" }));
 app.use(loadSession);
 
 const authLimiter = rateLimit({
@@ -53,6 +54,8 @@ app.use("/welcome", welcomeRoutes());
 app.use("/climate", climateRoutes());
 app.use("/stats", statsRoutes());
 app.use("/improvements", improvementsRoutes());
+// MCP remoto (Streamable HTTP) — clientes como Cursor usam URL + Bearer JWT da sessão.
+app.use("/mcp", mcpRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });

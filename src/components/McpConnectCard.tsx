@@ -6,8 +6,7 @@ import { getToken } from "@/lib/api";
 
 const PROD_API_URL = "https://api-fantasy2.gcsolutions-devs.com.br";
 const PROD_APP_URL = "https://fantasy2-hub.pages.dev";
-const REPO_URL = "https://github.com/devgustavinho/fantasy2-hub";
-const MCP_ENTRY_HINT = "/caminho/absoluto/fantasy2-hub/mcp/src/index.js";
+const MCP_URL = `${PROD_API_URL}/mcp`;
 
 async function copyText(text: string) {
   await navigator.clipboard.writeText(text);
@@ -17,11 +16,9 @@ function buildCursorConfig(tokenPlaceholder: string) {
   return `{
   "mcpServers": {
     "fantasy2-hub": {
-      "command": "node",
-      "args": ["${MCP_ENTRY_HINT}"],
-      "env": {
-        "FANTASY2_API_URL": "${PROD_API_URL}",
-        "FANTASY2_TOKEN": "${tokenPlaceholder}"
+      "url": "${MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${tokenPlaceholder}"
       }
     }
   }
@@ -31,10 +28,10 @@ function buildCursorConfig(tokenPlaceholder: string) {
 export function McpConnectCard() {
   const token = getToken() ?? "";
   const [revealed, setRevealed] = useState(false);
-  const [copied, setCopied] = useState<"token" | "config" | null>(null);
+  const [copied, setCopied] = useState<"token" | "config" | "url" | null>(null);
 
   const configSnippet = useMemo(
-    () => buildCursorConfig(token || "cole-o-jwt-aqui"),
+    () => buildCursorConfig(token || "cole-o-jwt-da-sessao-aqui"),
     [token],
   );
 
@@ -42,8 +39,8 @@ export function McpConnectCard() {
     ? `${token.slice(0, 12)}…${token.slice(-8)}`
     : "(faça login de novo se o token não aparecer)";
 
-  async function handleCopy(kind: "token" | "config") {
-    const value = kind === "token" ? token : configSnippet;
+  async function handleCopy(kind: "token" | "config" | "url") {
+    const value = kind === "token" ? token : kind === "url" ? MCP_URL : configSnippet;
     if (!value) return;
     try {
       await copyText(value);
@@ -62,57 +59,54 @@ export function McpConnectCard() {
           Conectar MCP
         </CardTitle>
         <CardDescription>
-          Use o Fantasy 2 Hub no Cursor (ou outro cliente MCP) com as mesmas permissões da sua
-          conta. O token equivale a estar logado — não compartilhe e não committe.
+          Conecte o Cursor (ou outro agente MCP) ao Fantasy 2 Hub em produção — serviço remoto,
+          com as mesmas permissões do seu cargo. Não é preciso clonar o projeto.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5 text-sm">
         <ol className="list-decimal space-y-2 pl-4 text-muted-foreground">
           <li>
-            Clone o repo{" "}
-            <a
-              href={REPO_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-foreground underline-offset-2 hover:underline"
-            >
-              devgustavinho/fantasy2-hub
-            </a>{" "}
-            e rode <code className="rounded bg-muted px-1 py-0.5 text-xs">npm install</code> em{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">mcp/</code>.
+            Abra o Cursor → Settings → MCP (ou edite{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">~/.cursor/mcp.json</code>).
           </li>
+          <li>Cole o snippet abaixo (já aponta para a API de produção).</li>
           <li>
-            No Cursor → Settings → MCP, adicione o JSON abaixo (troque o caminho absoluto do{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">index.js</code>).
+            Confirme o JWT da sessão em{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">Authorization</code> — use{" "}
+            <strong className="font-medium text-foreground">Copiar token</strong> se precisar
+            atualizar.
           </li>
-          <li>Cole o JWT da sessão em <code className="rounded bg-muted px-1 py-0.5 text-xs">FANTASY2_TOKEN</code>.</li>
+          <li>Salve e reinicie o MCP / o Cursor. As tools respeitam seu cargo (morador, síndico, admin…).</li>
         </ol>
 
         <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Caminhos e URLs
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Serviço remoto
+            </p>
+            <Button type="button" size="sm" variant="outline" onClick={() => handleCopy("url")}>
+              {copied === "url" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied === "url" ? "Copiado" : "Copiar URL"}
+            </Button>
+          </div>
           <ul className="space-y-1.5 text-xs text-muted-foreground">
             <li>
               App:{" "}
-              <a href={PROD_APP_URL} className="break-all text-foreground underline-offset-2 hover:underline">
+              <a
+                href={PROD_APP_URL}
+                className="break-all text-foreground underline-offset-2 hover:underline"
+              >
                 {PROD_APP_URL}
               </a>
             </li>
             <li>
+              MCP:{" "}
+              <code className="break-all rounded bg-muted px-1 py-0.5 text-foreground">{MCP_URL}</code>
+            </li>
+            <li>
               API:{" "}
-              <code className="break-all rounded bg-muted px-1 py-0.5 text-foreground">{PROD_API_URL}</code>
-            </li>
-            <li>
-              Entrada MCP:{" "}
               <code className="break-all rounded bg-muted px-1 py-0.5 text-foreground">
-                …/fantasy2-hub/mcp/src/index.js
-              </code>
-            </li>
-            <li>
-              Alternativa:{" "}
-              <code className="break-all rounded bg-muted px-1 py-0.5 text-foreground">
-                npm --prefix …/fantasy2-hub/mcp start
+                {PROD_API_URL}
               </code>
             </li>
           </ul>
@@ -145,28 +139,33 @@ export function McpConnectCard() {
               </Button>
             </div>
           </div>
-          <pre className="overflow-x-auto rounded-lg border bg-background p-3 text-xs leading-relaxed break-all whitespace-pre-wrap">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border bg-background p-3 text-xs leading-relaxed">
             {revealed && token ? token : maskedToken}
           </pre>
           <p className="text-xs text-muted-foreground">
-            É o mesmo valor de <code className="rounded bg-muted px-1">localStorage.fantasy2_token</code>{" "}
-            neste aparelho. Admin: só após o 2FA.
+            Equivale a estar logado neste aparelho. Não compartilhe nem committe. Admin: só após o
+            2FA.
           </p>
         </div>
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Snippet Cursor (MCP)
+              Snippet Cursor (MCP remoto)
             </p>
             <Button type="button" size="sm" variant="outline" onClick={() => handleCopy("config")}>
               {copied === "config" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied === "config" ? "Copiado" : "Copiar JSON"}
+              {copied === "config" ? "Copiado" : "Copiar config"}
             </Button>
           </div>
           <pre className="overflow-x-auto rounded-lg border bg-background p-3 text-xs leading-relaxed">
             {configSnippet}
           </pre>
+          <p className="text-xs text-muted-foreground">
+            Dica: em vez de colar o JWT no arquivo, use{" "}
+            <code className="rounded bg-muted px-1">{"Bearer ${env:FANTASY2_TOKEN}"}</code> e
+            exporte o token no ambiente do Cursor.
+          </p>
         </div>
       </CardContent>
     </Card>
