@@ -7,6 +7,7 @@ import { OnboardingBanner } from "@/components/OnboardingBanner";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
+import Home from "@/pages/Home";
 import TopicsList from "@/pages/TopicsList";
 import TopicDetail from "@/pages/TopicDetail";
 import AdminPanel from "@/pages/AdminPanel";
@@ -54,6 +55,14 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route
                 path="/"
+                element={
+                  <AppLayout>
+                    <Home />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/pautas"
                 element={
                   <AppLayout>
                     <TopicsList />

@@ -13,8 +13,9 @@ import * as servicesApi from "@/services/services";
 import { listApartmentsByTower } from "@/services/apartments";
 import type { Apartment, ManagedUser, Role } from "@/lib/types";
 
-// Deixa o admin cadastrar um serviço em nome de um morador (ex. alguém sem prática/tempo de
-// mexer no app sozinho) — depois de criado, o próprio morador edita tudo em "Meu serviço".
+const PAGE_SIZE = 20;
+const TOWERS = [1, 2, 3, 4, 5];
+
 function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
@@ -85,8 +86,6 @@ function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone:
   );
 }
 
-const TOWERS = [1, 2, 3, 4, 5];
-
 function floorLabel(floor: number) {
   if (floor === 0) return "Garden";
   if (floor === 7) return "Cobertura";
@@ -109,14 +108,40 @@ export default function UserManagement() {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const queryClient = useQueryClient();
+
+  const [page, setPage] = useState(1);
+  const [towerFilter, setTowerFilter] = useState<number | null>(null);
+  const [apartmentFilter, setApartmentFilter] = useState("");
+  const [apartmentDraft, setApartmentDraft] = useState("");
+
   const {
     data,
     isLoading,
     isError,
     refetch,
-  } = useQuery({ queryKey: ["users"], queryFn: usersService.listUsers });
+  } = useQuery({
+    queryKey: ["users", page, towerFilter, apartmentFilter],
+    queryFn: () =>
+      usersService.listUsers({
+        page,
+        pageSize: PAGE_SIZE,
+        tower: towerFilter,
+        apartment: apartmentFilter || undefined,
+      }),
+  });
+
+  const { data: pendingData } = useQuery({
+    queryKey: ["users-pending"],
+    queryFn: () => usersService.listUsers({ page: 1, pageSize: 50, approvalStatus: "pending" }),
+    enabled: isAdmin,
+  });
+
   const [resetSentFor, setResetSentFor] = useState<ManagedUser | null>(null);
+  const [emailChangedFor, setEmailChangedFor] = useState<{ name: string; email: string } | null>(null);
   const [serviceFormUserId, setServiceFormUserId] = useState<string | null>(null);
+  const [editingEmailUserId, setEditingEmailUserId] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -179,15 +204,36 @@ export default function UserManagement() {
     onSuccess: (_result, target) => setResetSentFor(target),
   });
 
+  const changeEmailMutation = useMutation({
+    mutationFn: ({ id, email }: { id: string; email: string }) => usersService.changeUserEmail(id, email),
+    onSuccess: (result, vars) => {
+      const target = data?.users.find((u) => u.id === vars.id);
+      setEmailChangedFor({ name: target?.name ?? "Morador", email: result.user.email });
+      setEditingEmailUserId(null);
+      setEmailDraft("");
+      setEmailError(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err) => setEmailError(err instanceof Error ? err.message : "Erro ao alterar e-mail."),
+  });
+
   const approveMutation = useMutation({
     mutationFn: (id: string) => usersService.approveUser(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users-pending"] });
+    },
   });
 
   const rejectMutation = useMutation({
     mutationFn: (id: string) => usersService.rejectUser(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users-pending"] });
+    },
   });
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -199,8 +245,29 @@ export default function UserManagement() {
     createMutation.mutate();
   }
 
+  function applyApartmentFilter(e: FormEvent) {
+    e.preventDefault();
+    setPage(1);
+    setApartmentFilter(apartmentDraft.trim());
+  }
+
+  function startEmailEdit(user: ManagedUser) {
+    setEditingEmailUserId(user.id);
+    setEmailDraft(user.email);
+    setEmailError(null);
+  }
+
+  function submitEmailEdit(user: ManagedUser) {
+    const next = emailDraft.trim().toLowerCase();
+    if (!next || !next.includes("@")) {
+      setEmailError("Informe um e-mail válido.");
+      return;
+    }
+    changeEmailMutation.mutate({ id: user.id, email: next });
+  }
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
       <h1 className="text-2xl font-semibold">Usuários</h1>
 
       {resetSentFor && (
@@ -217,278 +284,446 @@ export default function UserManagement() {
         </Card>
       )}
 
-      {isAdmin && data && data.users.some((u) => u.approvalStatus === "pending") && (
+      {emailChangedFor && (
+        <Card className="border-brand-gold/50 bg-brand-gold/10">
+          <CardContent className="space-y-2 pt-6">
+            <p className="text-sm">
+              E-mail de <strong>{emailChangedFor.name}</strong> atualizado para{" "}
+              <strong>{emailChangedFor.email}</strong>. Aviso enviado para o endereço antigo e o novo.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setEmailChangedFor(null)}>
+              Fechar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && pendingData && pendingData.users.length > 0 && (
         <Card className="border-brand-cyan/50 bg-brand-cyan/10">
           <CardHeader>
             <CardTitle className="text-base">Cadastros pendentes de aprovação</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {data.users
-              .filter((u) => u.approvalStatus === "pending")
-              .map((u) => (
-                <div key={u.id} className="flex items-center justify-between gap-3 rounded-md border bg-card p-3 text-sm">
-                  <div>
-                    <p className="font-medium">{u.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {u.email} · {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      disabled={approveMutation.isPending}
-                      onClick={() => approveMutation.mutate(u.id)}
-                    >
-                      Aprovar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={rejectMutation.isPending}
-                      onClick={() => rejectMutation.mutate(u.id)}
-                    >
-                      Recusar
-                    </Button>
-                  </div>
+            {pendingData.users.map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-3 rounded-md border bg-card p-3 text-sm">
+                <div>
+                  <p className="font-medium">{u.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {u.email} · {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
+                  </p>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <Button size="sm" disabled={approveMutation.isPending} onClick={() => approveMutation.mutate(u.id)}>
+                    Aprovar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rejectMutation.isPending}
+                    onClick={() => rejectMutation.mutate(u.id)}
+                  >
+                    Recusar
+                  </Button>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
 
       {isAdmin && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Criar conta de síndico</CardTitle>
-          <CardDescription>Só o administrador pode criar contas de síndico e trocar cargos.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
-                <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={linkApartment}
-                onChange={(e) => setLinkApartment(e.target.checked)}
-              />
-              Este síndico também mora no condomínio (vincular a um apartamento)
-            </label>
-
-            {linkApartment && (
-              <div className="space-y-4 rounded-md border p-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Criar conta de síndico</CardTitle>
+            <CardDescription>Só o administrador pode criar contas de síndico e trocar cargos.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Torre</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {TOWERS.map((t) => (
-                      <Button
-                        key={t}
-                        type="button"
-                        variant={tower === t ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setTower(t)}
-                      >
-                        Torre {t}
-                      </Button>
-                    ))}
-                  </div>
+                  <Label htmlFor="name">Nome</Label>
+                  <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </div>
 
-                {tower !== null && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={linkApartment}
+                  onChange={(e) => setLinkApartment(e.target.checked)}
+                />
+                Este síndico também mora no condomínio (vincular a um apartamento)
+              </label>
+
+              {linkApartment && (
+                <div className="space-y-4 rounded-md border p-3">
                   <div className="space-y-2">
-                    <Label>Andar</Label>
+                    <Label>Torre</Label>
                     <div className="flex flex-wrap gap-2">
-                      {floors.map((f) => (
+                      {TOWERS.map((t) => (
                         <Button
-                          key={f}
+                          key={t}
                           type="button"
-                          variant={floor === f ? "default" : "outline"}
+                          variant={tower === t ? "default" : "outline"}
                           size="sm"
-                          onClick={() => {
-                            setFloor(f);
-                            setApartmentId(null);
-                          }}
+                          onClick={() => setTower(t)}
                         >
-                          {floorLabel(f)}
+                          Torre {t}
                         </Button>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {floor !== null && (
-                  <div className="space-y-2">
-                    <Label>Apartamento</Label>
-                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-                      {unitsOnFloor.map((apt) => (
-                        <button
-                          key={apt.id}
-                          type="button"
-                          disabled={!apt.available}
-                          onClick={() => setApartmentId(apt.id)}
-                          className={cn(
-                            "rounded-md border px-2 py-2 text-sm font-medium transition-colors",
-                            !apt.available && "cursor-not-allowed bg-muted text-muted-foreground opacity-60",
-                            apt.available && apartmentId !== apt.id && "hover:bg-accent",
-                            apartmentId === apt.id && "border-primary bg-primary text-primary-foreground",
-                          )}
-                        >
-                          {apt.code}
-                        </button>
-                      ))}
+                  {tower !== null && (
+                    <div className="space-y-2">
+                      <Label>Andar</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {floors.map((f) => (
+                          <Button
+                            key={f}
+                            type="button"
+                            variant={floor === f ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              setFloor(f);
+                              setApartmentId(null);
+                            }}
+                          >
+                            {floorLabel(f)}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Criando..." : "Criar síndico"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+                  {floor !== null && (
+                    <div className="space-y-2">
+                      <Label>Apartamento</Label>
+                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+                        {unitsOnFloor.map((apt) => (
+                          <button
+                            key={apt.id}
+                            type="button"
+                            disabled={!apt.available}
+                            onClick={() => setApartmentId(apt.id)}
+                            className={cn(
+                              "rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                              !apt.available && "cursor-not-allowed bg-muted text-muted-foreground opacity-60",
+                              apt.available && apartmentId !== apt.id && "hover:bg-accent",
+                              apartmentId === apt.id && "border-primary bg-primary text-primary-foreground",
+                            )}
+                          >
+                            {apt.code}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Criando..." : "Criar síndico"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Todos os usuários</CardTitle>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Moradores e equipe</CardTitle>
+              <CardDescription>
+                Tabela paginada — filtre por torre e apartamento.
+                {data ? ` ${data.total} no total.` : ""}
+              </CardDescription>
+            </div>
+            {data && (
+              <span className="text-xs text-muted-foreground">
+                Página {data.page} de {totalPages}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label>Torre</Label>
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={towerFilter === null ? "default" : "outline"}
+                  onClick={() => {
+                    setTowerFilter(null);
+                    setPage(1);
+                  }}
+                >
+                  Todas
+                </Button>
+                {TOWERS.map((t) => (
+                  <Button
+                    key={t}
+                    type="button"
+                    size="sm"
+                    variant={towerFilter === t ? "default" : "outline"}
+                    onClick={() => {
+                      setTowerFilter(t);
+                      setPage(1);
+                    }}
+                  >
+                    {t}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <form onSubmit={applyApartmentFilter} className="flex items-end gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="apartmentFilter">Apartamento</Label>
+                <Input
+                  id="apartmentFilter"
+                  placeholder="Ex.: 101"
+                  value={apartmentDraft}
+                  onChange={(e) => setApartmentDraft(e.target.value)}
+                  className="h-9 w-32"
+                />
+              </div>
+              <Button type="submit" size="sm" variant="outline">
+                Buscar
+              </Button>
+              {(apartmentFilter || towerFilter !== null) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setApartmentDraft("");
+                    setApartmentFilter("");
+                    setTowerFilter(null);
+                    setPage(1);
+                  }}
+                >
+                  Limpar
+                </Button>
+              )}
+            </form>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           {isLoading && <p className="text-muted-foreground">Carregando...</p>}
           {isError && <QueryError onRetry={() => refetch()} />}
           {roleError && <p className="text-sm text-destructive">{roleError}</p>}
-          {data?.users.map((u) => {
-            const isSelf = u.id === currentUser?.id;
-            return (
-              <div key={u.id} className="rounded-md border p-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium">
-                    {u.name} <span className="font-normal text-muted-foreground">· {u.email}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {roleBadge(u.role)}
-                  {u.householdRole === "family" && <Badge variant="secondary">Familiar</Badge>}
-                  {approvalBadge(u.approvalStatus)}
-                  {!isSelf && isAdmin && u.role === "admin" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={roleMutation.isPending}
-                        onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
-                      >
-                        Rebaixar p/ síndico
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={roleMutation.isPending}
-                        onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
-                      >
-                        Rebaixar p/ morador
-                      </Button>
-                    </>
-                  )}
-                  {!isSelf && isAdmin && u.role === "sindico" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={roleMutation.isPending}
-                        onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
-                      >
-                        Rebaixar para morador
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={roleMutation.isPending}
-                        onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
-                      >
-                        Promover a admin
-                      </Button>
-                    </>
-                  )}
-                  {!isSelf && isAdmin && u.role === "morador" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={roleMutation.isPending}
-                        onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
-                      >
-                        Promover a síndico
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={roleMutation.isPending}
-                        onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
-                      >
-                        Promover a admin
-                      </Button>
-                    </>
-                  )}
-                  {!isSelf && u.role !== "admin" && (isAdmin || u.role === "morador") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={resetPasswordMutation.isPending}
-                      onClick={() => resetPasswordMutation.mutate(u)}
-                    >
-                      Resetar senha
-                    </Button>
-                  )}
-                  {!isSelf && isAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setServiceFormUserId(serviceFormUserId === u.id ? null : u.id)}
-                    >
-                      Criar serviço
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {serviceFormUserId === u.id && (
-                <CreateServiceForUserForm user={u} onDone={() => setServiceFormUserId(null)} />
-              )}
-              </div>
-            );
-          })}
+          {emailError && <p className="text-sm text-destructive">{emailError}</p>}
+
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Nome</th>
+                  <th className="px-3 py-2 font-medium">E-mail</th>
+                  <th className="px-3 py-2 font-medium">Torre</th>
+                  <th className="px-3 py-2 font-medium">Apto</th>
+                  <th className="px-3 py-2 font-medium">Papel</th>
+                  <th className="px-3 py-2 font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.users.map((u) => {
+                  const isSelf = u.id === currentUser?.id;
+                  return (
+                    <tr key={u.id} className="border-b align-top last:border-0">
+                      <td className="px-3 py-3">
+                        <div className="font-medium">{u.name}</div>
+                        {u.householdRole === "family" && (
+                          <Badge variant="secondary" className="mt-1">
+                            Familiar
+                          </Badge>
+                        )}
+                        {approvalBadge(u.approvalStatus)}
+                      </td>
+                      <td className="px-3 py-3">
+                        {editingEmailUserId === u.id ? (
+                          <div className="space-y-2">
+                            <Input
+                              type="email"
+                              value={emailDraft}
+                              onChange={(e) => setEmailDraft(e.target.value)}
+                              className="h-8"
+                            />
+                            <div className="flex flex-wrap gap-1">
+                              <Button
+                                size="sm"
+                                disabled={changeEmailMutation.isPending}
+                                onClick={() => submitEmailEdit(u)}
+                              >
+                                Salvar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingEmailUserId(null);
+                                  setEmailError(null);
+                                }}
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">{u.email}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 tabular-nums">{u.tower ?? "—"}</td>
+                      <td className="px-3 py-3">{u.apartmentCode ?? "—"}</td>
+                      <td className="px-3 py-3">{roleBadge(u.role)}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {!isSelf && isAdmin && u.role === "admin" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={roleMutation.isPending}
+                                onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
+                              >
+                                → Síndico
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={roleMutation.isPending}
+                                onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
+                              >
+                                → Morador
+                              </Button>
+                            </>
+                          )}
+                          {!isSelf && isAdmin && u.role === "sindico" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={roleMutation.isPending}
+                                onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
+                              >
+                                → Morador
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={roleMutation.isPending}
+                                onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
+                              >
+                                → Admin
+                              </Button>
+                            </>
+                          )}
+                          {!isSelf && isAdmin && u.role === "morador" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={roleMutation.isPending}
+                                onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
+                              >
+                                → Síndico
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={roleMutation.isPending}
+                                onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
+                              >
+                                → Admin
+                              </Button>
+                            </>
+                          )}
+                          {!isSelf && isAdmin && u.role !== "admin" && (
+                            <Button variant="outline" size="sm" onClick={() => startEmailEdit(u)}>
+                              Alterar e-mail
+                            </Button>
+                          )}
+                          {!isSelf && u.role !== "admin" && (isAdmin || u.role === "morador") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={resetPasswordMutation.isPending}
+                              onClick={() => resetPasswordMutation.mutate(u)}
+                            >
+                              Resetar senha
+                            </Button>
+                          )}
+                          {!isSelf && isAdmin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setServiceFormUserId(serviceFormUserId === u.id ? null : u.id)}
+                            >
+                              Criar serviço
+                            </Button>
+                          )}
+                        </div>
+                        {serviceFormUserId === u.id && (
+                          <CreateServiceForUserForm user={u} onDone={() => setServiceFormUserId(null)} />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {data && data.users.length === 0 && (
+              <p className="p-4 text-sm text-muted-foreground">Nenhum usuário encontrado com esses filtros.</p>
+            )}
+          </div>
+
+          {data && data.total > data.pageSize && (
+            <div className="flex items-center justify-between pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Anterior
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Próxima
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

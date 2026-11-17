@@ -12,6 +12,9 @@ votam a favor/contra, comentam, e a administração marca quando uma pauta foi l
 
 ## Desenvolvimento local
 
+Requer **Node.js 22** (LTS). Node 26 quebra o build nativo do `better-sqlite3`.
+
+
 ```bash
 # backend
 cd server
