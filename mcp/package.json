@@ -1,0 +1,30 @@
+{
+  "name": "fantasy2-hub-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Fantasy 2 Hub (role-gated tools)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "fantasy2-hub-mcp": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    ".env.example"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  }
+}
