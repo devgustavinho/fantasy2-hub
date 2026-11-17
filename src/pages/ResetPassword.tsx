@@ -47,11 +47,14 @@ export default function ResetPassword() {
                 <CardHeader>
                   <CardTitle>Link inválido</CardTitle>
                   <CardDescription>
-                    Esse link não tem um token de redefinição. Peça um novo reset pra administração.
+                    Esse link não tem um token de redefinição. Peça um novo em Esqueci minha senha.
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <Link to="/login" className="text-sm font-medium text-primary underline">
+                <CardContent className="space-y-2">
+                  <Link to="/esqueci-senha" className="block text-sm font-medium text-primary underline">
+                    Esqueci minha senha
+                  </Link>
+                  <Link to="/login" className="block text-sm font-medium text-primary underline">
                     Voltar pro login
                   </Link>
                 </CardContent>
