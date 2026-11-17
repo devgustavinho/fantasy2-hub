@@ -26,6 +26,7 @@ import RecommendationDetail from "@/pages/RecommendationDetail";
 import Faq from "@/pages/Faq";
 import ClimateList from "@/pages/ClimateList";
 import ClimateDetail from "@/pages/ClimateDetail";
+import ImprovementsBoard from "@/pages/ImprovementsBoard";
 import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
 import NotFound from "@/pages/NotFound";
@@ -157,6 +158,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <ClimateDetail />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/melhorias"
+                element={
+                  <AppLayout>
+                    <ImprovementsBoard />
                   </AppLayout>
                 }
               />
