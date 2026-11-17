@@ -1,26 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateOnly } from "@/lib/utils";
 import * as topicsService from "@/services/topics";
 import { QueryError } from "@/components/QueryError";
-
-function StatusBadge({ status, assemblyDate }: { status: string; assemblyDate: string | null }) {
-  if (status === "scheduled") {
-    return (
-      <Badge variant="success">
-        Pautada {assemblyDate ? `em ${formatDateOnly(assemblyDate)}` : ""}
-      </Badge>
-    );
-  }
-  return <Badge variant="secondary">Em aberto</Badge>;
-}
 
 export default function TopicsList() {
   const queryClient = useQueryClient();
@@ -29,7 +18,10 @@ export default function TopicsList() {
     isLoading,
     isError,
     refetch,
-  } = useQuery({ queryKey: ["topics"], queryFn: topicsService.listTopics });
+  } = useQuery({
+    queryKey: ["topics", "open"],
+    queryFn: () => topicsService.listTopics("open"),
+  });
 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -55,9 +47,20 @@ export default function TopicsList() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Pautas para assembleia</h1>
-        <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancelar" : "Nova pauta"}</Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Pautas para assembleia</h1>
+          <p className="text-sm text-muted-foreground">Pautas em aberto aguardando assembleia.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/pautas/historico">
+              <History className="mr-1.5 h-4 w-4" />
+              Histórico
+            </Link>
+          </Button>
+          <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancelar" : "Nova pauta"}</Button>
+        </div>
       </div>
 
       {showForm && (
@@ -100,7 +103,7 @@ export default function TopicsList() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-base">{topic.title}</CardTitle>
-                  <StatusBadge status={topic.status} assemblyDate={topic.assemblyDate} />
+                  <Badge variant="secondary">Em aberto</Badge>
                 </div>
               </CardHeader>
               <CardContent className="flex items-center gap-4 pt-0 text-sm text-muted-foreground">
@@ -113,7 +116,7 @@ export default function TopicsList() {
           </Link>
         ))}
         {data && data.topics.length === 0 && (
-          <p className="text-muted-foreground">Nenhuma pauta cadastrada ainda.</p>
+          <p className="text-muted-foreground">Nenhuma pauta em aberto no momento.</p>
         )}
       </div>
     </div>

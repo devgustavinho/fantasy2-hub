@@ -1,7 +1,12 @@
 import { api } from "@/lib/api";
 import type { Comment, Topic, TopicEvent, VoteValue } from "@/lib/types";
 
-export const listTopics = () => api.get<{ topics: Topic[] }>("/topics");
+export type TopicListStatus = "open" | "scheduled";
+
+export const listTopics = (status?: TopicListStatus) => {
+  const qs = status ? `?status=${status}` : "";
+  return api.get<{ topics: Topic[] }>(`/topics${qs}`);
+};
 
 export const createTopic = (data: { title: string; description: string }) =>
   api.post<{ topic: Topic }>("/topics", data);

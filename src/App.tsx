@@ -9,6 +9,7 @@ import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
 import Home from "@/pages/Home";
 import TopicsList from "@/pages/TopicsList";
+import TopicsHistory from "@/pages/TopicsHistory";
 import TopicDetail from "@/pages/TopicDetail";
 import AdminPanel from "@/pages/AdminPanel";
 import UserManagement from "@/pages/UserManagement";
@@ -66,6 +67,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <TopicsList />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/pautas/historico"
+                element={
+                  <AppLayout>
+                    <TopicsHistory />
                   </AppLayout>
                 }
               />

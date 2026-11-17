@@ -35,7 +35,7 @@ const deleteSchema = z.object({
   reason: z.string().trim().min(10, "O motivo precisa ter pelo menos 10 caracteres."),
 });
 
-const listTopics = sqlite.prepare(`
+const topicListSelect = `
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
     t.status_note AS statusNote,
@@ -47,8 +47,23 @@ const listTopics = sqlite.prepare(`
   FROM topics t
   JOIN users u ON u.id = t.created_by
   LEFT JOIN votes v ON v.topic_id = t.id
+`;
+
+const listTopics = sqlite.prepare(`
+  ${topicListSelect}
   GROUP BY t.id
   ORDER BY t.created_at DESC
+`);
+
+// Lista filtrada por status: open = em aberto; scheduled = pautada (histórico).
+const listTopicsByStatus = sqlite.prepare(`
+  ${topicListSelect}
+  WHERE t.status = ?
+  GROUP BY t.id
+  ORDER BY
+    CASE WHEN t.status = 'scheduled' THEN t.assembly_date END DESC,
+    t.updated_at DESC,
+    t.created_at DESC
 `);
 
 const getTopic = sqlite.prepare(`
@@ -149,8 +164,13 @@ export function topicsRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
 
-  router.get("/", (_req, res) => {
-    const rows = listTopics.all().map((row) => ({
+  router.get("/", (req, res) => {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    if (status && status !== "open" && status !== "scheduled") {
+      return res.status(400).json({ message: "Status inválido. Use open ou scheduled." });
+    }
+    const raw = status ? listTopicsByStatus.all(status) : listTopics.all();
+    const rows = raw.map((row) => ({
       ...row,
       favorCount: Number(row.favorCount),
       contraCount: Number(row.contraCount),
