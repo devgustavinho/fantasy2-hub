@@ -2,8 +2,27 @@ import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { sqlite } from "../../db/client.js";
 
 const TOKEN_TTL_MS = 60 * 60 * 1000;
+/** Intervalo mínimo entre e-mails de reset self-service pro mesmo usuário. */
+export const FORGOT_PASSWORD_COOLDOWN_MS = 10 * 60 * 1000;
 
 const hashToken = (token) => createHash("sha256").update(token).digest("hex");
+
+const getLatestTokenCreatedAt = sqlite.prepare(`
+  SELECT created_at AS createdAt
+  FROM password_reset_tokens
+  WHERE user_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`);
+
+/** True se ainda estamos dentro do cooldown de 10 min desde o último token desse usuário. */
+export function isForgotPasswordRateLimited(userId) {
+  const row = getLatestTokenCreatedAt.get(userId);
+  if (!row?.createdAt) return false;
+  const createdMs = Date.parse(row.createdAt);
+  if (Number.isNaN(createdMs)) return false;
+  return Date.now() - createdMs < FORGOT_PASSWORD_COOLDOWN_MS;
+}
 
 const insertToken = sqlite.prepare(`
   INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
