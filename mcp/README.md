@@ -1,7 +1,7 @@
-# Fantasy 2 Hub — MCP server
+# Fantasy 2 Hub — MCP
 
-Servidor [MCP](https://modelcontextprotocol.io) (stdio) que expõe a API do Fantasy 2 Hub
-como tools, **filtradas pelo cargo** do usuário autenticado.
+O Fantasy 2 Hub expõe um **MCP remoto** na API de produção. Moradores e staff conectam o
+Cursor (ou outro cliente MCP) **sem clonar este repositório**.
 
 | Cargo | Nível MCP | Tools |
 |---|---|---|
@@ -11,77 +11,57 @@ como tools, **filtradas pelo cargo** do usuário autenticado.
 
 `conselheiro` é só tag: mesmas tools de `morador`.
 
-## Pré-requisitos
+## Para moradores (recomendado)
 
-1. Conta **aprovada** no Hub.
-2. Token JWT de sessão (`Authorization: Bearer`), o mesmo que o front guarda em `localStorage`
-   (`fantasy2_token`) após login (admin precisa concluir o 2FA).
-3. Node.js ≥ 20.
+1. Entre em [fantasy2-hub.pages.dev](https://fantasy2-hub.pages.dev) → **Perfil → Conectar MCP**.
+2. Copie o snippet Cursor (URL remota + JWT da sessão).
+3. Cole em `~/.cursor/mcp.json` (ou Settings → MCP) e reinicie o MCP.
 
-## Variáveis de ambiente
+Endpoint de produção:
 
-| Env | Obrigatória | Descrição |
-|---|---|---|
-| `FANTASY2_TOKEN` | sim | JWT de sessão |
-| `FANTASY2_API_URL` | não | Base da API (default `http://127.0.0.1:3100`). Produção: `https://api-fantasy2.gcsolutions-devs.com.br` |
-
-## Instalação
-
-```bash
-cd mcp
-npm install
+```text
+https://api-fantasy2.gcsolutions-devs.com.br/mcp
 ```
 
-## Rodar (smoke)
-
-```bash
-export FANTASY2_API_URL=http://127.0.0.1:3100
-export FANTASY2_TOKEN='eyJ…'   # token pós-login
-node src/index.js
-# stderr: fantasy2-hub MCP: voce@… role=morador tier=resident tools=N …
-# fica à espera de JSON-RPC no stdin (cliente MCP)
-```
-
-## No app (recomendado)
-
-Em produção ([fantasy2-hub.pages.dev](https://fantasy2-hub.pages.dev)) → **Perfil → Conectar MCP**:
-snippet Cursor pronto, URLs de API/app, dicas de caminho e botão para copiar o JWT da sessão.
-
-## Cursor / Claude Desktop
-
-Exemplo de entrada em MCP settings (stdio):
+Exemplo `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "fantasy2-hub": {
-      "command": "node",
-      "args": ["/caminho/absoluto/fantasy2-hub/mcp/src/index.js"],
-      "env": {
-        "FANTASY2_API_URL": "https://api-fantasy2.gcsolutions-devs.com.br",
-        "FANTASY2_TOKEN": "cole-o-jwt-aqui"
+      "url": "https://api-fantasy2.gcsolutions-devs.com.br/mcp",
+      "headers": {
+        "Authorization": "Bearer cole-o-jwt-da-sessao-aqui"
       }
     }
   }
 }
 ```
 
-Ou, a partir da pasta `mcp` após `npm install`:
+O JWT é o mesmo da sessão do Hub (`localStorage.fantasy2_token` após login; admin precisa do 2FA).
+Não compartilhe nem committe o token. Preferível: `Bearer ${env:FANTASY2_TOKEN}` e a variável no
+ambiente do Cursor.
 
-```json
-{
-  "command": "npm",
-  "args": ["--prefix", "/caminho/absoluto/fantasy2-hub/mcp", "start"],
-  "env": {
-    "FANTASY2_API_URL": "https://api-fantasy2.gcsolutions-devs.com.br",
-    "FANTASY2_TOKEN": "cole-o-jwt-aqui"
-  }
-}
+**Gate de permissão:** só conta **aprovada**; tools de staff/admin **não são registradas** para
+morador; a API ainda aplica 403.
+
+## Implementação
+
+| Peça | Onde |
+|---|---|
+| HTTP Streamable (produção) | `server/src/modules/mcp/` — montado em `POST /mcp` |
+| stdio (dev / offline) | este pacote `mcp/` — chama a API via `FANTASY2_API_URL` + `FANTASY2_TOKEN` |
+
+### stdio (opcional, desenvolvedores do monorepo)
+
+```bash
+cd mcp && npm install
+export FANTASY2_API_URL=https://api-fantasy2.gcsolutions-devs.com.br
+export FANTASY2_TOKEN='eyJ…'
+npm start
 ```
 
-**Segurança:** o token equivale a estar logado. Não commite tokens; use secret store / env local.
-Admin tokens exigem 2FA no login. Tools de staff/admin **não são registradas** para morador —
-mesmo que o modelo peça, a lista `tools/list` não as inclui; a API também rejeita com 403.
+Moradores **não** precisam deste fluxo.
 
 ## Tools por nível
 

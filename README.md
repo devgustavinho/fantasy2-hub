@@ -9,7 +9,7 @@ votam a favor/contra, comentam, e a administração marca quando uma pauta foi l
 - `/server` — backend (Node + Express puro, JavaScript ESM, sem build step). Roda numa VPS que
   também hospeda o `getflix` (projeto separado), mas com usuário de sistema, diretório e systemd
   próprios (`fantasy2hub`, `/home/fantasy2hub`) — nenhum arquivo é compartilhado entre os dois.
-- `/mcp` — servidor MCP (stdio) com tools da API filtradas por cargo; ver `mcp/README.md`.
+- MCP remoto em `POST /mcp` na API (Cursor via URL + JWT); pacote `mcp/` stdio é opcional p/ devs — ver `mcp/README.md` e Perfil → Conectar MCP.
 
 ## Desenvolvimento local
 

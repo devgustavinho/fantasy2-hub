@@ -28,6 +28,7 @@ npm run dev
 - 2FA obrigatório pra admin (`src/auth/twoFactor.js`, TOTP via `otplib`, compatível com Google Authenticator): todo login de uma conta `admin` passa por `establishSession`, que só libera o token de sessão depois do código de 6 dígitos — na primeira vez, força o cadastro do 2FA (mostra QR code) antes de liberar. Vale tanto pra login por senha quanto por passkey.
 - Um apartamento tem no máximo 2 usuários vinculados: 1 titular (`household_role = 'owner'`, o que se cadastrou pelo `/register`) e 1 familiar convidado por ele (`household_role = 'family'`) — garantido por índice único composto (`idx_users_apartment_household` em `(apartment_id, household_role)`, `WHERE apartment_id IS NOT NULL`). Ver seção "Família" abaixo.
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
+- MCP remoto: `POST /mcp` (Streamable HTTP, `src/modules/mcp/`) — clientes (Cursor etc.) usam a URL da API + `Authorization: Bearer` com o JWT da sessão do Hub. Tools filtradas por cargo. Moradores não precisam do pacote stdio em `/mcp` do monorepo.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
 
 ## Permissões por cargo
