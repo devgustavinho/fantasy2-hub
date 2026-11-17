@@ -6,7 +6,11 @@ import { hashPassword, verifyPassword } from "../../auth/password.js";
 import { requireAuth, requireApproved } from "../../auth/guards.js";
 import { toPublicUser } from "../../auth/publicUser.js";
 import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
-import { createPasswordResetToken, consumePasswordResetToken } from "./passwordReset.js";
+import {
+  createPasswordResetToken,
+  consumePasswordResetToken,
+  isForgotPasswordRateLimited,
+} from "./passwordReset.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyAdmins } from "../notifications/service.js";
 import { env } from "../../env.js";
@@ -48,11 +52,23 @@ const resetPasswordSchema = z.object({
 
 const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
+  tower: z.coerce.number().int().min(1).max(5),
+  apartmentId: z.string().min(1),
 });
 
 const getApartment = sqlite.prepare("SELECT id, tower, code FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT * FROM users WHERE email = ?");
+// Conta aprovada cujo e-mail está ligado exatamente a essa unidade (torre bate com o apto).
+const getApprovedUserForApartmentEmail = sqlite.prepare(`
+  SELECT u.id, u.name, u.email, u.approval_status
+  FROM users u
+  JOIN apartments a ON a.id = u.apartment_id
+  WHERE u.email = ?
+    AND u.apartment_id = ?
+    AND a.tower = ?
+    AND u.approval_status = 'approved'
+`);
 const insertUser = sqlite.prepare(`
   INSERT INTO users (id, apartment_id, name, email, password_hash, role, approval_status)
   VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador', 'pending')
@@ -207,16 +223,23 @@ export function authRoutes() {
     res.status(204).end();
   });
 
-  // Pedido público de "esqueci minha senha". Sempre responde 204 (não vaza se o e-mail existe).
-  // Só dispara e-mail pra contas aprovadas — pendente/rejeitada não recebe link.
+  // Pedido público de "esqueci minha senha". Exige e-mail + torre + apartamento e só manda
+  // e-mail se o e-mail estiver ligado exatamente a essa unidade (conta aprovada). Sempre 204
+  // pra não enumerar contas. Cooldown de 10 min por usuário (último token criado).
   router.post("/forgot-password", (req, res) => {
     const parsed = forgotPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Informe um e-mail válido." });
+      return res.status(400).json({ message: "Informe e-mail, torre e apartamento." });
     }
 
-    const user = getUserByEmail.get(parsed.data.email);
-    if (user?.approval_status === "approved") {
+    const { email, tower, apartmentId } = parsed.data;
+    const apartment = getApartment.get(apartmentId);
+    if (!apartment || apartment.tower !== tower) {
+      return res.status(204).end();
+    }
+
+    const user = getApprovedUserForApartmentEmail.get(email, apartmentId, tower);
+    if (user && !isForgotPasswordRateLimited(user.id)) {
       const token = createPasswordResetToken(user.id);
       const resetUrl = `${env.CORS_ORIGIN}/redefinir-senha?token=${token}`;
       recordAudit({
