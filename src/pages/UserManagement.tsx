@@ -22,8 +22,11 @@ const TOWERS = [1, 2, 3, 4, 5];
 const ROLE_LABEL: Record<Role, string> = {
   admin: "admin",
   sindico: "síndico",
+  conselheiro: "conselheiro",
   morador: "morador",
 };
+
+const ALL_ROLES: Role[] = ["admin", "sindico", "conselheiro", "morador"];
 
 function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -87,7 +90,12 @@ function floorLabel(floor: number) {
 function roleBadge(role: Role) {
   if (role === "admin") return <Badge>Admin</Badge>;
   if (role === "sindico") return <Badge variant="success">Síndico</Badge>;
+  if (role === "conselheiro") return <Badge variant="gold">Conselheiro</Badge>;
   return <Badge variant="secondary">Morador</Badge>;
+}
+
+function isResidentLike(role: Role) {
+  return role === "morador" || role === "conselheiro";
 }
 
 function approvalBadge(status: ManagedUser["approvalStatus"]) {
@@ -298,7 +306,7 @@ export default function UserManagement() {
 
   function roleOptionsFor(user: ManagedUser): Role[] {
     if (!isAdmin || user.id === currentUser?.id) return [];
-    return (["admin", "sindico", "morador"] as Role[]).filter((r) => r !== user.role);
+    return ALL_ROLES.filter((r) => r !== user.role);
   }
 
   return (
@@ -489,9 +497,7 @@ export default function UserManagement() {
                 {data?.users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
                   const hasActions =
-                    !isSelf &&
-                    (isAdmin ||
-                      (u.role !== "admin" && (isAdmin || u.role === "morador")));
+                    !isSelf && (isAdmin || isResidentLike(u.role));
                   return (
                     <tr key={u.id} className="border-b last:border-0">
                       <td className="px-3 py-3">
@@ -702,7 +708,7 @@ export default function UserManagement() {
                 Alterar e-mail
               </button>
             )}
-            {actionsUser.role !== "admin" && (isAdmin || actionsUser.role === "morador") && (
+            {actionsUser.role !== "admin" && (isAdmin || isResidentLike(actionsUser.role)) && (
               <button
                 type="button"
                 className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
@@ -744,6 +750,11 @@ export default function UserManagement() {
             {roleConfirm.to === "admin" && (
               <p className="text-sm text-muted-foreground">
                 Admins precisam de 2FA e têm acesso total ao condomínio.
+              </p>
+            )}
+            {roleConfirm.to === "conselheiro" && (
+              <p className="text-sm text-muted-foreground">
+                Conselheiro é só uma tag de reconhecimento — sem poderes de síndico ou admin.
               </p>
             )}
             <div className="flex gap-2">

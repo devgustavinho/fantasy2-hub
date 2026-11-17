@@ -1,4 +1,4 @@
-export type Role = "admin" | "sindico" | "morador";
+export type Role = "admin" | "sindico" | "conselheiro" | "morador";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 export type HouseholdRole = "owner" | "family";
 

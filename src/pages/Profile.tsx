@@ -1,26 +1,38 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
+import { Moon, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
 import * as authService from "@/services/auth";
 import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
+import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
 
 function roleLabel(role: Role) {
   if (role === "admin") return "Administrador";
   if (role === "sindico") return "Síndico";
+  if (role === "conselheiro") return "Conselheiro";
   return "Morador";
+}
+
+function roleBadgeVariant(role: Role) {
+  if (role === "admin") return "default" as const;
+  if (role === "sindico") return "success" as const;
+  if (role === "conselheiro") return "gold" as const;
+  return "secondary" as const;
 }
 
 export default function Profile() {
   const { user, setUser } = useAuth();
+  const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
   const [whatsapp, setWhatsapp] = useState(user?.whatsapp ?? "");
   const [whatsappVisible, setWhatsappVisible] = useState(user?.whatsappVisible ?? false);
@@ -131,9 +143,51 @@ export default function Profile() {
             <span className="text-muted-foreground">E-mail:</span> {user.email}
           </p>
           <p className="flex items-center gap-2">
-            <span className="text-muted-foreground">Cargo:</span> <Badge variant="secondary">{roleLabel(user.role)}</Badge>
+            <span className="text-muted-foreground">Cargo:</span>{" "}
+            <Badge variant={roleBadgeVariant(user.role)}>{roleLabel(user.role)}</Badge>
             {user.householdRole === "family" && <Badge variant="secondary">Familiar</Badge>}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Aparência</CardTitle>
+          <CardDescription>
+            Escolha o tema do app. A preferência fica salva neste aparelho.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/40 p-1.5">
+            <button
+              type="button"
+              onClick={() => setTheme("light")}
+              aria-pressed={theme === "light"}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                theme === "light"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+              )}
+            >
+              <Sun className="h-4 w-4" />
+              Claro
+            </button>
+            <button
+              type="button"
+              onClick={() => setTheme("dark")}
+              aria-pressed={theme === "dark"}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                theme === "dark"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+              )}
+            >
+              <Moon className="h-4 w-4" />
+              Escuro
+            </button>
+          </div>
         </CardContent>
       </Card>
 
