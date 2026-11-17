@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
-import { Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,7 @@ function roleBadgeVariant(role: Role) {
 
 export default function Profile() {
   const { user, setUser } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { preference, setPreference } = useTheme();
   const queryClient = useQueryClient();
   const [whatsapp, setWhatsapp] = useState(user?.whatsapp ?? "");
   const [whatsappVisible, setWhatsappVisible] = useState(user?.whatsappVisible ?? false);
@@ -154,39 +154,35 @@ export default function Profile() {
         <CardHeader>
           <CardTitle className="text-base">Aparência</CardTitle>
           <CardDescription>
-            Escolha o tema do app. A preferência fica salva neste aparelho.
+            Por padrão acompanha o tema do aparelho. Só grava neste aparelho se você escolher Claro
+            ou Escuro.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-2 rounded-xl border bg-muted/40 p-1.5">
-            <button
-              type="button"
-              onClick={() => setTheme("light")}
-              aria-pressed={theme === "light"}
-              className={cn(
-                "flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                theme === "light"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-              )}
-            >
-              <Sun className="h-4 w-4" />
-              Claro
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme("dark")}
-              aria-pressed={theme === "dark"}
-              className={cn(
-                "flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                theme === "dark"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-              )}
-            >
-              <Moon className="h-4 w-4" />
-              Escuro
-            </button>
+          <div className="grid grid-cols-3 gap-1.5 rounded-xl border bg-muted/40 p-1.5">
+            {(
+              [
+                { value: "system" as const, label: "Sistema", icon: Monitor },
+                { value: "light" as const, label: "Claro", icon: Sun },
+                { value: "dark" as const, label: "Escuro", icon: Moon },
+              ] as const
+            ).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPreference(value)}
+                aria-pressed={preference === value}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-sm font-medium transition-colors",
+                  preference === value
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </button>
+            ))}
           </div>
         </CardContent>
       </Card>
