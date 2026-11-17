@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Building2,
   ClipboardList,
@@ -7,6 +8,7 @@ import {
   Home,
   LayoutDashboard,
   ScrollText,
+  Shield,
   ShoppingBag,
   Star,
   Tag,
@@ -16,6 +18,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 
 export function TopBar() {
   const { user, logout } = useAuth();
@@ -57,6 +60,13 @@ export function TopBar() {
   );
 }
 
+type AdminLink = {
+  title: string;
+  href: string;
+  icon: ReactNode;
+  description: string;
+};
+
 // `sticky` (não `fixed`) de propósito: em vários navegadores mobile (barra de endereço que
 // aparece/some), um elemento `position: fixed` no rodapé fica ancorado no "layout viewport"
 // (que inclui a área atrás da barra do navegador) em vez do viewport visível — o dock parece
@@ -65,10 +75,17 @@ export function TopBar() {
 // empurrado pro fim do conteúdo (ou colado no fim da tela visível, o que for maior).
 export function BottomDock() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [adminOpen, setAdminOpen] = useState(false);
+
   if (!user) return null;
 
   const isStaff = user.role === "admin" || user.role === "sindico";
+  const isAdmin = user.role === "admin";
+  const onAdminRoute = location.pathname.startsWith("/admin");
 
+  // Modo morador: só navegação do condomínio. Staff ganha um único item "Admin" com submenu.
   const items: FloatingDockItem[] = [
     { title: "Início", icon: <Home className="h-full w-full" />, href: "/" },
     { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/pautas" },
@@ -77,21 +94,102 @@ export function BottomDock() {
     { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },
     { title: "Clima", icon: <Gauge className="h-full w-full" />, href: "/clima" },
     ...(isStaff
-      ? [{ title: "Administração", icon: <LayoutDashboard className="h-full w-full" />, href: "/admin" }]
-      : []),
-    ...(isStaff ? [{ title: "Usuários", icon: <Users className="h-full w-full" />, href: "/admin/usuarios" }] : []),
-    ...(user.role === "admin"
       ? [
-          { title: "Auditoria", icon: <ScrollText className="h-full w-full" />, href: "/admin/auditoria" },
-          { title: "Tags", icon: <Tag className="h-full w-full" />, href: "/admin/tags" },
-          { title: "Apartamentos", icon: <Building2 className="h-full w-full" />, href: "/admin/apartamentos" },
+          {
+            title: "Admin",
+            icon: <Shield className="h-full w-full" />,
+            onClick: () => setAdminOpen(true),
+            active: onAdminRoute || adminOpen,
+          },
         ]
       : []),
   ];
 
+  const adminLinks: AdminLink[] = [
+    {
+      title: "Painel",
+      href: "/admin",
+      icon: <LayoutDashboard className="h-5 w-5" />,
+      description: "Pautas por engajamento e acessos",
+    },
+    {
+      title: "Usuários",
+      href: "/admin/usuarios",
+      icon: <Users className="h-5 w-5" />,
+      description: "Moradores, cargos e aprovações",
+    },
+    ...(isAdmin
+      ? [
+          {
+            title: "Auditoria",
+            href: "/admin/auditoria",
+            icon: <ScrollText className="h-5 w-5" />,
+            description: "Histórico de ações",
+          },
+          {
+            title: "Tags",
+            href: "/admin/tags",
+            icon: <Tag className="h-5 w-5" />,
+            description: "Tags de serviços",
+          },
+          {
+            title: "Apartamentos",
+            href: "/admin/apartamentos",
+            icon: <Building2 className="h-5 w-5" />,
+            description: "Mapa das torres",
+          },
+          {
+            title: "Boas-vindas",
+            href: "/admin/boas-vindas",
+            icon: <Home className="h-5 w-5" />,
+            description: "Página do QR do elevador",
+          },
+        ]
+      : []),
+  ];
+
+  function goAdmin(href: string) {
+    setAdminOpen(false);
+    navigate(href);
+  }
+
   return (
-    <div className="sticky bottom-4 z-30 mt-6 flex justify-center px-4 [padding-bottom:env(safe-area-inset-bottom)]">
-      <FloatingDock items={items} />
-    </div>
+    <>
+      <div className="sticky bottom-4 z-30 mt-6 flex justify-center px-4 [padding-bottom:env(safe-area-inset-bottom)]">
+        <FloatingDock items={items} />
+      </div>
+
+      <BottomSheet
+        open={adminOpen}
+        onClose={() => setAdminOpen(false)}
+        title="Administração"
+        description="Atalhos do painel — pensado para o celular."
+      >
+        <ul className="space-y-1">
+          {adminLinks.map((link) => {
+            const active = location.pathname === link.href;
+            return (
+              <li key={link.href}>
+                <button
+                  type="button"
+                  onClick={() => goAdmin(link.href)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${
+                    active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                  }`}
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-navy/90 text-white">
+                    {link.icon}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-medium">{link.title}</span>
+                    <span className="block text-xs text-muted-foreground">{link.description}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </BottomSheet>
+    </>
   );
 }

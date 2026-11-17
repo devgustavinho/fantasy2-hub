@@ -6,7 +6,9 @@ import { cn } from "@/lib/utils";
 export interface FloatingDockItem {
   title: string;
   icon: ReactNode;
-  href: string;
+  href?: string;
+  onClick?: () => void;
+  active?: boolean;
   badge?: number;
 }
 
@@ -29,7 +31,15 @@ export function FloatingDock({ items, className }: { items: FloatingDockItem[]; 
   );
 }
 
-function IconContainer({ mouseX, title, icon, href, badge }: FloatingDockItem & { mouseX: MotionValue }) {
+function IconContainer({
+  mouseX,
+  title,
+  icon,
+  href,
+  onClick,
+  active,
+  badge,
+}: FloatingDockItem & { mouseX: MotionValue }) {
   const ref = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
 
@@ -49,36 +59,47 @@ function IconContainer({ mouseX, title, icon, href, badge }: FloatingDockItem & 
   const widthIcon = useSpring(widthTransformIcon, spring);
   const heightIcon = useSpring(heightTransformIcon, spring);
 
-  return (
-    <Link to={href}>
-      <motion.div
-        ref={ref}
-        style={{ width, height }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        className="relative flex aspect-square items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-      >
-        <AnimatePresence>
-          {hovered && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, x: "-50%" }}
-              animate={{ opacity: 1, y: 0, x: "-50%" }}
-              exit={{ opacity: 0, y: 2, x: "-50%" }}
-              className="absolute -top-8 left-1/2 w-fit whitespace-pre rounded-md border border-white/10 bg-brand-navy px-2 py-0.5 text-xs text-white shadow-md"
-            >
-              {title}
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <motion.div style={{ width: widthIcon, height: heightIcon }} className="flex items-center justify-center">
-          {icon}
-        </motion.div>
-        {!!badge && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-            {badge}
-          </span>
+  const body = (
+    <motion.div
+      ref={ref}
+      style={{ width, height }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={cn(
+        "relative flex aspect-square items-center justify-center rounded-full text-white",
+        active ? "bg-primary/90 hover:bg-primary" : "bg-white/10 hover:bg-white/20",
+      )}
+    >
+      <AnimatePresence>
+        {hovered && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: 2, x: "-50%" }}
+            className="absolute -top-8 left-1/2 w-fit whitespace-pre rounded-md border border-white/10 bg-brand-navy px-2 py-0.5 text-xs text-white shadow-md"
+          >
+            {title}
+          </motion.div>
         )}
+      </AnimatePresence>
+      <motion.div style={{ width: widthIcon, height: heightIcon }} className="flex items-center justify-center">
+        {icon}
       </motion.div>
-    </Link>
+      {!!badge && (
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+          {badge}
+        </span>
+      )}
+    </motion.div>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} aria-label={title} className="appearance-none border-0 bg-transparent p-0">
+        {body}
+      </button>
+    );
+  }
+
+  return <Link to={href ?? "/"}>{body}</Link>;
 }
