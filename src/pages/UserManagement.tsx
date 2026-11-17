@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { QueryError } from "@/components/QueryError";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +17,12 @@ import type { Apartment, ManagedUser, Role } from "@/lib/types";
 
 const PAGE_SIZE = 20;
 const TOWERS = [1, 2, 3, 4, 5];
+
+const ROLE_LABEL: Record<Role, string> = {
+  admin: "admin",
+  sindico: "síndico",
+  morador: "morador",
+};
 
 function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -49,36 +57,19 @@ function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone:
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded-md border bg-muted/20 p-3">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        {user.name} vai poder editar tudo depois em "Meu serviço" (itens, fotos, opções...).
+        {user.name} vai poder editar tudo depois em "Meu serviço".
       </p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Input
-          placeholder="Nome do serviço"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="h-8 text-sm"
-        />
-        <Input
-          placeholder="WhatsApp (opcional)"
-          value={whatsapp}
-          onChange={(e) => setWhatsapp(e.target.value)}
-          className="h-8 text-sm"
-        />
-        <Input
-          placeholder="Instagram (opcional)"
-          value={instagram}
-          onChange={(e) => setInstagram(e.target.value)}
-          className="h-8 text-sm"
-        />
-      </div>
+      <Input placeholder="Nome do serviço" value={name} onChange={(e) => setName(e.target.value)} />
+      <Input placeholder="WhatsApp (opcional)" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
+      <Input placeholder="Instagram (opcional)" value={instagram} onChange={(e) => setInstagram(e.target.value)} />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={createMutation.isPending}>
+        <Button type="submit" disabled={createMutation.isPending}>
           {createMutation.isPending ? "Criando..." : "Criar serviço"}
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={onDone}>
+        <Button type="button" variant="outline" onClick={onDone}>
           Cancelar
         </Button>
       </div>
@@ -103,6 +94,8 @@ function approvalBadge(status: ManagedUser["approvalStatus"]) {
   if (status === "rejected") return <Badge variant="destructive">Recusado</Badge>;
   return null;
 }
+
+type RoleAction = { id: string; name: string; from: Role; to: Role };
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
@@ -138,8 +131,11 @@ export default function UserManagement() {
 
   const [resetSentFor, setResetSentFor] = useState<ManagedUser | null>(null);
   const [emailChangedFor, setEmailChangedFor] = useState<{ name: string; email: string } | null>(null);
-  const [serviceFormUserId, setServiceFormUserId] = useState<string | null>(null);
-  const [editingEmailUserId, setEditingEmailUserId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [actionsUser, setActionsUser] = useState<ManagedUser | null>(null);
+  const [roleConfirm, setRoleConfirm] = useState<RoleAction | null>(null);
+  const [serviceUser, setServiceUser] = useState<ManagedUser | null>(null);
+  const [emailUser, setEmailUser] = useState<ManagedUser | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
 
@@ -184,6 +180,7 @@ export default function UserManagement() {
       setLinkApartment(false);
       setTower(null);
       setApartmentId(null);
+      setCreateOpen(false);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Erro ao criar síndico."),
@@ -194,6 +191,8 @@ export default function UserManagement() {
     mutationFn: ({ id, role }: { id: string; role: Role }) => usersService.changeUserRole(id, role),
     onSuccess: () => {
       setRoleError(null);
+      setRoleConfirm(null);
+      setActionsUser(null);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (err) => setRoleError(err instanceof Error ? err.message : "Erro ao mudar o cargo."),
@@ -201,17 +200,21 @@ export default function UserManagement() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: (target: ManagedUser) => usersService.resetUserPassword(target.id),
-    onSuccess: (_result, target) => setResetSentFor(target),
+    onSuccess: (_result, target) => {
+      setResetSentFor(target);
+      setActionsUser(null);
+    },
   });
 
   const changeEmailMutation = useMutation({
     mutationFn: ({ id, email }: { id: string; email: string }) => usersService.changeUserEmail(id, email),
     onSuccess: (result, vars) => {
-      const target = data?.users.find((u) => u.id === vars.id);
+      const target = emailUser ?? data?.users.find((u) => u.id === vars.id);
       setEmailChangedFor({ name: target?.name ?? "Morador", email: result.user.email });
-      setEditingEmailUserId(null);
+      setEmailUser(null);
       setEmailDraft("");
       setEmailError(null);
+      setActionsUser(null);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (err) => setEmailError(err instanceof Error ? err.message : "Erro ao alterar e-mail."),
@@ -251,24 +254,44 @@ export default function UserManagement() {
     setApartmentFilter(apartmentDraft.trim());
   }
 
-  function startEmailEdit(user: ManagedUser) {
-    setEditingEmailUserId(user.id);
+  function requestRoleChange(user: ManagedUser, to: Role) {
+    setActionsUser(null);
+    setRoleConfirm({ id: user.id, name: user.name, from: user.role, to });
+  }
+
+  function openEmailEdit(user: ManagedUser) {
+    setActionsUser(null);
+    setEmailUser(user);
     setEmailDraft(user.email);
     setEmailError(null);
   }
 
-  function submitEmailEdit(user: ManagedUser) {
+  function submitEmailEdit() {
+    if (!emailUser) return;
     const next = emailDraft.trim().toLowerCase();
     if (!next || !next.includes("@")) {
       setEmailError("Informe um e-mail válido.");
       return;
     }
-    changeEmailMutation.mutate({ id: user.id, email: next });
+    changeEmailMutation.mutate({ id: emailUser.id, email: next });
+  }
+
+  function roleOptionsFor(user: ManagedUser): Role[] {
+    if (!isAdmin || user.id === currentUser?.id) return [];
+    return (["admin", "sindico", "morador"] as Role[]).filter((r) => r !== user.role);
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
-      <h1 className="text-2xl font-semibold">Usuários</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Usuários</h1>
+        {isAdmin && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Criar síndico
+          </Button>
+        )}
+      </div>
 
       {resetSentFor && (
         <Card className="border-brand-gold/50 bg-brand-gold/10">
@@ -327,127 +350,6 @@ export default function UserManagement() {
                 </div>
               </div>
             ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {isAdmin && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Criar conta de síndico</CardTitle>
-            <CardDescription>Só o administrador pode criar contas de síndico e trocar cargos.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome</Label>
-                  <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="password">Senha</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    minLength={8}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={linkApartment}
-                  onChange={(e) => setLinkApartment(e.target.checked)}
-                />
-                Este síndico também mora no condomínio (vincular a um apartamento)
-              </label>
-
-              {linkApartment && (
-                <div className="space-y-4 rounded-md border p-3">
-                  <div className="space-y-2">
-                    <Label>Torre</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {TOWERS.map((t) => (
-                        <Button
-                          key={t}
-                          type="button"
-                          variant={tower === t ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setTower(t)}
-                        >
-                          Torre {t}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {tower !== null && (
-                    <div className="space-y-2">
-                      <Label>Andar</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {floors.map((f) => (
-                          <Button
-                            key={f}
-                            type="button"
-                            variant={floor === f ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => {
-                              setFloor(f);
-                              setApartmentId(null);
-                            }}
-                          >
-                            {floorLabel(f)}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {floor !== null && (
-                    <div className="space-y-2">
-                      <Label>Apartamento</Label>
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-                        {unitsOnFloor.map((apt) => (
-                          <button
-                            key={apt.id}
-                            type="button"
-                            disabled={!apt.available}
-                            onClick={() => setApartmentId(apt.id)}
-                            className={cn(
-                              "rounded-md border px-2 py-2 text-sm font-medium transition-colors",
-                              !apt.available && "cursor-not-allowed bg-muted text-muted-foreground opacity-60",
-                              apt.available && apartmentId !== apt.id && "hover:bg-accent",
-                              apartmentId === apt.id && "border-primary bg-primary text-primary-foreground",
-                            )}
-                          >
-                            {apt.code}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Criando..." : "Criar síndico"}
-              </Button>
-            </form>
           </CardContent>
         </Card>
       )}
@@ -536,10 +438,9 @@ export default function UserManagement() {
           {isLoading && <p className="text-muted-foreground">Carregando...</p>}
           {isError && <QueryError onRetry={() => refetch()} />}
           {roleError && <p className="text-sm text-destructive">{roleError}</p>}
-          {emailError && <p className="text-sm text-destructive">{emailError}</p>}
 
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 font-medium">Nome</th>
@@ -553,8 +454,12 @@ export default function UserManagement() {
               <tbody>
                 {data?.users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
+                  const hasActions =
+                    !isSelf &&
+                    (isAdmin ||
+                      (u.role !== "admin" && (isAdmin || u.role === "morador")));
                   return (
-                    <tr key={u.id} className="border-b align-top last:border-0">
+                    <tr key={u.id} className="border-b last:border-0">
                       <td className="px-3 py-3">
                         <div className="font-medium">{u.name}</div>
                         {u.householdRole === "family" && (
@@ -564,131 +469,24 @@ export default function UserManagement() {
                         )}
                         {approvalBadge(u.approvalStatus)}
                       </td>
-                      <td className="px-3 py-3">
-                        {editingEmailUserId === u.id ? (
-                          <div className="space-y-2">
-                            <Input
-                              type="email"
-                              value={emailDraft}
-                              onChange={(e) => setEmailDraft(e.target.value)}
-                              className="h-8"
-                            />
-                            <div className="flex flex-wrap gap-1">
-                              <Button
-                                size="sm"
-                                disabled={changeEmailMutation.isPending}
-                                onClick={() => submitEmailEdit(u)}
-                              >
-                                Salvar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingEmailUserId(null);
-                                  setEmailError(null);
-                                }}
-                              >
-                                Cancelar
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">{u.email}</span>
-                        )}
-                      </td>
+                      <td className="px-3 py-3 text-muted-foreground">{u.email}</td>
                       <td className="px-3 py-3 tabular-nums">{u.tower ?? "—"}</td>
                       <td className="px-3 py-3">{u.apartmentCode ?? "—"}</td>
                       <td className="px-3 py-3">{roleBadge(u.role)}</td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {!isSelf && isAdmin && u.role === "admin" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={roleMutation.isPending}
-                                onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
-                              >
-                                → Síndico
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={roleMutation.isPending}
-                                onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
-                              >
-                                → Morador
-                              </Button>
-                            </>
-                          )}
-                          {!isSelf && isAdmin && u.role === "sindico" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={roleMutation.isPending}
-                                onClick={() => roleMutation.mutate({ id: u.id, role: "morador" })}
-                              >
-                                → Morador
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={roleMutation.isPending}
-                                onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
-                              >
-                                → Admin
-                              </Button>
-                            </>
-                          )}
-                          {!isSelf && isAdmin && u.role === "morador" && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={roleMutation.isPending}
-                                onClick={() => roleMutation.mutate({ id: u.id, role: "sindico" })}
-                              >
-                                → Síndico
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={roleMutation.isPending}
-                                onClick={() => roleMutation.mutate({ id: u.id, role: "admin" })}
-                              >
-                                → Admin
-                              </Button>
-                            </>
-                          )}
-                          {!isSelf && isAdmin && u.role !== "admin" && (
-                            <Button variant="outline" size="sm" onClick={() => startEmailEdit(u)}>
-                              Alterar e-mail
-                            </Button>
-                          )}
-                          {!isSelf && u.role !== "admin" && (isAdmin || u.role === "morador") && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={resetPasswordMutation.isPending}
-                              onClick={() => resetPasswordMutation.mutate(u)}
-                            >
-                              Resetar senha
-                            </Button>
-                          )}
-                          {!isSelf && isAdmin && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setServiceFormUserId(serviceFormUserId === u.id ? null : u.id)}
-                            >
-                              Criar serviço
-                            </Button>
-                          )}
-                        </div>
-                        {serviceFormUserId === u.id && (
-                          <CreateServiceForUserForm user={u} onDone={() => setServiceFormUserId(null)} />
+                        {hasActions ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            aria-label={`Ações de ${u.name}`}
+                            onClick={() => setActionsUser(u)}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only sm:not-sr-only sm:inline">Ações</span>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                     </tr>
@@ -726,6 +524,243 @@ export default function UserManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Create síndico — padrão CRUD: botão abre sheet */}
+      <BottomSheet
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Criar conta de síndico"
+        description="Só o administrador pode criar contas de síndico."
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Nome</Label>
+            <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">E-mail</Label>
+            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Senha</Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={linkApartment}
+              onChange={(e) => setLinkApartment(e.target.checked)}
+            />
+            Este síndico também mora no condomínio (vincular a um apartamento)
+          </label>
+
+          {linkApartment && (
+            <div className="space-y-4 rounded-md border p-3">
+              <div className="space-y-2">
+                <Label>Torre</Label>
+                <div className="flex flex-wrap gap-2">
+                  {TOWERS.map((t) => (
+                    <Button
+                      key={t}
+                      type="button"
+                      variant={tower === t ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTower(t)}
+                    >
+                      Torre {t}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {tower !== null && (
+                <div className="space-y-2">
+                  <Label>Andar</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {floors.map((f) => (
+                      <Button
+                        key={f}
+                        type="button"
+                        variant={floor === f ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          setFloor(f);
+                          setApartmentId(null);
+                        }}
+                      >
+                        {floorLabel(f)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {floor !== null && (
+                <div className="space-y-2">
+                  <Label>Apartamento</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {unitsOnFloor.map((apt) => (
+                      <button
+                        key={apt.id}
+                        type="button"
+                        disabled={!apt.available}
+                        onClick={() => setApartmentId(apt.id)}
+                        className={cn(
+                          "rounded-md border px-2 py-2 text-sm font-medium transition-colors",
+                          !apt.available && "cursor-not-allowed bg-muted text-muted-foreground opacity-60",
+                          apt.available && apartmentId !== apt.id && "hover:bg-accent",
+                          apartmentId === apt.id && "border-primary bg-primary text-primary-foreground",
+                        )}
+                      >
+                        {apt.code}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+            {createMutation.isPending ? "Criando..." : "Criar síndico"}
+          </Button>
+        </form>
+      </BottomSheet>
+
+      {/* Menu de ações da linha */}
+      <BottomSheet
+        open={!!actionsUser}
+        onClose={() => setActionsUser(null)}
+        title={actionsUser ? `Ações · ${actionsUser.name}` : "Ações"}
+        description={
+          actionsUser
+            ? `${actionsUser.email}${actionsUser.tower ? ` · Torre ${actionsUser.tower} - ${actionsUser.apartmentCode}` : ""}`
+            : undefined
+        }
+      >
+        {actionsUser && (
+          <div className="space-y-1">
+            {roleOptionsFor(actionsUser).map((to) => (
+              <button
+                key={to}
+                type="button"
+                className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
+                onClick={() => requestRoleChange(actionsUser, to)}
+              >
+                Alterar para {ROLE_LABEL[to]}
+              </button>
+            ))}
+            {isAdmin && actionsUser.role !== "admin" && (
+              <button
+                type="button"
+                className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
+                onClick={() => openEmailEdit(actionsUser)}
+              >
+                Alterar e-mail
+              </button>
+            )}
+            {actionsUser.role !== "admin" && (isAdmin || actionsUser.role === "morador") && (
+              <button
+                type="button"
+                className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
+                disabled={resetPasswordMutation.isPending}
+                onClick={() => resetPasswordMutation.mutate(actionsUser)}
+              >
+                Resetar senha
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
+                onClick={() => {
+                  setServiceUser(actionsUser);
+                  setActionsUser(null);
+                }}
+              >
+                Criar serviço
+              </button>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+
+      {/* Confirmação de promoção/rebaixamento */}
+      <BottomSheet
+        open={!!roleConfirm}
+        onClose={() => setRoleConfirm(null)}
+        title="Confirmar alteração de cargo"
+      >
+        {roleConfirm && (
+          <div className="space-y-4">
+            <p className="text-sm">
+              Alterar <strong>{roleConfirm.name}</strong> de{" "}
+              <strong>{ROLE_LABEL[roleConfirm.from]}</strong> para{" "}
+              <strong>{ROLE_LABEL[roleConfirm.to]}</strong>?
+            </p>
+            {roleConfirm.to === "admin" && (
+              <p className="text-sm text-muted-foreground">
+                Admins precisam de 2FA e têm acesso total ao condomínio.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                disabled={roleMutation.isPending}
+                onClick={() => roleMutation.mutate({ id: roleConfirm.id, role: roleConfirm.to })}
+              >
+                {roleMutation.isPending ? "Salvando..." : "Confirmar"}
+              </Button>
+              <Button className="flex-1" variant="outline" onClick={() => setRoleConfirm(null)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={!!emailUser}
+        onClose={() => setEmailUser(null)}
+        title="Alterar e-mail"
+        description={emailUser?.name}
+      >
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="newEmail">Novo e-mail</Label>
+            <Input
+              id="newEmail"
+              type="email"
+              value={emailDraft}
+              onChange={(e) => setEmailDraft(e.target.value)}
+            />
+          </div>
+          {emailError && <p className="text-sm text-destructive">{emailError}</p>}
+          <Button className="w-full" disabled={changeEmailMutation.isPending} onClick={submitEmailEdit}>
+            {changeEmailMutation.isPending ? "Salvando..." : "Salvar e-mail"}
+          </Button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={!!serviceUser}
+        onClose={() => setServiceUser(null)}
+        title="Criar serviço"
+        description={serviceUser?.name}
+      >
+        {serviceUser && (
+          <CreateServiceForUserForm user={serviceUser} onDone={() => setServiceUser(null)} />
+        )}
+      </BottomSheet>
     </div>
   );
 }
