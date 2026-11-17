@@ -79,3 +79,44 @@ export function emailChangedEmail({ name, oldEmail, newEmail }) {
     }),
   };
 }
+
+export function registrationApprovedEmail({ name }) {
+  return {
+    subject: "Cadastro aprovado — Fantasy 2 Hub",
+    html: layout({
+      heading: `Olá, ${name}`,
+      bodyHtml:
+        "A administração aprovou o seu cadastro no Fantasy 2 Hub. Você já pode entrar e usar " +
+        "pautas, serviços e o restante da comunidade.",
+      ctaText: "Entrar no Fantasy 2 Hub",
+      ctaUrl: frontUrl("/login"),
+    }),
+  };
+}
+
+export function registrationRejectedEmail({ name, reason }) {
+  const reasonBlock = reason
+    ? `<br/><br/><strong>Motivo:</strong> ${escapeHtml(reason)}`
+    : "";
+  return {
+    subject: "Cadastro não aprovado — Fantasy 2 Hub",
+    html: layout({
+      heading: `Olá, ${name}`,
+      bodyHtml:
+        "A administração não aprovou o seu pedido de acesso ao Fantasy 2 Hub." +
+        reasonBlock +
+        "<br/><br/>Você pode se cadastrar de novo com o mesmo e-mail, se quiser tentar outra vez " +
+        "(por exemplo, após corrigir os dados ou falar com a administração).",
+      ctaText: "Tentar cadastrar de novo",
+      ctaUrl: frontUrl("/register"),
+    }),
+  };
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}

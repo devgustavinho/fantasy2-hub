@@ -9,7 +9,12 @@ import { createPasswordResetToken } from "../auth/passwordReset.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyUser } from "../notifications/service.js";
 import { sendEmail } from "../../lib/email.js";
-import { emailChangedEmail, passwordResetEmail } from "../../lib/emailTemplates.js";
+import {
+  emailChangedEmail,
+  passwordResetEmail,
+  registrationApprovedEmail,
+  registrationRejectedEmail,
+} from "../../lib/emailTemplates.js";
 
 const createSindicoSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -24,6 +29,10 @@ const changeRoleSchema = z.object({
 
 const changeEmailSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
+});
+
+const rejectSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
 });
 
 const listUsersPage = sqlite.prepare(`
@@ -86,10 +95,12 @@ const insertUser = sqlite.prepare(`
 const updateRole = sqlite.prepare("UPDATE users SET role = ? WHERE id = ?");
 // Só aplica se ainda estiver pendente — evita corrida entre dois admins.
 const approveUser = sqlite.prepare(
-  "UPDATE users SET approval_status = 'approved' WHERE id = ? AND approval_status = 'pending'",
+  "UPDATE users SET approval_status = 'approved', rejection_reason = NULL WHERE id = ? AND approval_status = 'pending'",
 );
 const rejectUser = sqlite.prepare(
-  "UPDATE users SET approval_status = 'rejected', apartment_id = NULL WHERE id = ? AND approval_status = 'pending'",
+  `UPDATE users
+   SET approval_status = 'rejected', apartment_id = NULL, rejection_reason = @rejection_reason
+   WHERE id = @id AND approval_status = 'pending'`,
 );
 
 function alreadyResolvedResponse(res, target) {
@@ -244,6 +255,7 @@ export function usersRoutes() {
       topicId: null,
       message: "Seu cadastro foi aprovado! Você já pode acessar o Fantasy 2 Hub.",
     });
+    sendEmail({ to: target.email, ...registrationApprovedEmail({ name: target.name }) });
     res.status(204).end();
   });
 
@@ -254,7 +266,13 @@ export function usersRoutes() {
       return alreadyResolvedResponse(res, target);
     }
 
-    const result = rejectUser.run(target.id);
+    const parsed = rejectSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Motivo inválido (máx. 500 caracteres)." });
+    }
+    const reason = parsed.data.reason?.trim() || null;
+
+    const result = rejectUser.run({ id: target.id, rejection_reason: reason });
     if (result.changes === 0) {
       const fresh = getUserById.get(target.id);
       return alreadyResolvedResponse(res, fresh ?? target);
@@ -266,7 +284,11 @@ export function usersRoutes() {
       action: "users.reject",
       entityType: "user",
       entityId: target.id,
-      details: { freedApartmentId: target.apartment_id },
+      details: { freedApartmentId: target.apartment_id, reason },
+    });
+    sendEmail({
+      to: target.email,
+      ...registrationRejectedEmail({ name: target.name, reason }),
     });
     res.status(204).end();
   });

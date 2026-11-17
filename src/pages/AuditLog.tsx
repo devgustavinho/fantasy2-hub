@@ -9,6 +9,7 @@ import * as auditService from "@/services/audit";
 
 const ACTION_LABELS: Record<string, string> = {
   "auth.register": "Cadastro",
+  "auth.reregister": "Novo pedido após recusa",
   "auth.login": "Login",
   "auth.2fa_enabled": "2FA ativado",
   "users.create_sindico": "Síndico criado",

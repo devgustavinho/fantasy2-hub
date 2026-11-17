@@ -50,6 +50,20 @@ const insertUser = sqlite.prepare(`
   INSERT INTO users (id, apartment_id, name, email, password_hash, role, approval_status)
   VALUES (@id, @apartment_id, @name, @email, @password_hash, 'morador', 'pending')
 `);
+// Cadastro rejeitado libera o e-mail: o mesmo endereço pode pedir acesso de novo,
+// reaproveitando a linha (status volta pra pending) em vez de esbarrar no UNIQUE.
+const reregisterRejectedUser = sqlite.prepare(`
+  UPDATE users
+  SET apartment_id = @apartment_id,
+      name = @name,
+      password_hash = @password_hash,
+      role = 'morador',
+      household_role = 'owner',
+      approval_status = 'pending',
+      rejection_reason = NULL,
+      invited_by = NULL
+  WHERE id = @id AND approval_status = 'rejected'
+`);
 const updateMe = sqlite.prepare(
   "UPDATE users SET whatsapp = @whatsapp, whatsapp_visible = @whatsapp_visible WHERE id = @id",
 );
@@ -81,21 +95,37 @@ export function authRoutes() {
     if (getApartmentOwner.get(apartmentId)) {
       return res.status(409).json({ message: "Este apartamento já está cadastrado." });
     }
-    if (getUserByEmail.get(email)) {
+
+    const existing = getUserByEmail.get(email);
+    if (existing && existing.approval_status !== "rejected") {
       return res.status(409).json({ message: "Já existe uma conta com este e-mail." });
     }
 
     const passwordHash = await hashPassword(password);
-    const userId = randomUUID();
+    let userId;
 
     try {
-      insertUser.run({
-        id: userId,
-        apartment_id: apartmentId,
-        name,
-        email,
-        password_hash: passwordHash,
-      });
+      if (existing?.approval_status === "rejected") {
+        const updated = reregisterRejectedUser.run({
+          id: existing.id,
+          apartment_id: apartmentId,
+          name,
+          password_hash: passwordHash,
+        });
+        if (updated.changes === 0) {
+          return res.status(409).json({ message: "Já existe uma conta com este e-mail." });
+        }
+        userId = existing.id;
+      } else {
+        userId = randomUUID();
+        insertUser.run({
+          id: userId,
+          apartment_id: apartmentId,
+          name,
+          email,
+          password_hash: passwordHash,
+        });
+      }
     } catch (err) {
       if (String(err.message).includes("UNIQUE")) {
         return res.status(409).json({ message: "Apartamento ou e-mail já cadastrado." });
@@ -106,7 +136,7 @@ export function authRoutes() {
     recordAudit({
       actorUserId: userId,
       actorName: name,
-      action: "auth.register",
+      action: existing?.approval_status === "rejected" ? "auth.reregister" : "auth.register",
       entityType: "user",
       entityId: userId,
       details: { email, apartmentId },
