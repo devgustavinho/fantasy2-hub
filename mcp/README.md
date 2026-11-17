@@ -42,6 +42,11 @@ node src/index.js
 # fica à espera de JSON-RPC no stdin (cliente MCP)
 ```
 
+## No app (recomendado)
+
+Em produção ([fantasy2-hub.pages.dev](https://fantasy2-hub.pages.dev)) → **Perfil → Conectar MCP**:
+snippet Cursor pronto, URLs de API/app, dicas de caminho e botão para copiar o JWT da sessão.
+
 ## Cursor / Claude Desktop
 
 Exemplo de entrada em MCP settings (stdio):
