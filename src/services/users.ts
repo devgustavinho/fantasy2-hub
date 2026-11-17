@@ -43,4 +43,5 @@ export const changeUserEmail = (id: string, email: string) =>
 export const resetUserPassword = (id: string) => api.patch<void>(`/users/${id}/reset-password`);
 
 export const approveUser = (id: string) => api.patch<void>(`/users/${id}/approve`);
-export const rejectUser = (id: string) => api.patch<void>(`/users/${id}/reject`);
+export const rejectUser = (id: string, data: { reason?: string } = {}) =>
+  api.patch<void>(`/users/${id}/reject`, data);

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { QueryError } from "@/components/QueryError";
 import { cn } from "@/lib/utils";
@@ -132,6 +133,8 @@ export default function UserManagement() {
   const [resetSentFor, setResetSentFor] = useState<ManagedUser | null>(null);
   const [emailChangedFor, setEmailChangedFor] = useState<{ name: string; email: string } | null>(null);
   const [approvalConflict, setApprovalConflict] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<ManagedUser | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [actionsUser, setActionsUser] = useState<ManagedUser | null>(null);
   const [roleConfirm, setRoleConfirm] = useState<RoleAction | null>(null);
@@ -236,14 +239,18 @@ export default function UserManagement() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (id: string) => usersService.rejectUser(id),
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      usersService.rejectUser(id, reason ? { reason } : {}),
     onSuccess: () => {
       setApprovalConflict(null);
+      setRejectTarget(null);
+      setRejectReason("");
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["users-pending"] });
     },
     onError: (err) => {
       setApprovalConflict(err instanceof Error ? err.message : "Não foi possível recusar o cadastro.");
+      setRejectTarget(null);
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["users-pending"] });
     },
@@ -367,7 +374,10 @@ export default function UserManagement() {
                     size="sm"
                     variant="outline"
                     disabled={rejectMutation.isPending}
-                    onClick={() => rejectMutation.mutate(u.id)}
+                    onClick={() => {
+                      setRejectTarget(u);
+                      setRejectReason("");
+                    }}
                   >
                     Recusar
                   </Button>
@@ -745,6 +755,61 @@ export default function UserManagement() {
                 {roleMutation.isPending ? "Salvando..." : "Confirmar"}
               </Button>
               <Button className="flex-1" variant="outline" onClick={() => setRoleConfirm(null)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={!!rejectTarget}
+        onClose={() => {
+          setRejectTarget(null);
+          setRejectReason("");
+        }}
+        title="Recusar cadastro"
+        description={rejectTarget ? `${rejectTarget.name} · ${rejectTarget.email}` : undefined}
+      >
+        {rejectTarget && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              A pessoa recebe um e-mail avisando a recusa. O motivo é opcional — se preencher,
+              entra no e-mail. Depois ela pode se cadastrar de novo com o mesmo e-mail.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="rejectReason">Motivo (opcional)</Label>
+              <Textarea
+                id="rejectReason"
+                rows={3}
+                maxLength={500}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Ex.: apartamento já tem outro responsável cadastrado"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                variant="destructive"
+                disabled={rejectMutation.isPending}
+                onClick={() =>
+                  rejectMutation.mutate({
+                    id: rejectTarget.id,
+                    reason: rejectReason.trim() || undefined,
+                  })
+                }
+              >
+                {rejectMutation.isPending ? "Recusando..." : "Confirmar recusa"}
+              </Button>
+              <Button
+                className="flex-1"
+                variant="outline"
+                onClick={() => {
+                  setRejectTarget(null);
+                  setRejectReason("");
+                }}
+              >
                 Cancelar
               </Button>
             </div>
