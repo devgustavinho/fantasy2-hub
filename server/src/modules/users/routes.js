@@ -56,12 +56,27 @@ const countUsers = sqlite.prepare(`
     AND (@approvalStatus IS NULL OR u.approval_status = @approvalStatus)
 `);
 
-const getUserById = sqlite.prepare("SELECT id, name, email, role, apartment_id FROM users WHERE id = ?");
+const getUserById = sqlite.prepare(
+  "SELECT id, name, email, role, apartment_id, approval_status FROM users WHERE id = ?",
+);
 const countAdmins = sqlite.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT id FROM users WHERE email = ?");
 const updateEmail = sqlite.prepare("UPDATE users SET email = ? WHERE id = ?");
+const getAdminNameById = sqlite.prepare("SELECT name FROM users WHERE id = ?");
+
+// Quem tomou a última decisão de aprovação/recusa (nome gravado no audit no momento da ação;
+// se o admin ainda existir, preferimos o nome atual da conta).
+const getLastApprovalDecision = sqlite.prepare(`
+  SELECT actor_user_id AS actorUserId, actor_name AS actorName, action, created_at AS createdAt
+  FROM audit_log
+  WHERE entity_type = 'user'
+    AND entity_id = @entityId
+    AND action = @action
+  ORDER BY created_at DESC
+  LIMIT 1
+`);
 
 const insertUser = sqlite.prepare(`
   INSERT INTO users (id, apartment_id, name, email, password_hash, role, approval_status)
@@ -69,10 +84,36 @@ const insertUser = sqlite.prepare(`
 `);
 
 const updateRole = sqlite.prepare("UPDATE users SET role = ? WHERE id = ?");
-const approveUser = sqlite.prepare("UPDATE users SET approval_status = 'approved' WHERE id = ?");
-const rejectUser = sqlite.prepare(
-  "UPDATE users SET approval_status = 'rejected', apartment_id = NULL WHERE id = ?",
+// Só aplica se ainda estiver pendente — evita corrida entre dois admins.
+const approveUser = sqlite.prepare(
+  "UPDATE users SET approval_status = 'approved' WHERE id = ? AND approval_status = 'pending'",
 );
+const rejectUser = sqlite.prepare(
+  "UPDATE users SET approval_status = 'rejected', apartment_id = NULL WHERE id = ? AND approval_status = 'pending'",
+);
+
+function alreadyResolvedResponse(res, target) {
+  const decision = target.approval_status === "rejected" ? "rejected" : "approved";
+  const verb = decision === "rejected" ? "rejeitado" : "aprovado";
+  const auditAction = decision === "rejected" ? "users.reject" : "users.approve";
+  const entry = getLastApprovalDecision.get({ entityId: target.id, action: auditAction });
+
+  let decidedByName = entry?.actorName || null;
+  let decidedById = entry?.actorUserId || null;
+  if (decidedById) {
+    const current = getAdminNameById.get(decidedById);
+    if (current?.name) decidedByName = current.name;
+  }
+  if (!decidedByName) decidedByName = "outro administrador";
+
+  return res.status(409).json({
+    code: "already_resolved",
+    message: `O usuário ${target.name} foi ${verb} pelo administrador ${decidedByName}.`,
+    user: { id: target.id, name: target.name },
+    decision,
+    decidedBy: { id: decidedById, name: decidedByName },
+  });
+}
 
 export function usersRoutes() {
   const router = Router();
@@ -180,8 +221,17 @@ export function usersRoutes() {
   router.patch("/:id/approve", requireAdmin, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
+    if (target.approval_status !== "pending") {
+      return alreadyResolvedResponse(res, target);
+    }
 
-    approveUser.run(target.id);
+    const result = approveUser.run(target.id);
+    if (result.changes === 0) {
+      // Outro admin ganhou a corrida entre o SELECT e o UPDATE.
+      const fresh = getUserById.get(target.id);
+      return alreadyResolvedResponse(res, fresh ?? target);
+    }
+
     recordAudit({
       actorUserId: req.user.id,
       actorName: req.user.name,
@@ -200,8 +250,16 @@ export function usersRoutes() {
   router.patch("/:id/reject", requireAdmin, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
+    if (target.approval_status !== "pending") {
+      return alreadyResolvedResponse(res, target);
+    }
 
-    rejectUser.run(target.id);
+    const result = rejectUser.run(target.id);
+    if (result.changes === 0) {
+      const fresh = getUserById.get(target.id);
+      return alreadyResolvedResponse(res, fresh ?? target);
+    }
+
     recordAudit({
       actorUserId: req.user.id,
       actorName: req.user.name,

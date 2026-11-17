@@ -131,6 +131,7 @@ export default function UserManagement() {
 
   const [resetSentFor, setResetSentFor] = useState<ManagedUser | null>(null);
   const [emailChangedFor, setEmailChangedFor] = useState<{ name: string; email: string } | null>(null);
+  const [approvalConflict, setApprovalConflict] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [actionsUser, setActionsUser] = useState<ManagedUser | null>(null);
   const [roleConfirm, setRoleConfirm] = useState<RoleAction | null>(null);
@@ -223,6 +224,12 @@ export default function UserManagement() {
   const approveMutation = useMutation({
     mutationFn: (id: string) => usersService.approveUser(id),
     onSuccess: () => {
+      setApprovalConflict(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users-pending"] });
+    },
+    onError: (err) => {
+      setApprovalConflict(err instanceof Error ? err.message : "Não foi possível aprovar o cadastro.");
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["users-pending"] });
     },
@@ -231,6 +238,12 @@ export default function UserManagement() {
   const rejectMutation = useMutation({
     mutationFn: (id: string) => usersService.rejectUser(id),
     onSuccess: () => {
+      setApprovalConflict(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users-pending"] });
+    },
+    onError: (err) => {
+      setApprovalConflict(err instanceof Error ? err.message : "Não foi possível recusar o cadastro.");
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["users-pending"] });
     },
@@ -315,6 +328,17 @@ export default function UserManagement() {
               <strong>{emailChangedFor.email}</strong>. Aviso enviado para o endereço antigo e o novo.
             </p>
             <Button size="sm" variant="outline" onClick={() => setEmailChangedFor(null)}>
+              Fechar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {approvalConflict && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="space-y-2 pt-6">
+            <p className="text-sm">{approvalConflict}</p>
+            <Button size="sm" variant="outline" onClick={() => setApprovalConflict(null)}>
               Fechar
             </Button>
           </CardContent>
