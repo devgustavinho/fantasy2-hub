@@ -15,6 +15,8 @@ const ACTION_LABELS: Record<string, string> = {
   "users.create_sindico": "Síndico criado",
   "users.role_change": "Cargo alterado",
   "users.reset_password": "Senha resetada",
+  "auth.forgot_password": "Pedido de redefinição de senha",
+  "auth.password_reset_complete": "Senha redefinida",
   "users.email_change": "E-mail alterado",
   "users.approve": "Cadastro aprovado",
   "users.reject": "Cadastro recusado",

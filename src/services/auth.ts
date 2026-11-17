@@ -32,5 +32,8 @@ export const getFamilyMember = () => api.get<{ familyMember: FamilyMember | null
 export const inviteFamilyMember = (data: { name: string; email: string; password: string }) =>
   api.post<{ familyMember: FamilyMember }>("/auth/family-member", data);
 
+export const requestPasswordReset = (email: string) =>
+  api.post<void>("/auth/forgot-password", { email });
+
 export const confirmPasswordReset = (data: { token: string; password: string }) =>
   api.post<void>("/auth/reset-password", data);

@@ -146,6 +146,11 @@ export default function Login() {
                   </form>
 
                   <p className="mt-4 text-center text-sm text-muted-foreground">
+                    <Link to="/esqueci-senha" className="font-medium text-primary underline">
+                      Esqueci minha senha
+                    </Link>
+                  </p>
+                  <p className="mt-2 text-center text-sm text-muted-foreground">
                     Ainda não tem conta?{" "}
                     <Link to="/register" className="font-medium text-primary underline">
                       Cadastre seu apartamento
@@ -207,6 +212,11 @@ export default function Login() {
                     <Button type="submit" className="w-full" disabled={loading}>
                       {loading ? "Entrando..." : "Entrar"}
                     </Button>
+                    <p className="text-center text-sm">
+                      <Link to="/esqueci-senha" className="font-medium text-primary underline">
+                        Esqueci minha senha
+                      </Link>
+                    </p>
                     <button
                       type="button"
                       className="w-full text-center text-xs text-muted-foreground underline"

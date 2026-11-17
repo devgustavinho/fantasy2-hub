@@ -48,13 +48,17 @@ function layout({ heading, bodyHtml, ctaText, ctaUrl }) {
 
 const frontUrl = (path = "") => `${env.CORS_ORIGIN}${path}`;
 
-export function passwordResetEmail({ name, resetUrl }) {
+export function passwordResetEmail({ name, resetUrl, requestedBy = "admin" }) {
+  const intro =
+    requestedBy === "self"
+      ? "Recebemos um pedido pra redefinir a senha da sua conta no Fantasy 2 Hub. Clique no botão abaixo "
+      : "A administração do Fantasy 2 Hub pediu a redefinição da sua senha. Clique no botão abaixo ";
   return {
     subject: "Redefina sua senha",
     html: layout({
       heading: `Olá, ${name}`,
       bodyHtml:
-        "A administração do Fantasy 2 Hub pediu a redefinição da sua senha. Clique no botão abaixo " +
+        intro +
         "pra escolher uma senha nova — o link vale por 1 hora e só funciona uma vez." +
         "<br/><br/>Se não foi você quem pediu essa redefinição, ignore este e-mail (sua senha atual continua valendo).",
       ctaText: "Redefinir minha senha",

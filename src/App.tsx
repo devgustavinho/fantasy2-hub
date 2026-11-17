@@ -7,6 +7,7 @@ import { OnboardingBanner } from "@/components/OnboardingBanner";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
+import ForgotPassword from "@/pages/ForgotPassword";
 import Home from "@/pages/Home";
 import TopicsList from "@/pages/TopicsList";
 import TopicsHistory from "@/pages/TopicsHistory";
@@ -50,6 +51,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/esqueci-senha" element={<ForgotPassword />} />
             <Route path="/redefinir-senha" element={<ResetPassword />} />
             <Route path="/boas-vindas" element={<Welcome />} />
 

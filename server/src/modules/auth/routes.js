@@ -6,9 +6,12 @@ import { hashPassword, verifyPassword } from "../../auth/password.js";
 import { requireAuth, requireApproved } from "../../auth/guards.js";
 import { toPublicUser } from "../../auth/publicUser.js";
 import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
-import { consumePasswordResetToken } from "./passwordReset.js";
+import { createPasswordResetToken, consumePasswordResetToken } from "./passwordReset.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyAdmins } from "../notifications/service.js";
+import { env } from "../../env.js";
+import { sendEmail } from "../../lib/email.js";
+import { passwordResetEmail } from "../../lib/emailTemplates.js";
 
 const registerSchema = z.object({
   apartmentId: z.string().min(1),
@@ -41,6 +44,10 @@ const familyMemberSchema = z.object({
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(8).max(200),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
 });
 
 const getApartment = sqlite.prepare("SELECT id, tower, code FROM apartments WHERE id = ?");
@@ -200,11 +207,39 @@ export function authRoutes() {
     res.status(204).end();
   });
 
-  // Completa o reset de senha assistido (PATCH /users/:id/reset-password gera o token e manda
-  // o link por e-mail) — pública porque quem chega aqui ainda não tem sessão. Token é de uso
-  // único: `consumePasswordResetToken` já marca como usado antes de devolver, então uma segunda
-  // tentativa com o mesmo link (replay, aba duplicada) cai no mesmo erro de "inválido ou
-  // expirado" de um link vencido — não dá pra distinguir os dois casos por fora, de propósito.
+  // Pedido público de "esqueci minha senha". Sempre responde 204 (não vaza se o e-mail existe).
+  // Só dispara e-mail pra contas aprovadas — pendente/rejeitada não recebe link.
+  router.post("/forgot-password", (req, res) => {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Informe um e-mail válido." });
+    }
+
+    const user = getUserByEmail.get(parsed.data.email);
+    if (user?.approval_status === "approved") {
+      const token = createPasswordResetToken(user.id);
+      const resetUrl = `${env.CORS_ORIGIN}/redefinir-senha?token=${token}`;
+      recordAudit({
+        actorUserId: user.id,
+        actorName: user.name,
+        action: "auth.forgot_password",
+        entityType: "user",
+        entityId: user.id,
+      });
+      sendEmail({
+        to: user.email,
+        ...passwordResetEmail({ name: user.name, resetUrl, requestedBy: "self" }),
+      });
+    }
+
+    res.status(204).end();
+  });
+
+  // Completa o reset (admin assistido ou self-service via /auth/forgot-password) — pública
+  // porque quem chega aqui ainda não tem sessão. Token é de uso único: `consumePasswordResetToken`
+  // já marca como usado antes de devolver, então uma segunda tentativa com o mesmo link (replay,
+  // aba duplicada) cai no mesmo erro de "inválido ou expirado" de um link vencido — não dá pra
+  // distinguir os dois casos por fora, de propósito.
   router.post("/reset-password", async (req, res) => {
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -213,7 +248,9 @@ export function authRoutes() {
 
     const result = consumePasswordResetToken(parsed.data.token);
     if (!result) {
-      return res.status(400).json({ message: "Link inválido ou expirado. Peça um novo reset pra administração." });
+      return res.status(400).json({
+        message: "Link inválido ou expirado. Peça um novo em Esqueci minha senha.",
+      });
     }
 
     const passwordHash = await hashPassword(parsed.data.password);
