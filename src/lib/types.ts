@@ -296,6 +296,19 @@ export interface FaqEntry {
   createdBy: RecommendationAuthor;
 }
 
+export type ImprovementStatus = "new" | "reviewing" | "in_progress" | "done";
+
+export interface Improvement {
+  id: string;
+  title: string;
+  description: string;
+  status: ImprovementStatus;
+  createdAt: string;
+  updatedAt: string;
+  createdById: string;
+  createdByName: string;
+}
+
 // Resultado de login (senha ou passkey) — o backend pode responder de 3 formas diferentes
 // dependendo do estado da conta (2FA obrigatório pra admin). Aprovação pendente/recusada não
 // afeta o login em si — sempre libera sessão; quem bloqueia o app é o `ApprovalGate` no front,

@@ -49,6 +49,9 @@ const ACTION_LABELS: Record<string, string> = {
   "climate.delete": "Pesquisa de clima excluída",
   "tags.create": "Tag criada",
   "tags.delete": "Tag excluída",
+  "improvements.create": "Melhoria sugerida",
+  "improvements.status": "Status de melhoria alterado",
+  "improvements.delete": "Melhoria excluída",
 };
 
 function actionBadgeVariant(action: string): "default" | "secondary" | "destructive" | "success" {
