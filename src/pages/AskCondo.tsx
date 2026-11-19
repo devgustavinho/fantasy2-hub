@@ -185,7 +185,10 @@ export default function AskCondo() {
         : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col" style={{ minHeight: "calc(100dvh - 9.5rem)" }}>
+    <div
+      className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col pb-[4.75rem]"
+      style={{ minHeight: "calc(100dvh - 5.5rem)" }}
+    >
       {/* Cabeçalho fino — estilo conversa */}
       <div className="flex items-center justify-between gap-2 border-b border-brand-navy/10 bg-brand-navy px-4 py-2.5 text-white">
         <div className="min-w-0">
@@ -265,9 +268,10 @@ export default function AskCondo() {
       </div>
 
       {/* Composer — colado embaixo, acima do dock */}
+      {/* Composer acima do dock sticky do AppLayout (~h-14 + bottom-4). */}
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 border-t bg-background px-3 py-2"
+        className="sticky bottom-[4.75rem] z-20 shrink-0 border-t bg-background/95 px-3 py-2 backdrop-blur"
       >
         <div className="flex items-end gap-2 rounded-2xl border bg-muted/40 px-2 py-1.5">
           <textarea
