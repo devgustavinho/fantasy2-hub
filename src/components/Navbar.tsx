@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Building2,
   ClipboardList,
+  Clock,
   Columns3,
   Gauge,
   HelpCircle,
@@ -95,6 +96,7 @@ export function BottomDock() {
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
     { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
     { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },
+    { title: "Horários", icon: <Clock className="h-full w-full" />, href: "/horarios" },
     { title: "Perguntar", icon: <MessageCircleQuestion className="h-full w-full" />, href: "/perguntar" },
     { title: "Clima", icon: <Gauge className="h-full w-full" />, href: "/clima" },
     { title: "Melhorias", icon: <Lightbulb className="h-full w-full" />, href: "/melhorias" },
