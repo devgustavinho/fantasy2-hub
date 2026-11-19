@@ -211,6 +211,20 @@ pautas (sem comentários/PII de clima).
 
 UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
 
+## Horários (áreas, mudanças, convivência)
+
+`src/modules/horarios/` — fuso `America/Fortaleza`. Migration `0035_horarios.sql`.
+
+| Peça | Detalhe |
+|---|---|
+| Áreas | Ilha 1–3, Deck, Salão, Sala de Jogos, Academia (24h), Coworking, Pet Place |
+| Mudança | Janelas por dia da semana + dias bloqueados (feriados BR + Fortaleza, 5 anos) |
+| Convivência | `noiseUntil` — barulho permitido até esse horário |
+| Status | `GET /horarios/status` — mudança agora/amanhã + barulho agora |
+| Staff | `PATCH /horarios/areas/:id`, `PUT /horarios/mudanca`, blocked days, `PUT /horarios/convivencia` |
+
+UI: dock **Horários** (`/horarios`); cards de status também no Início.
+
 ## Adicionando uma nova migration
 
 1. Crie `migrations/000N_nome.sql` (o runner aplica em ordem alfabética e registra em `_migrations`).
