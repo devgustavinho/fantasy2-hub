@@ -201,7 +201,7 @@ pautas (sem comentários/PII de clima).
 | Peça | Detalhe |
 |---|---|
 | Env | `OPENAI_API_KEY` (opcional, fallback). Preferência: admin salva provedor+key em `rag_settings` |
-| Ask | `POST /rag/ask` — morador aprovado; rate limit 10/min; responde só com o contexto |
+| Ask | `POST /rag/ask` — morador aprovado; rate limit 10/min; top-k apertado + cita só blocos usados |
 | Status | `GET /rag/status` — staff vê contagens; morador só `available` |
 | Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key |
 | Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force` |

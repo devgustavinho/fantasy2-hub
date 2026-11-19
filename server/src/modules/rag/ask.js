@@ -7,8 +7,14 @@ import {
   isOpenAiConfigured,
 } from "./openai.js";
 
-const TOP_K = 6;
-const MIN_SCORE = 0.28;
+/** Poucos trechos, só os bem parecidos — evita “Leonh Flash / Ideal Vidros” num FAQ de carro. */
+const TOP_K = 3;
+const MIN_SCORE = 0.42;
+/** Descarta hits muito abaixo do melhor (mesmo acima do mínimo absoluto). */
+const RELATIVE_GAP = 0.06;
+/** Acima disso, restringe ao mesmo source_type do melhor hit (ex.: só FAQ). */
+const STRONG_SCORE = 0.52;
+const MAX_CITATIONS = 2;
 
 const listChunks = sqlite.prepare(`
   SELECT c.id, c.content, c.embedding, c.chunk_index AS chunkIndex,
@@ -37,6 +43,36 @@ export function getIndexStatus() {
       sourceType: r.sourceType,
       documents: Number(r.documents),
     })),
+  };
+}
+
+/**
+ * Escolhe poucos chunks fortes; se o melhor for bem claro, não mistura tipos fracos.
+ * @param {Array<{ score: number, sourceType: string, sourceId: string }>} scoredSorted
+ */
+export function selectHits(scoredSorted) {
+  const aboveMin = scoredSorted.filter((s) => s.score >= MIN_SCORE);
+  if (aboveMin.length === 0) return [];
+
+  const best = aboveMin[0];
+  let pool = aboveMin.filter((s) => s.score >= best.score - RELATIVE_GAP);
+
+  if (best.score >= STRONG_SCORE) {
+    const sameType = pool.filter((s) => s.sourceType === best.sourceType);
+    // Se o melhor FAQ (etc.) é forte, não espalha pra serviço/pauta fracos.
+    if (sameType.length > 0) pool = sameType;
+  }
+
+  return pool.slice(0, TOP_K);
+}
+
+function citationFromHit(hit) {
+  return {
+    title: hit.title,
+    sourceType: hit.sourceType,
+    sourceId: hit.sourceId,
+    excerpt: hit.content.slice(0, 280),
+    score: Number(hit.score.toFixed(4)),
   };
 }
 
@@ -92,7 +128,7 @@ export async function askCondo(question) {
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const top = scored.filter((s) => s.score >= MIN_SCORE).slice(0, TOP_K);
+  const top = selectHits(scored);
 
   if (top.length === 0) {
     return {
@@ -107,23 +143,7 @@ export async function askCondo(question) {
     };
   }
 
-  // Dedup citations por source
-  const seen = new Set();
-  const citations = [];
-  for (const hit of top) {
-    const key = `${hit.sourceType}:${hit.sourceId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    citations.push({
-      title: hit.title,
-      sourceType: hit.sourceType,
-      sourceId: hit.sourceId,
-      excerpt: hit.content.slice(0, 280),
-      score: Number(hit.score.toFixed(4)),
-    });
-  }
-
-  const answer = await answerFromContext({
+  const { answer, usedIndices } = await answerFromContext({
     question: q,
     contextBlocks: top.map((h) => ({
       title: h.title,
@@ -131,6 +151,22 @@ export async function askCondo(question) {
       content: h.content,
     })),
   });
+
+  // Cita só os blocos que o modelo declarou ter usado (e no máx. MAX_CITATIONS docs).
+  const usedHits =
+    usedIndices.length > 0
+      ? usedIndices.map((n) => top[n - 1]).filter(Boolean)
+      : top.slice(0, 1);
+
+  const seen = new Set();
+  const citations = [];
+  for (const hit of usedHits) {
+    const key = `${hit.sourceType}:${hit.sourceId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    citations.push(citationFromHit(hit));
+    if (citations.length >= MAX_CITATIONS) break;
+  }
 
   return {
     answer,
