@@ -11,7 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
 import type { TopicCloseKind, VoteValue } from "@/lib/types";
-import { buildWhatsAppShareLink, cn, formatDateOnly } from "@/lib/utils";
+import {
+  buildTopicShareMessage,
+  buildTopicShortUrl,
+  buildWhatsAppShareLink,
+  cn,
+  formatDateOnly,
+} from "@/lib/utils";
 
 export default function TopicDetail() {
   const { id } = useParams<{ id: string }>();
@@ -121,9 +127,8 @@ export default function TopicDetail() {
   const canEdit =
     !isClosed && !!user && (isOwner || user.role === "admin" || user.role === "sindico");
   const canDelete = !!user && (isOwner || user.role === "admin");
-  const shareLink = buildWhatsAppShareLink(
-    `📋 Vote nesta pauta do condomínio: "${topic.title}"\n${window.location.origin}/topics/${topic.id}`,
-  );
+  const shortUrl = buildTopicShortUrl(window.location.origin, topic.shareCode);
+  const shareLink = buildWhatsAppShareLink(buildTopicShareMessage(topic.title, shortUrl));
 
   function statusBadge() {
     if (topic.status === "closed") {
@@ -279,6 +284,17 @@ export default function TopicDetail() {
             <>
               <p className="whitespace-pre-wrap text-sm">{topic.description}</p>
               <p className="text-xs text-muted-foreground">Criada por {topic.createdByName}</p>
+              {topic.shareCode && (
+                <p className="text-xs text-muted-foreground">
+                  Link curto:{" "}
+                  <a
+                    href={shortUrl}
+                    className="font-mono text-foreground underline-offset-2 hover:underline"
+                  >
+                    /t/{topic.shareCode}
+                  </a>
+                </p>
+              )}
             </>
           )}
 

@@ -37,6 +37,15 @@ export function buildWhatsAppShareLink(message: string) {
   return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
+/** Texto de compartilhamento da pauta: título + CTA, link curto na linha seguinte. */
+export function buildTopicShareMessage(title: string, shortUrl: string) {
+  return `${title}: vote na pauta\n${shortUrl}`;
+}
+
+export function buildTopicShortUrl(origin: string, shareCode: string) {
+  return `${origin.replace(/\/+$/, "")}/t/${shareCode}`;
+}
+
 export function buildInstagramLink(handle: string) {
   return `https://instagram.com/${handle.replace(/^@/, "")}`;
 }

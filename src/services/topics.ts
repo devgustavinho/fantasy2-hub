@@ -18,6 +18,9 @@ export const createTopic = (data: { title: string; description: string }) =>
 export const getTopic = (id: string) =>
   api.get<{ topic: Topic; comments: Comment[]; events: TopicEvent[] }>(`/topics/${id}`);
 
+export const resolveShareCode = (code: string) =>
+  api.get<{ topicId: string; shareCode: string }>(`/topics/by-code/${encodeURIComponent(code)}`);
+
 export const voteOnTopic = (id: string, value: VoteValue) =>
   api.post<{ favorCount: number; contraCount: number; myVote: VoteValue }>(`/topics/${id}/vote`, {
     value,
