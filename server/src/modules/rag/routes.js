@@ -14,6 +14,7 @@ import {
 } from "./embeds.js";
 import { reindexAll } from "./ingest.js";
 import { isOpenAiConfigured } from "./openai.js";
+import { quotaPayload, releaseAskSlot, reserveAskSlot } from "./quota.js";
 import { clearRagApiKey, getRagSettingsPublic, saveRagSettings } from "./settings.js";
 
 const uploadText = multer({
@@ -187,14 +188,33 @@ export function ragRoutes() {
       return res.status(400).json({ message: "Escreva uma pergunta (3 a 500 caracteres)." });
     }
 
+    let reservedId = null;
     try {
+      // Cota por usuário (5 / 24h) — MCP usa a mesma rota, então herda o limite.
+      const reserved = reserveAskSlot(req.user.id);
+      reservedId = reserved.id;
+
       const result = await askCondo(parsed.data.question);
-      res.json(result);
+      const quota = quotaPayload(reserved.quota);
+      res.setHeader("X-RateLimit-Limit", String(quota.limit));
+      res.setHeader("X-RateLimit-Remaining", String(quota.remaining));
+      if (quota.resetAt) res.setHeader("X-RateLimit-Reset", quota.resetAt);
+      res.json({ ...result, quota });
     } catch (err) {
+      if (reservedId) releaseAskSlot(reservedId);
       const status = err.status || 500;
-      res.status(status).json({
+      const body = {
         message: err.message || "Não foi possível responder agora.",
-      });
+      };
+      if (err.quota) {
+        body.limit = err.quota.limit;
+        body.remaining = err.quota.remaining;
+        body.resetAt = err.quota.resetAt;
+        res.setHeader("X-RateLimit-Limit", String(err.quota.limit));
+        res.setHeader("X-RateLimit-Remaining", String(err.quota.remaining));
+        if (err.quota.resetAt) res.setHeader("X-RateLimit-Reset", err.quota.resetAt);
+      }
+      res.status(status).json(body);
     }
   });
 

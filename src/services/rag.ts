@@ -8,10 +8,18 @@ export type RagCitation = {
   score: number;
 };
 
+export type RagAskQuota = {
+  limit: number;
+  remaining: number;
+  resetAt: string | null;
+  windowHours: number;
+};
+
 export type RagAskResult = {
   answer: string;
   citations: RagCitation[];
   scores?: { title: string; sourceType: string; score: number }[];
+  quota?: RagAskQuota;
 };
 
 export type RagSettings = {
