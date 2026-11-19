@@ -27,6 +27,8 @@ export const listUsers = (params: ListUsersParams = {}) => {
   return api.get<ListUsersResult>(`/users${qs ? `?${qs}` : ""}`);
 };
 
+export const getUser = (id: string) => api.get<{ user: ManagedUser }>(`/users/${id}`);
+
 export const createSindico = (data: {
   name: string;
   email: string;

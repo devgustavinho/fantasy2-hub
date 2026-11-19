@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +111,8 @@ export default function UserManagement() {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusUserId = searchParams.get("user");
 
   const [page, setPage] = useState(1);
   const [towerFilter, setTowerFilter] = useState<number | null>(null);
@@ -150,6 +153,32 @@ export default function UserManagement() {
   const [emailUser, setEmailUser] = useState<ManagedUser | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
+
+  const { data: focusUserData } = useQuery({
+    queryKey: ["user", focusUserId],
+    queryFn: () => usersService.getUser(focusUserId!),
+    enabled: !!focusUserId,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (focusUserData?.user) {
+      setActionsUser(focusUserData.user);
+    }
+  }, [focusUserData]);
+
+  function clearFocusUser() {
+    setActionsUser(null);
+    if (!focusUserId) return;
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("user");
+        return params;
+      },
+      { replace: true },
+    );
+  }
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -679,7 +708,7 @@ export default function UserManagement() {
       {/* Menu de ações da linha */}
       <BottomSheet
         open={!!actionsUser}
-        onClose={() => setActionsUser(null)}
+        onClose={clearFocusUser}
         title={actionsUser ? `Ações · ${actionsUser.name}` : "Ações"}
         description={
           actionsUser
