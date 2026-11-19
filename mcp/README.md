@@ -13,9 +13,11 @@ Cursor (ou outro cliente MCP) **sem clonar este repositório**.
 
 ## Para moradores (recomendado)
 
-1. Entre em [fantasy2-hub.pages.dev](https://fantasy2-hub.pages.dev) → **Perfil → Conectar MCP**.
-2. Copie o snippet Cursor (URL remota + JWT da sessão).
-3. Cole em `~/.cursor/mcp.json` (ou Settings → MCP) e reinicie o MCP.
+1. Entre em [fantasy2-hub.pages.dev](https://fantasy2-hub.pages.dev) → **Perfil → Avançado**.
+2. Em **Conectar MCP**, escolha o cliente (**Claude**, **Cursor** ou **Antigravity**) e copie URL + JWT / snippet.
+3. Cole na config do cliente e reconecte.
+
+**Avançado** também guarda **Dispositivos** (biometria/passkeys). A maioria dos moradores não precisa abrir.
 
 Endpoint de produção:
 
