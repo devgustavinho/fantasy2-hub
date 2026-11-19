@@ -155,6 +155,17 @@ export function registerToolsForUser(server, api, user) {
   tool(server, "list_faq", "Lista entradas do FAQ.", {}, async () => api.get("/faq"));
   add("list_faq");
 
+  tool(
+    server,
+    "ask_condo",
+    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, serviços, recomendações e pautas oficiais). Responde só com base no índice RAG; inclui citações.",
+    {
+      question: z.string().min(3).max(500).describe("Pergunta em português"),
+    },
+    async ({ question }) => api.post("/rag/ask", { question }),
+  );
+  add("ask_condo");
+
   tool(server, "list_tags", "Lista tags curadas (serviços/recomendações).", {}, async () =>
     api.get("/tags"),
   );

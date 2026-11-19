@@ -20,6 +20,7 @@ import { welcomeRoutes } from "./modules/welcome/routes.js";
 import { climateRoutes } from "./modules/climate/routes.js";
 import { statsRoutes } from "./modules/stats/routes.js";
 import { improvementsRoutes } from "./modules/improvements/routes.js";
+import { ragRoutes } from "./modules/rag/routes.js";
 import { mcpRoutes } from "./modules/mcp/routes.js";
 
 const app = express();
@@ -64,6 +65,7 @@ app.use("/welcome", welcomeRoutes());
 app.use("/climate", climateRoutes());
 app.use("/stats", statsRoutes());
 app.use("/improvements", improvementsRoutes());
+app.use("/rag", ragRoutes());
 // MCP remoto (Streamable HTTP) — clientes como Cursor usam URL + Bearer JWT da sessão.
 app.use("/mcp", mcpRoutes());
 

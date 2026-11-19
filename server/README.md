@@ -192,6 +192,23 @@ usuário aprovado pode listar as tags (`GET /tags`) e filtrar `GET /services?tag
 aparece se tiver **qualquer uma** das tags informadas). Página de administração em `/admin/tags`.
 Auditado: `tags.create`, `tags.delete`.
 
+## RAG (perguntas ao condomínio)
+
+`src/modules/rag/` — índice semântico no SQLite (`rag_documents` + `rag_chunks` com embeddings
+`text-embedding-3-small`). Fontes: FAQ, boas-vindas, serviços, recomendações e campos oficiais de
+pautas (sem comentários/PII de clima).
+
+| Peça | Detalhe |
+|---|---|
+| Env | `OPENAI_API_KEY` (opcional; sem ela `/rag/ask` e reindex retornam 503) |
+| Ask | `POST /rag/ask` — morador aprovado; rate limit 10/min; responde só com o contexto |
+| Status | `GET /rag/status` — staff vê contagens; morador só `available` |
+| Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force` |
+| MCP | tool `ask_condo` (resident+) → mesmo `/rag/ask` |
+| Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
+
+UI: `/perguntar` (dock **Perguntar**; staff também via Admin → Índice RAG).
+
 ## Adicionando uma nova migration
 
 1. Crie `migrations/000N_nome.sql` (o runner aplica em ordem alfabética e registra em `_migrations`).

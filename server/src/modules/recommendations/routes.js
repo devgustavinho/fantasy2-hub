@@ -8,6 +8,7 @@ import { recordAudit } from "../audit/service.js";
 import { deleteFromR2 } from "../../lib/r2.js";
 import { processAndSaveImage, saveVideo } from "../../lib/media.js";
 import { notifyUser } from "../notifications/service.js";
+import { ingestRecommendation, removeDocument, scheduleIngest } from "../rag/ingest.js";
 
 const MAX_MEDIA_PER_COMMENT = 4;
 const VIDEO_MIMETYPES = new Set(["video/mp4", "video/quicktime", "video/webm"]);
@@ -247,6 +248,7 @@ export function recommendationsRoutes() {
       details: { name: parsed.data.name },
     });
 
+    scheduleIngest(`recommendation/${id}`, () => ingestRecommendation(id));
     res.status(201).json({ recommendation: serializeRecommendation(getRecommendationWithStats.get(id)) });
   });
 
@@ -285,6 +287,7 @@ export function recommendationsRoutes() {
       entityId: recommendation.id,
     });
 
+    scheduleIngest(`recommendation/${recommendation.id}`, () => ingestRecommendation(recommendation.id));
     res.json({ recommendation: serializeRecommendation(getRecommendationWithStats.get(recommendation.id)) });
   });
 
@@ -303,6 +306,7 @@ export function recommendationsRoutes() {
       }
     }
     deleteRecommendationById.run(recommendation.id);
+    removeDocument("recommendation", recommendation.id);
 
     recordAudit({
       actorUserId: req.user.id,

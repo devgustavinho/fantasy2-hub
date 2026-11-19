@@ -6,6 +6,7 @@ import { sqlite } from "../../db/client.js";
 import { requireAuth, requireApproved, requireAdmin } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 import { processAndSaveImage } from "../../lib/media.js";
+import { ingestFaq, removeDocument, scheduleIngest } from "../rag/ingest.js";
 
 const uploadImage = multer({
   storage: multer.memoryStorage(),
@@ -84,6 +85,7 @@ export function faqRoutes() {
       details: { question: parsed.data.question },
     });
 
+    scheduleIngest(`faq/${id}`, () => ingestFaq(id));
     res.status(201).json({ entries: listFaq.all().map(serializeFaq) });
   });
 
@@ -106,6 +108,7 @@ export function faqRoutes() {
       entityId: entry.id,
     });
 
+    scheduleIngest(`faq/${entry.id}`, () => ingestFaq(entry.id));
     res.json({ entries: listFaq.all().map(serializeFaq) });
   });
 
@@ -114,6 +117,7 @@ export function faqRoutes() {
     if (!entry) return res.status(404).json({ message: "Pergunta não encontrada." });
 
     deleteFaqById.run(entry.id);
+    removeDocument("faq", entry.id);
 
     recordAudit({
       actorUserId: req.user.id,

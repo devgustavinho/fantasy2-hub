@@ -7,6 +7,7 @@ import { env } from "../../env.js";
 import { requireAuth, requireApproved, requireAdmin } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 import { processAndSaveImage } from "../../lib/media.js";
+import { ingestWelcome, scheduleIngest } from "../rag/ingest.js";
 
 const uploadImage = multer({
   storage: multer.memoryStorage(),
@@ -92,6 +93,7 @@ export function welcomeRoutes() {
       details: { title: parsed.data.title },
     });
 
+    scheduleIngest("welcome", () => ingestWelcome());
     res.json(getWelcome.get());
   });
 
