@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, RefreshCw, SendHorizontal, Settings2 } from "lucide-react";
+import { FileUp, KeyRound, RefreshCw, SendHorizontal, Settings2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ const SOURCE_LABEL: Record<string, string> = {
   service: "Serviço",
   recommendation: "Recomendação",
   topic: "Pauta",
+  external: "Embed",
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -55,9 +56,12 @@ export default function AskCondo() {
   const [provider, setProvider] = useState<"openai">("openai");
   const [apiKey, setApiKey] = useState("");
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [embedTitle, setEmbedTitle] = useState("");
+  const [embedMsg, setEmbedMsg] = useState<string | null>(null);
 
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const statusQuery = useQuery({
     queryKey: ["rag-status"],
@@ -67,6 +71,12 @@ export default function AskCondo() {
   const settingsQuery = useQuery({
     queryKey: ["rag-settings"],
     queryFn: ragService.getRagSettings,
+    enabled: isAdmin && advancedOpen,
+  });
+
+  const embedsQuery = useQuery({
+    queryKey: ["rag-embeds"],
+    queryFn: ragService.listRagEmbeds,
     enabled: isAdmin && advancedOpen,
   });
 
@@ -101,6 +111,30 @@ export default function AskCondo() {
     },
     onError: (err) =>
       setSettingsMsg(err instanceof Error ? err.message : "Não foi possível remover."),
+  });
+
+  const uploadEmbedMutation = useMutation({
+    mutationFn: (file: File) => ragService.uploadRagEmbedFile(file, embedTitle || undefined),
+    onSuccess: (data) => {
+      setEmbedTitle("");
+      setEmbedMsg(`Indexado: ${data.embed.title} (${data.embed.chunkCount} chunks).`);
+      if (fileRef.current) fileRef.current.value = "";
+      queryClient.invalidateQueries({ queryKey: ["rag-embeds"] });
+      queryClient.invalidateQueries({ queryKey: ["rag-status"] });
+    },
+    onError: (err) =>
+      setEmbedMsg(err instanceof Error ? err.message : "Falha ao indexar o arquivo."),
+  });
+
+  const deleteEmbedMutation = useMutation({
+    mutationFn: (id: string) => ragService.deleteRagEmbed(id),
+    onSuccess: () => {
+      setEmbedMsg("Embed removido do índice.");
+      queryClient.invalidateQueries({ queryKey: ["rag-embeds"] });
+      queryClient.invalidateQueries({ queryKey: ["rag-status"] });
+    },
+    onError: (err) =>
+      setEmbedMsg(err instanceof Error ? err.message : "Falha ao remover."),
   });
 
   useEffect(() => {
@@ -383,6 +417,82 @@ export default function AskCondo() {
                     )}
                   </div>
                 </form>
+              </section>
+            )}
+
+            {isAdmin && (
+              <section className="space-y-3 border-t pt-4">
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <FileUp className="h-4 w-4" />
+                  Embeds externos
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Texto só por enquanto (.txt, .md…). O arquivo é chunked e indexado no RAG.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="rag-embed-title">Título (opcional)</Label>
+                  <Input
+                    id="rag-embed-title"
+                    value={embedTitle}
+                    onChange={(e) => setEmbedTitle(e.target.value)}
+                    placeholder="Ex.: Regulamento interno"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rag-embed-file">Arquivo</Label>
+                  <Input
+                    id="rag-embed-file"
+                    ref={fileRef}
+                    type="file"
+                    accept=".txt,.md,.markdown,.text,.csv,.log,text/plain,text/markdown"
+                    disabled={uploadEmbedMutation.isPending}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setEmbedMsg(null);
+                      uploadEmbedMutation.mutate(file);
+                    }}
+                  />
+                </div>
+                {embedMsg && <p className="text-sm text-muted-foreground">{embedMsg}</p>}
+                {uploadEmbedMutation.isPending && (
+                  <p className="text-xs text-muted-foreground">Indexando…</p>
+                )}
+                <ul className="space-y-2">
+                  {(embedsQuery.data?.embeds ?? []).map((embed) => (
+                    <li
+                      key={embed.id}
+                      className="flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{embed.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {embed.filename ?? "texto"} · {embed.chunkCount} chunk
+                          {embed.chunkCount === 1 ? "" : "s"} ·{" "}
+                          {embed.bodyChars.toLocaleString("pt-BR")} chars
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 px-2"
+                        disabled={deleteEmbedMutation.isPending}
+                        aria-label={`Remover ${embed.title}`}
+                        onClick={() => {
+                          if (window.confirm(`Remover "${embed.title}" do índice?`)) {
+                            deleteEmbedMutation.mutate(embed.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                  {embedsQuery.isSuccess && (embedsQuery.data?.embeds.length ?? 0) === 0 && (
+                    <li className="text-xs text-muted-foreground">Nenhum embed externo ainda.</li>
+                  )}
+                </ul>
               </section>
             )}
 

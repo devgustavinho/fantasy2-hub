@@ -53,3 +53,29 @@ export const reindexRag = (force = false) =>
     errors: number;
     status: RagStatus;
   }>("/rag/reindex", { force });
+
+export type RagExternalEmbed = {
+  id: string;
+  title: string;
+  filename: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; name: string };
+  chunkCount: number;
+  bodyChars: number;
+};
+
+export const listRagEmbeds = () => api.get<{ embeds: RagExternalEmbed[] }>("/rag/embeds");
+
+export const uploadRagEmbedFile = (file: File, title?: string) => {
+  const form = new FormData();
+  form.set("file", file);
+  if (title?.trim()) form.set("title", title.trim());
+  return api.postForm<{ embed: RagExternalEmbed; status: RagStatus }>("/rag/embeds", form);
+};
+
+export const createRagEmbedText = (data: { title: string; body: string }) =>
+  api.post<{ embed: RagExternalEmbed; status: RagStatus }>("/rag/embeds", data);
+
+export const deleteRagEmbed = (id: string) =>
+  api.delete<{ ok: true; status: RagStatus }>(`/rag/embeds/${id}`);

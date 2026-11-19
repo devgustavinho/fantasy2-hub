@@ -1,12 +1,32 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { z } from "zod";
 import { requireAuth, requireApproved, requireAdmin, requireStaff } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 import { askCondo, getIndexStatus } from "./ask.js";
+import {
+  createExternalEmbed,
+  deleteExternalEmbed,
+  isAllowedTextFilename,
+  listExternalEmbedsPublic,
+  MAX_BODY_CHARS,
+} from "./embeds.js";
 import { reindexAll } from "./ingest.js";
 import { isOpenAiConfigured } from "./openai.js";
 import { clearRagApiKey, getRagSettingsPublic, saveRagSettings } from "./settings.js";
+
+const uploadText = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_BODY_CHARS, files: 1 },
+});
+
+function handleTextUpload(req, res, next) {
+  uploadText.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || "Erro no upload." });
+    next();
+  });
+}
 
 const askSchema = z.object({
   question: z.string().trim().min(3).max(500),
@@ -92,6 +112,73 @@ export function ragRoutes() {
       details: { configured: settings.configured },
     });
     res.json(settings);
+  });
+
+  // Embeds externos (texto) — só admin; corpo nunca é listado de volta na listagem.
+  router.get("/embeds", requireAdmin, (_req, res) => {
+    res.json({ embeds: listExternalEmbedsPublic() });
+  });
+
+  router.post("/embeds", requireAdmin, handleTextUpload, async (req, res) => {
+    try {
+      let title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+      let body = typeof req.body?.body === "string" ? req.body.body : "";
+      let filename = null;
+
+      if (req.file) {
+        filename = req.file.originalname || "arquivo.txt";
+        if (!isAllowedTextFilename(filename)) {
+          return res.status(400).json({
+            message: "Só texto por enquanto (.txt, .md, .markdown, .csv, .log).",
+          });
+        }
+        body = req.file.buffer.toString("utf8");
+        if (!title) title = filename.replace(/\.[^.]+$/, "");
+      }
+
+      if (!String(body || "").trim()) {
+        return res.status(400).json({ message: "Envie um arquivo de texto ou o campo body." });
+      }
+
+      const result = await createExternalEmbed({
+        title,
+        filename,
+        body,
+        actorUserId: req.user.id,
+      });
+
+      recordAudit({
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: "rag.embed_create",
+        entityType: "rag_external_embed",
+        entityId: result.embed.id,
+        details: { title: result.embed.title, filename, chunks: result.indexed?.chunks },
+      });
+
+      res.status(201).json({
+        embed: result.embed,
+        status: getIndexStatus(),
+      });
+    } catch (err) {
+      res.status(err.status || 500).json({ message: err.message || "Falha ao indexar o embed." });
+    }
+  });
+
+  router.delete("/embeds/:id", requireAdmin, async (req, res) => {
+    try {
+      await deleteExternalEmbed(req.params.id);
+      recordAudit({
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: "rag.embed_delete",
+        entityType: "rag_external_embed",
+        entityId: req.params.id,
+      });
+      res.json({ ok: true, status: getIndexStatus() });
+    } catch (err) {
+      res.status(err.status || 500).json({ message: err.message || "Falha ao remover." });
+    }
   });
 
   router.post("/ask", askLimiter, async (req, res) => {
