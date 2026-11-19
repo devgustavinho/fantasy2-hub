@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageCircleQuestion, RefreshCw } from "lucide-react";
+import { KeyRound, MessageCircleQuestion, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/QueryError";
@@ -17,17 +18,31 @@ const SOURCE_LABEL: Record<string, string> = {
   topic: "Pauta",
 };
 
+const PROVIDER_LABEL: Record<string, string> = {
+  openai: "OpenAI",
+};
+
 export default function AskCondo() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isStaff = user?.role === "admin" || user?.role === "sindico";
+  const isAdmin = user?.role === "admin";
 
   const [question, setQuestion] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<"openai">("openai");
+  const [apiKey, setApiKey] = useState("");
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
 
   const statusQuery = useQuery({
     queryKey: ["rag-status"],
     queryFn: ragService.getRagStatus,
+  });
+
+  const settingsQuery = useQuery({
+    queryKey: ["rag-settings"],
+    queryFn: ragService.getRagSettings,
+    enabled: isAdmin,
   });
 
   const askMutation = useMutation({
@@ -44,14 +59,46 @@ export default function AskCondo() {
     onError: (err) => setError(err instanceof Error ? err.message : "Falha ao reindexar."),
   });
 
+  const saveSettingsMutation = useMutation({
+    mutationFn: () => ragService.saveRagSettings({ provider, apiKey: apiKey.trim() }),
+    onSuccess: () => {
+      // Limpa o campo local imediatamente — a key nunca volta do servidor.
+      setApiKey("");
+      setSettingsMsg("Provedor e chave salvos. A chave não é exibida de novo.");
+      queryClient.invalidateQueries({ queryKey: ["rag-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["rag-status"] });
+    },
+    onError: (err) =>
+      setSettingsMsg(err instanceof Error ? err.message : "Não foi possível salvar."),
+  });
+
+  const clearSettingsMutation = useMutation({
+    mutationFn: () => ragService.clearRagSettings(),
+    onSuccess: () => {
+      setApiKey("");
+      setSettingsMsg("Chave removida do cadastro admin.");
+      queryClient.invalidateQueries({ queryKey: ["rag-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["rag-status"] });
+    },
+    onError: (err) =>
+      setSettingsMsg(err instanceof Error ? err.message : "Não foi possível remover."),
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     askMutation.mutate(question.trim());
   }
 
+  function handleSaveSettings(e: FormEvent) {
+    e.preventDefault();
+    setSettingsMsg(null);
+    saveSettingsMutation.mutate();
+  }
+
   const result = askMutation.data;
   const status = statusQuery.data;
+  const settings = settingsQuery.data ?? status?.settings;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -73,7 +120,94 @@ export default function AskCondo() {
           <CardContent className="pt-4 text-sm text-amber-900 dark:text-amber-100">
             {status.openaiConfigured
               ? "O índice ainda está vazio. A administração precisa rodar a reindexação."
-              : "Perguntas ao condomínio ainda não estão configuradas no servidor (falta OPENAI_API_KEY)."}
+              : isAdmin
+                ? "Cadastre o provedor e a API key abaixo para ativar as perguntas."
+                : "Perguntas ao condomínio ainda não estão configuradas. Peça ao administrador."}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <KeyRound className="h-5 w-5" />
+              Provedor de IA
+            </CardTitle>
+            <CardDescription>
+              Só admin. A API key é gravada cifrada e nunca é mostrada de volta — só o status
+              “configurada”.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm">
+              Status:{" "}
+              <span className="font-medium">
+                {settings?.configured
+                  ? `chave configurada (${PROVIDER_LABEL[settings.provider] ?? settings.provider}${
+                      settings.source === "env" ? ", via .env" : ""
+                    })`
+                  : "sem chave"}
+              </span>
+              {settings?.updatedAt && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  · atualizado {new Date(settings.updatedAt).toLocaleString("pt-BR")}
+                </span>
+              )}
+            </p>
+            <form onSubmit={handleSaveSettings} className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="rag-provider">Provedor</Label>
+                <select
+                  id="rag-provider"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as "openai")}
+                >
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rag-api-key">API key</Label>
+                <Input
+                  id="rag-api-key"
+                  type="password"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  placeholder={
+                    settings?.configured
+                      ? "Cole uma nova key para substituir (não é exibida depois)"
+                      : "Cole a API key"
+                  }
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  required
+                  minLength={16}
+                />
+              </div>
+              {settingsMsg && <p className="text-sm text-muted-foreground">{settingsMsg}</p>}
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={saveSettingsMutation.isPending || apiKey.trim().length < 16}>
+                  {saveSettingsMutation.isPending ? "Salvando…" : "Salvar provedor e chave"}
+                </Button>
+                {settings?.source === "admin" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={clearSettingsMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm("Remover a chave cadastrada pelo admin?")) {
+                        setSettingsMsg(null);
+                        clearSettingsMutation.mutate();
+                      }
+                    }}
+                  >
+                    Remover chave
+                  </Button>
+                )}
+              </div>
+            </form>
           </CardContent>
         </Card>
       )}

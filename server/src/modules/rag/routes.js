@@ -1,14 +1,20 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { requireAuth, requireApproved, requireStaff } from "../../auth/guards.js";
+import { requireAuth, requireApproved, requireAdmin, requireStaff } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 import { askCondo, getIndexStatus } from "./ask.js";
 import { reindexAll } from "./ingest.js";
 import { isOpenAiConfigured } from "./openai.js";
+import { clearRagApiKey, getRagSettingsPublic, saveRagSettings } from "./settings.js";
 
 const askSchema = z.object({
   question: z.string().trim().min(3).max(500),
+});
+
+const settingsSchema = z.object({
+  provider: z.enum(["openai"]),
+  apiKey: z.string().trim().min(16).max(200),
 });
 
 const askLimiter = rateLimit({
@@ -35,7 +41,57 @@ export function ragRoutes() {
         openaiConfigured: status.openaiConfigured,
       });
     }
-    res.json({ ...status, available: status.openaiConfigured && status.chunks > 0, reindexRunning });
+    res.json({
+      ...status,
+      available: status.openaiConfigured && status.chunks > 0,
+      reindexRunning,
+      settings: getRagSettingsPublic(),
+    });
+  });
+
+  // Metadados do provedor — nunca devolve a API key (só configured/source).
+  router.get("/settings", requireAdmin, (_req, res) => {
+    res.json(getRagSettingsPublic());
+  });
+
+  router.put("/settings", requireAdmin, (req, res) => {
+    const parsed = settingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Informe o provedor e uma API key válida." });
+    }
+
+    try {
+      const settings = saveRagSettings({
+        provider: parsed.data.provider,
+        apiKey: parsed.data.apiKey,
+        actorUserId: req.user.id,
+      });
+      recordAudit({
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: "rag.settings_save",
+        entityType: "rag_settings",
+        entityId: "1",
+        details: { provider: parsed.data.provider, configured: true },
+      });
+      // Resposta sem a key — só status.
+      res.json(settings);
+    } catch (err) {
+      res.status(err.status || 500).json({ message: err.message || "Não foi possível salvar." });
+    }
+  });
+
+  router.delete("/settings", requireAdmin, (req, res) => {
+    const settings = clearRagApiKey({ actorUserId: req.user.id });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "rag.settings_clear",
+      entityType: "rag_settings",
+      entityId: "1",
+      details: { configured: settings.configured },
+    });
+    res.json(settings);
   });
 
   router.post("/ask", askLimiter, async (req, res) => {
@@ -58,7 +114,7 @@ export function ragRoutes() {
   router.post("/reindex", requireStaff, async (req, res) => {
     if (!isOpenAiConfigured()) {
       return res.status(503).json({
-        message: "OPENAI_API_KEY não configurada no servidor.",
+        message: "Provedor de IA não configurado. Cadastre a API key (Admin → Perguntar).",
       });
     }
     if (reindexRunning) {
