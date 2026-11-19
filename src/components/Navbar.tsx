@@ -9,6 +9,7 @@ import {
   Home,
   LayoutDashboard,
   Lightbulb,
+  MessageCircleQuestion,
   ScrollText,
   Shield,
   ShoppingBag,
@@ -94,6 +95,7 @@ export function BottomDock() {
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
     { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
     { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },
+    { title: "Perguntar", icon: <MessageCircleQuestion className="h-full w-full" />, href: "/perguntar" },
     { title: "Clima", icon: <Gauge className="h-full w-full" />, href: "/clima" },
     { title: "Melhorias", icon: <Lightbulb className="h-full w-full" />, href: "/melhorias" },
     ...(isStaff
@@ -114,6 +116,12 @@ export function BottomDock() {
       href: "/admin",
       icon: <LayoutDashboard className="h-5 w-5" />,
       description: "Pautas por engajamento e acessos",
+    },
+    {
+      title: "Índice RAG",
+      href: "/perguntar",
+      icon: <MessageCircleQuestion className="h-5 w-5" />,
+      description: "Status do índice e reindexação",
     },
     {
       title: "Melhorias",

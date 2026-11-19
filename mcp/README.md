@@ -71,7 +71,7 @@ Moradores **não** precisam deste fluxo.
 
 `whoami`, `list_my_capabilities`, `get_home_stats`, `list_topics`, `get_topic`, `create_topic`,
 `vote_topic`, `comment_topic`, `list_services`, `get_service`, `list_recommendations`,
-`get_recommendation`, `list_faq`, `list_tags`, `list_climate`, `get_climate`, `respond_climate`,
+`get_recommendation`, `list_faq`, `ask_condo`, `list_tags`, `list_climate`, `get_climate`, `respond_climate`,
 `list_improvements`, `create_improvement`, `list_notifications`, `mark_notifications_read`,
 `update_my_profile`
 

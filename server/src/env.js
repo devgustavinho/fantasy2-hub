@@ -21,6 +21,10 @@ const schema = z.object({
   // "Nome <remetente@dominio>".
   RESEND_API_KEY: z.string().min(1),
   EMAIL_FROM: z.string().min(1),
+
+  // RAG (perguntas ao condomínio) — opcional: sem chave o servidor sobe, mas POST /rag/ask
+  // e o reindex retornam 503 até configurar. Modelo de embedding: text-embedding-3-small.
+  OPENAI_API_KEY: z.string().optional().default(""),
 });
 
 const parsed = schema.safeParse(process.env);

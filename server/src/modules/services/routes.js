@@ -7,6 +7,7 @@ import { requireAuth, requireApproved, requireAdmin } from "../../auth/guards.js
 import { recordAudit } from "../audit/service.js";
 import { deleteFromR2 } from "../../lib/r2.js";
 import { processAndSaveImage as processAndSaveImageShared } from "../../lib/media.js";
+import { ingestService, removeDocument, scheduleIngest } from "../rag/ingest.js";
 
 const MAX_IMAGES_PER_ITEM = 5;
 
@@ -379,6 +380,7 @@ export function servicesRoutes() {
       details: { name: parsed.data.name, ...(ownerId !== req.user.id ? { forUserId: ownerId } : {}) },
     });
 
+    scheduleIngest(`service/${id}`, () => ingestService(id));
     res.status(201).json({ service: { ...serializeServiceDetail(getServiceWithOwnerById.get(id)) } });
   });
 
@@ -411,6 +413,7 @@ export function servicesRoutes() {
       entityId: service.id,
     });
 
+    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
     res.json({
       service: {
         ...serializeServiceDetail(getServiceWithOwnerById.get(service.id)),
@@ -430,6 +433,7 @@ export function servicesRoutes() {
       }
     }
     deleteServiceById.run(service.id);
+    removeDocument("service", service.id);
 
     recordAudit({
       actorUserId: req.user.id,
@@ -505,6 +509,7 @@ export function servicesRoutes() {
       details: { tagIds: parsed.data.tagIds },
     });
 
+    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
     res.json({ tags: listTagsByService.all(service.id) });
   });
 
@@ -549,6 +554,7 @@ export function servicesRoutes() {
       details: { serviceId: service.id, name: parsed.data.name },
     });
 
+    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
     res.status(201).json({ itemId: id, items: listItemsByService.all(service.id).map(serializeItem) });
   });
 
@@ -604,6 +610,7 @@ export function servicesRoutes() {
       entityId: item.id,
     });
 
+    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
     res.json({ items: listItemsByService.all(service.id).map(serializeItem) });
   });
 
@@ -630,6 +637,7 @@ export function servicesRoutes() {
       details: { serviceId: service.id, name: item.name },
     });
 
+    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
     res.status(204).end();
   });
 

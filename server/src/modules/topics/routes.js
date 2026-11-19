@@ -6,6 +6,7 @@ import { requireApproved, requireAuth, requireStaff } from "../../auth/guards.js
 import { notifyTopicWatchers, notifyUser } from "../notifications/service.js";
 import { recordAudit } from "../audit/service.js";
 import { allocateShareCode, ensureTopicShareCodes, isValidShareCode } from "./shareCode.js";
+import { ingestTopic, removeDocument, scheduleIngest } from "../rag/ingest.js";
 
 ensureTopicShareCodes();
 
@@ -258,6 +259,7 @@ export function topicsRoutes() {
       entityId: id,
       details: { title: parsed.data.title },
     });
+    scheduleIngest(`topic/${id}`, () => ingestTopic(id));
     res.status(201).json({ topic: getTopic.get(id) });
   });
 
@@ -328,6 +330,7 @@ export function topicsRoutes() {
       details: { kind: parsed.data.kind, reason: parsed.data.reason },
     });
 
+    scheduleIngest(`topic/${topic.id}`, () => ingestTopic(topic.id));
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -365,6 +368,7 @@ export function topicsRoutes() {
       details: { assemblyDate },
     });
 
+    scheduleIngest(`topic/${topic.id}`, () => ingestTopic(topic.id));
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -395,6 +399,7 @@ export function topicsRoutes() {
       entityType: "topic",
       entityId: topic.id,
     });
+    scheduleIngest(`topic/${topic.id}`, () => ingestTopic(topic.id));
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -424,6 +429,7 @@ export function topicsRoutes() {
       details: { note },
     });
 
+    scheduleIngest(`topic/${topic.id}`, () => ingestTopic(topic.id));
     res.json({ topic: getTopic.get(topic.id) });
   });
 
@@ -448,6 +454,7 @@ export function topicsRoutes() {
     }
 
     deleteTopicCascade(topic.id);
+    removeDocument("topic", topic.id);
 
     if (!isOwner) {
       notifyUser({

@@ -30,6 +30,7 @@ import ClimateDetail from "@/pages/ClimateDetail";
 import ImprovementsBoard from "@/pages/ImprovementsBoard";
 import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
+import AskCondo from "@/pages/AskCondo";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -151,6 +152,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <Faq />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/perguntar"
+                element={
+                  <AppLayout>
+                    <AskCondo />
                   </AppLayout>
                 }
               />

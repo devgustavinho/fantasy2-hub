@@ -12,6 +12,7 @@
     "db:migrate": "node --env-file=.env src/db/migrate.js",
     "db:seed": "node --env-file=.env src/db/seed-apartments.js",
     "create-admin": "node --env-file=.env scripts/create-admin.js",
+    "rag:reindex": "node --env-file=.env scripts/rag-reindex.js",
     "check": "node --check src/index.js"
   },
   "dependencies": {
