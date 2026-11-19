@@ -5,6 +5,9 @@ import { sqlite } from "../../db/client.js";
 import { requireApproved, requireAuth, requireStaff } from "../../auth/guards.js";
 import { notifyTopicWatchers, notifyUser } from "../notifications/service.js";
 import { recordAudit } from "../audit/service.js";
+import { allocateShareCode, ensureTopicShareCodes, isValidShareCode } from "./shareCode.js";
+
+ensureTopicShareCodes();
 
 const nowIso = () => new Date().toISOString();
 
@@ -50,7 +53,7 @@ const LIST_STATUS_VALUES = new Set(["open", "scheduled", "closed", "history"]);
 const topicListSelect = `
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
-    t.status_note AS statusNote,
+    t.status_note AS statusNote, t.share_code AS shareCode,
     t.close_kind AS closeKind, t.close_reason AS closeReason, t.closed_at AS closedAt,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
     u.name AS createdByName,
@@ -98,13 +101,17 @@ function prepareTopicList({ status, sort }) {
 const getTopic = sqlite.prepare(`
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
-    t.status_note AS statusNote,
+    t.status_note AS statusNote, t.share_code AS shareCode,
     t.close_kind AS closeKind, t.close_reason AS closeReason, t.closed_at AS closedAt,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
     t.created_by AS createdById, u.name AS createdByName
   FROM topics t
   JOIN users u ON u.id = t.created_by
   WHERE t.id = ?
+`);
+
+const getTopicIdByShareCode = sqlite.prepare(`
+  SELECT id, share_code AS shareCode FROM topics WHERE share_code = ?
 `);
 
 const closeTopic = sqlite.prepare(`
@@ -146,8 +153,8 @@ const listEvents = sqlite.prepare(`
 `);
 
 const insertTopic = sqlite.prepare(`
-  INSERT INTO topics (id, title, description, created_by)
-  VALUES (@id, @title, @description, @created_by)
+  INSERT INTO topics (id, title, description, created_by, share_code)
+  VALUES (@id, @title, @description, @created_by, @share_code)
 `);
 
 const updateTopicSchedule = sqlite.prepare(`
@@ -236,7 +243,12 @@ export function topicsRoutes() {
       return res.status(400).json({ message: "Preencha título e descrição da pauta." });
     }
     const id = randomUUID();
-    insertTopic.run({ id, ...parsed.data, created_by: req.user.id });
+    insertTopic.run({
+      id,
+      ...parsed.data,
+      created_by: req.user.id,
+      share_code: allocateShareCode(),
+    });
     recordEvent(id, req.user.id, `${req.user.name} criou a pauta`);
     recordAudit({
       actorUserId: req.user.id,
@@ -247,6 +259,16 @@ export function topicsRoutes() {
       details: { title: parsed.data.title },
     });
     res.status(201).json({ topic: getTopic.get(id) });
+  });
+
+  // Resolve /t/<code> no front — precisa ficar antes de /:id.
+  router.get("/by-code/:code", (req, res) => {
+    if (!isValidShareCode(req.params.code)) {
+      return res.status(400).json({ message: "Código de compartilhamento inválido." });
+    }
+    const row = getTopicIdByShareCode.get(req.params.code);
+    if (!row) return res.status(404).json({ message: "Pauta não encontrada." });
+    res.json({ topicId: row.id, shareCode: row.shareCode });
   });
 
   router.get("/:id", (req, res) => {

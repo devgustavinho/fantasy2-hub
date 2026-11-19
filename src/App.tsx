@@ -12,6 +12,7 @@ import Home from "@/pages/Home";
 import TopicsList from "@/pages/TopicsList";
 import TopicsHistory from "@/pages/TopicsHistory";
 import TopicDetail from "@/pages/TopicDetail";
+import TopicShortLink from "@/pages/TopicShortLink";
 import AdminPanel from "@/pages/AdminPanel";
 import UserManagement from "@/pages/UserManagement";
 import Profile from "@/pages/Profile";
@@ -86,6 +87,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <TopicDetail />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/t/:code"
+                element={
+                  <AppLayout>
+                    <TopicShortLink />
                   </AppLayout>
                 }
               />

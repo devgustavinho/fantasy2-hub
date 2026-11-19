@@ -72,6 +72,8 @@ export interface Topic {
   closeKind: TopicCloseKind | null;
   closeReason: string | null;
   closedAt: string | null;
+  /** Código curto (até 6 A-Za-z0-9) para /t/<code>. */
+  shareCode: string;
   createdAt: string;
   updatedAt: string;
   createdById: string;
