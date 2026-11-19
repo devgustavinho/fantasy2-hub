@@ -12,7 +12,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
 import * as authService from "@/services/auth";
-import { McpConnectCard } from "@/components/McpConnectCard";
+import { AdvancedSettingsCard } from "@/components/AdvancedSettingsCard";
 import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
@@ -188,8 +188,6 @@ export default function Profile() {
         </CardContent>
       </Card>
 
-      <McpConnectCard />
-
       {!standalone && (
         <Card>
           <CardHeader>
@@ -275,69 +273,6 @@ export default function Profile() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Login por biometria</CardTitle>
-          <CardDescription>
-            Cadastre este aparelho para entrar com o mesmo desbloqueador do seu celular, sem digitar
-            a senha.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!supported && (
-            <p className="text-sm text-muted-foreground">
-              Este navegador não tem suporte a login por biometria.
-            </p>
-          )}
-
-          {supported && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="deviceName">Nome do aparelho (opcional)</Label>
-                <Input
-                  id="deviceName"
-                  placeholder="Ex: Meu celular"
-                  value={deviceName}
-                  onChange={(e) => setDeviceName(e.target.value)}
-                />
-              </div>
-              <Button
-                onClick={() => registerMutation.mutate()}
-                disabled={registerMutation.isPending}
-              >
-                {registerMutation.isPending ? "Cadastrando..." : "Cadastrar biometria neste aparelho"}
-              </Button>
-            </div>
-          )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <div className="space-y-2">
-            {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-            {data?.credentials.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
-                <div>
-                  <p className="font-medium">{c.deviceName || "Dispositivo sem nome"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Cadastrado em {new Date(c.createdAt).toLocaleDateString("pt-BR")}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate(c.id)}
-                >
-                  Remover
-                </Button>
-              </div>
-            ))}
-            {data && data.credentials.length === 0 && (
-              <p className="text-sm text-muted-foreground">Nenhum aparelho cadastrado ainda.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-base">Notificações push</CardTitle>
           <CardDescription>
             Receba um aviso neste aparelho quando alguém comentar, mudar o status ou responder numa
@@ -414,6 +349,70 @@ export default function Profile() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Avançado: dispositivos + MCP remoto (Claude / Cursor / Antigravity). */}
+      <AdvancedSettingsCard
+        devices={
+          <div className="space-y-4">
+            {!supported && (
+              <p className="text-sm text-muted-foreground">
+                Este navegador não tem suporte a login por biometria.
+              </p>
+            )}
+
+            {supported && (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="deviceName">Nome do aparelho (opcional)</Label>
+                  <Input
+                    id="deviceName"
+                    placeholder="Ex: Meu celular"
+                    value={deviceName}
+                    onChange={(e) => setDeviceName(e.target.value)}
+                  />
+                </div>
+                <Button
+                  onClick={() => registerMutation.mutate()}
+                  disabled={registerMutation.isPending}
+                >
+                  {registerMutation.isPending
+                    ? "Cadastrando..."
+                    : "Cadastrar biometria neste aparelho"}
+                </Button>
+              </div>
+            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <div className="space-y-2">
+              {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
+              {data?.credentials.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between rounded-md border p-3 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">{c.deviceName || "Dispositivo sem nome"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Cadastrado em {new Date(c.createdAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate(c.id)}
+                  >
+                    Remover
+                  </Button>
+                </div>
+              ))}
+              {data && data.credentials.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhum aparelho cadastrado ainda.</p>
+              )}
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }
