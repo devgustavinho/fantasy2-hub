@@ -13,6 +13,7 @@ export interface FloatingDockItem {
 }
 
 // Sempre horizontal e aberto (mesmo no celular) — nada de esconder atrás de um botão de menu.
+// No mobile o dock fica compacto (ícones fixos); o efeito de magnify fica só em ponteiro fino.
 export function FloatingDock({ items, className }: { items: FloatingDockItem[]; className?: string }) {
   const mouseX = useMotionValue(Infinity);
   return (
@@ -20,7 +21,7 @@ export function FloatingDock({ items, className }: { items: FloatingDockItem[]; 
       onMouseMove={(e) => mouseX.set(e.pageX)}
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
-        "mx-auto flex h-14 items-end gap-2 rounded-2xl bg-brand-navy/95 px-3 pb-2 backdrop-blur sm:gap-3",
+        "mx-auto flex h-12 max-w-full items-end gap-1.5 overflow-x-auto rounded-2xl bg-brand-navy/95 px-2 pb-1.5 backdrop-blur [scrollbar-width:none] sm:h-14 sm:gap-3 sm:overflow-visible sm:px-3 sm:pb-2 [&::-webkit-scrollbar]:hidden",
         className,
       )}
     >
@@ -66,7 +67,7 @@ function IconContainer({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={cn(
-        "relative flex aspect-square items-center justify-center rounded-full text-white",
+        "relative flex aspect-square h-9 w-9 shrink-0 items-center justify-center rounded-full text-white sm:h-auto sm:w-auto",
         active ? "bg-primary/90 hover:bg-primary" : "bg-white/10 hover:bg-white/20",
       )}
     >
@@ -76,13 +77,16 @@ function IconContainer({
             initial={{ opacity: 0, y: 10, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: 2, x: "-50%" }}
-            className="absolute -top-8 left-1/2 w-fit whitespace-pre rounded-md border border-white/10 bg-brand-navy px-2 py-0.5 text-xs text-white shadow-md"
+            className="pointer-events-none absolute -top-8 left-1/2 hidden w-fit whitespace-pre rounded-md border border-white/10 bg-brand-navy px-2 py-0.5 text-xs text-white shadow-md sm:block"
           >
             {title}
           </motion.div>
         )}
       </AnimatePresence>
-      <motion.div style={{ width: widthIcon, height: heightIcon }} className="flex items-center justify-center">
+      <motion.div
+        style={{ width: widthIcon, height: heightIcon }}
+        className="flex h-[18px] w-[18px] items-center justify-center sm:h-auto sm:w-auto"
+      >
         {icon}
       </motion.div>
       {!!badge && (
@@ -95,11 +99,15 @@ function IconContainer({
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} aria-label={title} className="appearance-none border-0 bg-transparent p-0">
+      <button type="button" onClick={onClick} aria-label={title} className="shrink-0 appearance-none border-0 bg-transparent p-0">
         {body}
       </button>
     );
   }
 
-  return <Link to={href ?? "/"}>{body}</Link>;
+  return (
+    <Link to={href ?? "/"} className="shrink-0" aria-label={title}>
+      {body}
+    </Link>
+  );
 }

@@ -84,9 +84,9 @@ export default function ImprovementsBoard() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Melhorias do Portal</h1>
           <p className="text-sm text-muted-foreground">
             Sugira melhorias e acompanhe o andamento. A administração move os cards entre os status.
@@ -129,11 +129,12 @@ export default function ImprovementsBoard() {
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
       {isError && <QueryError onRetry={() => refetch()} />}
 
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory">
+      <div className="max-w-full overflow-x-auto overscroll-x-contain pb-2 [-webkit-overflow-scrolling:touch]">
+        <div className="flex w-max gap-3 snap-x snap-mandatory px-0.5">
         {COLUMN_ORDER.map((status) => (
           <section
             key={status}
-            className="w-[85vw] max-w-xs shrink-0 snap-start rounded-xl border bg-muted/30 p-3 sm:w-72"
+            className="w-[min(85vw,20rem)] shrink-0 snap-start rounded-xl border bg-muted/30 p-3 sm:w-72"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">{STATUS_META[status].label}</h2>
@@ -195,6 +196,7 @@ export default function ImprovementsBoard() {
             </div>
           </section>
         ))}
+        </div>
       </div>
     </div>
   );

@@ -498,7 +498,7 @@ export default function Horarios() {
                         onChange={(e) => setBlockDate(e.target.value)}
                       />
                     </div>
-                    <div className="min-w-[12rem] flex-1 space-y-1">
+                    <div className="min-w-0 flex-1 basis-full space-y-1 sm:min-w-[12rem] sm:basis-auto">
                       <Label htmlFor="block-reason">Motivo</Label>
                       <Input
                         id="block-reason"
@@ -562,7 +562,7 @@ export default function Horarios() {
                         onChange={(e) => setNoiseUntil(e.target.value)}
                       />
                     </div>
-                    <div className="min-w-[10rem] flex-1 space-y-1">
+                    <div className="min-w-0 flex-1 basis-full space-y-1 sm:min-w-[10rem] sm:basis-auto">
                       <Label htmlFor="noise-assembly">Assembleia (opcional)</Label>
                       <Input
                         id="noise-assembly"
