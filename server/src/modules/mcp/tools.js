@@ -64,9 +64,12 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "list_topics",
-    "Lista pautas. status: open | scheduled. sort: vote_balance | oldest | newest | most_comments | least_comments.",
+    "Lista pautas. status: open | scheduled | closed | history (scheduled+closed). sort: vote_balance | oldest | newest | most_comments | least_comments.",
     {
-      status: z.enum(["open", "scheduled"]).optional().describe("Filtro de status"),
+      status: z
+        .enum(["open", "scheduled", "closed", "history"])
+        .optional()
+        .describe("Filtro de status"),
       sort: z
         .enum(["vote_balance", "oldest", "newest", "most_comments", "least_comments"])
         .optional()
@@ -244,6 +247,19 @@ export function registerToolsForUser(server, api, user) {
       async ({ id, assemblyDate }) => api.patch(`/topics/${id}`, { assemblyDate }),
     );
     add("schedule_topic");
+
+    tool(
+      server,
+      "close_topic",
+      "Fecha uma pauta. kind: debated (debatida) | not_scheduled (não pautada). reason: motivo livre.",
+      {
+        id: z.string().min(1),
+        kind: z.enum(["debated", "not_scheduled"]),
+        reason: z.string().min(4).max(2000),
+      },
+      async ({ id, kind, reason }) => api.post(`/topics/${id}/close`, { kind, reason }),
+    );
+    add("close_topic");
 
     tool(
       server,

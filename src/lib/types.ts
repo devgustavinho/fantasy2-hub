@@ -57,7 +57,9 @@ export interface Apartment {
   available: boolean;
 }
 
-export type TopicStatus = "open" | "scheduled";
+export type TopicStatus = "open" | "scheduled" | "closed";
+/** Tipo de fechamento: debatida na assembleia / não pautada. */
+export type TopicCloseKind = "debated" | "not_scheduled";
 export type VoteValue = "favor" | "contra";
 
 export interface Topic {
@@ -67,6 +69,9 @@ export interface Topic {
   status: TopicStatus;
   assemblyDate: string | null;
   statusNote: string | null;
+  closeKind: TopicCloseKind | null;
+  closeReason: string | null;
+  closedAt: string | null;
   createdAt: string;
   updatedAt: string;
   createdById: string;
