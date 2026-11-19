@@ -6,6 +6,7 @@ import { loadSession } from "./auth/guards.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { apartmentsRoutes } from "./modules/apartments/routes.js";
 import { topicsRoutes } from "./modules/topics/routes.js";
+import { topicsOgRoutes } from "./modules/topics/ogRoutes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { webauthnRoutes } from "./modules/webauthn/routes.js";
 import { notificationsRoutes } from "./modules/notifications/routes.js";
@@ -36,10 +37,19 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Preview OG (WhatsApp/crawlers) — público e barato; limiter separado do login.
+const ogLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/auth", authLimiter, authRoutes());
 app.use("/apartments", apartmentsRoutes());
+app.use("/topics/og", ogLimiter, topicsOgRoutes());
 app.use("/topics", topicsRoutes());
 app.use("/users", usersRoutes());
 app.use("/webauthn", authLimiter, webauthnRoutes());

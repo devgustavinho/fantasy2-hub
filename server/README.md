@@ -39,6 +39,7 @@ npm run dev
 | Editar título/descrição de uma pauta | só a própria | ✅ (qualquer) | ✅ (qualquer) |
 | Marcar/reabrir pauta como pautada, definir "atualização da administração" | ❌ | ✅ | ✅ |
 | Fechar pauta (debatida / não pautada + motivo) | ❌ | ✅ | ✅ |
+| Preview OG público (`GET /topics/og/...`, título + início da descrição) | ✅ (sem login) | ✅ | ✅ |
 | Ver painel `/admin` (pautas por engajamento) | ❌ | ✅ | ✅ |
 | Ver lista de usuários (`GET /users`) | ❌ | ✅ | ✅ |
 | Resetar senha de um morador | ❌ | ✅ | ✅ |
