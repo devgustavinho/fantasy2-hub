@@ -14,7 +14,9 @@ const force = process.argv.includes("--force");
 
 async function main() {
   if (!isOpenAiConfigured()) {
-    console.error("OPENAI_API_KEY não configurada. Defina em server/.env e tente de novo.");
+    console.error(
+      "Provedor de IA não configurado. Cadastre a API key pelo Admin em /perguntar, ou defina OPENAI_API_KEY no .env.",
+    );
     process.exit(1);
   }
 

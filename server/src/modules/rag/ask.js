@@ -47,7 +47,7 @@ export function getIndexStatus() {
 export async function askCondo(question) {
   if (!isOpenAiConfigured()) {
     const err = new Error(
-      "Perguntas ao condomínio ainda não estão disponíveis (OPENAI_API_KEY não configurada).",
+      "Perguntas ao condomínio ainda não estão disponíveis. Peça ao administrador para cadastrar o provedor de IA.",
     );
     err.status = 503;
     throw err;

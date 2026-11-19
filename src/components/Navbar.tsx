@@ -121,7 +121,7 @@ export function BottomDock() {
       title: "Índice RAG",
       href: "/perguntar",
       icon: <MessageCircleQuestion className="h-5 w-5" />,
-      description: "Status do índice e reindexação",
+      description: isAdmin ? "Provedor, chave e reindexação" : "Status do índice e reindexação",
     },
     {
       title: "Melhorias",

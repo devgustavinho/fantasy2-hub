@@ -1,11 +1,11 @@
-import { env } from "../../env.js";
+import { resolveApiKey } from "./settings.js";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMS = 1536;
 const CHAT_MODEL = "gpt-4o-mini";
 
 export function isOpenAiConfigured() {
-  return Boolean(env.OPENAI_API_KEY?.trim());
+  return Boolean(resolveApiKey());
 }
 
 export function embeddingDims() {
@@ -13,9 +13,11 @@ export function embeddingDims() {
 }
 
 async function openaiJson(path, body) {
-  const key = env.OPENAI_API_KEY?.trim();
+  const key = resolveApiKey();
   if (!key) {
-    const err = new Error("OPENAI_API_KEY não configurada.");
+    const err = new Error(
+      "Provedor de IA não configurado. Peça ao administrador para cadastrar a API key em Perguntar.",
+    );
     err.status = 503;
     throw err;
   }

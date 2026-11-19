@@ -14,6 +14,13 @@ export type RagAskResult = {
   scores?: { title: string; sourceType: string; score: number }[];
 };
 
+export type RagSettings = {
+  provider: "openai";
+  configured: boolean;
+  source: "admin" | "env" | null;
+  updatedAt: string | null;
+};
+
 export type RagStatus = {
   available: boolean;
   openaiConfigured: boolean;
@@ -22,9 +29,18 @@ export type RagStatus = {
   lastUpdatedAt?: string | null;
   bySource?: { sourceType: string; documents: number }[];
   reindexRunning?: boolean;
+  settings?: RagSettings;
 };
 
 export const getRagStatus = () => api.get<RagStatus>("/rag/status");
+
+export const getRagSettings = () => api.get<RagSettings>("/rag/settings");
+
+/** Salva provedor + key. A resposta NUNCA traz a key — só configured/source. */
+export const saveRagSettings = (data: { provider: "openai"; apiKey: string }) =>
+  api.put<RagSettings>("/rag/settings", data);
+
+export const clearRagSettings = () => api.delete<RagSettings>("/rag/settings");
 
 export const askCondo = (question: string) =>
   api.post<RagAskResult>("/rag/ask", { question });
