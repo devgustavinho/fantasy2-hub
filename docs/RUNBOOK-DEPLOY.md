@@ -223,9 +223,14 @@ automaticamente (SSH → git reset --hard → npm ci → migrate → seed → re
    - Framework preset: **Vite**
    - Build command: `npm run build`
    - Build output directory: `dist`
-4. Variável de ambiente (Production e Preview): `VITE_API_URL=https://api-fantasy2.gcsolutions-devs.com.br`
+4. Variáveis de ambiente (Production e Preview):
+   - `VITE_API_URL=https://api-fantasy2.gcsolutions-devs.com.br` (build do Vite)
+   - `API_URL=https://api-fantasy2.gcsolutions-devs.com.br` (Pages Functions — OG/WhatsApp em `/t/*` e `/topics/*`; se omitido, usa o mesmo host de produção como fallback)
 5. Depois do primeiro deploy, vá em **Custom domains** → adicione `fantasy2.gcsolutions-devs.com.br`
    e siga o CNAME que o Cloudflare Pages indicar.
+
+Pages Functions em `functions/` injetam `og:`/`twitter:` com título e início da descrição da pauta
+(via `GET /topics/og/...` na API, público). `_routes.json` limita as Functions a `/t/*` e `/topics/*`.
 
 Não é necessário nenhum workflow do GitHub Actions para o frontend — o Cloudflare Pages já observa
 o repositório e builda automaticamente a cada push em `main` (preview builds em outras branches/PRs).
