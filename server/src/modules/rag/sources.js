@@ -51,6 +51,10 @@ const listTopicEvents = sqlite.prepare(`
   SELECT message FROM topic_events WHERE topic_id = ? ORDER BY created_at ASC
 `);
 
+const listExternalEmbeds = sqlite.prepare(
+  "SELECT id, title, body FROM rag_external_embeds ORDER BY created_at ASC",
+);
+
 function money(cents) {
   return `R$ ${(Number(cents) / 100).toFixed(2).replace(".", ",")}`;
 }
@@ -163,6 +167,13 @@ export function buildTopicDocument(id) {
   };
 }
 
+export function buildExternalDocumentFromRow(row) {
+  if (!row) return null;
+  const body = normalizeForIndex(`# ${row.title}\n\n${row.body}`);
+  if (!body) return null;
+  return { sourceType: "external", sourceId: row.id, title: row.title, body };
+}
+
 export function listAllSourceDocuments() {
   const docs = [];
   for (const row of listFaq.all()) {
@@ -181,6 +192,10 @@ export function listAllSourceDocuments() {
   }
   for (const row of listTopics.all()) {
     const d = buildTopicDocument(row.id);
+    if (d) docs.push(d);
+  }
+  for (const row of listExternalEmbeds.all()) {
+    const d = buildExternalDocumentFromRow(row);
     if (d) docs.push(d);
   }
   return docs;

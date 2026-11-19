@@ -163,7 +163,7 @@ export function scheduleIngest(label, fn) {
 }
 
 /**
- * Reindexa todo o corpus (FAQ, welcome, serviços, recomendações, pautas).
+ * Reindexa todo o corpus (FAQ, welcome, serviços, recomendações, pautas, embeds externos).
  * @param {{ force?: boolean, onProgress?: (info: object) => void }} [opts]
  */
 export async function reindexAll(opts = {}) {

@@ -204,11 +204,12 @@ pautas (sem comentários/PII de clima).
 | Ask | `POST /rag/ask` — morador aprovado; rate limit 10/min; top-k apertado + cita só blocos usados |
 | Status | `GET /rag/status` — staff vê contagens; morador só `available` |
 | Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key |
+| Embeds | `GET/POST/DELETE /rag/embeds` (admin) — texto (.txt/.md/…); upload → chunk+embed; listagem sem o corpo |
 | Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force` |
 | MCP | tool `ask_condo` (resident+) → mesmo `/rag/ask` |
 | Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
 
-UI: `/perguntar` (dock **Perguntar**; staff → Índice RAG; admin cadastra provedor/key write-only).
+UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
 
 ## Adicionando uma nova migration
 
