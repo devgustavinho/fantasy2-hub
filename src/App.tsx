@@ -38,10 +38,13 @@ const queryClient = new QueryClient();
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-background" style={{ minHeight: "100dvh" }}>
+    <div
+      className="flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background"
+      style={{ minHeight: "100dvh" }}
+    >
       <TopBar />
       <OnboardingBanner />
-      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">{children}</main>
       <BottomDock />
     </div>
   );

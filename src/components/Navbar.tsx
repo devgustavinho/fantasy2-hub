@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Clock,
   Columns3,
+  Ellipsis,
   Gauge,
   HelpCircle,
   Home,
@@ -37,12 +38,12 @@ export function TopBar() {
 
   return (
     <header className="border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
-      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5">
-        <Link to="/" className="flex items-center gap-2 font-semibold tracking-wide">
-          <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 rounded-full" />
-          <span className="hidden text-brand-gold sm:inline">Fantasy 2 Hub</span>
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
+        <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold tracking-wide">
+          <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 shrink-0 rounded-full" />
+          <span className="hidden truncate text-brand-gold sm:inline">Fantasy 2 Hub</span>
         </Link>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex shrink-0 items-center gap-2 text-sm sm:gap-3">
           <NotificationBell />
           <Link
             to="/perfil"
@@ -50,11 +51,11 @@ export function TopBar() {
             className="flex items-center gap-1.5 text-white/70 transition-colors hover:text-brand-gold"
           >
             <User className="h-5 w-5 sm:hidden" />
-            <span className="hidden sm:inline">{user.name}</span>
+            <span className="hidden max-w-[10rem] truncate sm:inline">{user.name}</span>
           </Link>
           <button
             onClick={handleLogout}
-            className="rounded-md border border-white/25 px-3 py-1.5 text-white/90 transition-colors hover:border-white/50 hover:bg-white/10"
+            className="rounded-md border border-white/25 px-2.5 py-1.5 text-white/90 transition-colors hover:border-white/50 hover:bg-white/10 sm:px-3"
           >
             Sair
           </button>
@@ -64,7 +65,7 @@ export function TopBar() {
   );
 }
 
-type AdminLink = {
+type SheetLink = {
   title: string;
   href: string;
   icon: ReactNode;
@@ -82,6 +83,7 @@ export function BottomDock() {
   const location = useLocation();
   const navigate = useNavigate();
   const [adminOpen, setAdminOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   if (!user) return null;
 
@@ -89,17 +91,57 @@ export function BottomDock() {
   const isAdmin = user.role === "admin";
   const onAdminRoute = location.pathname.startsWith("/admin");
 
-  // Modo morador: só navegação do condomínio. Staff ganha um único item "Admin" com submenu.
+  const moreLinks: SheetLink[] = [
+    {
+      title: "Recomendações",
+      href: "/recomendacoes",
+      icon: <Star className="h-5 w-5" />,
+      description: "Indicações da comunidade",
+    },
+    {
+      title: "FAQ",
+      href: "/faq",
+      icon: <HelpCircle className="h-5 w-5" />,
+      description: "Perguntas frequentes",
+    },
+    {
+      title: "Horários",
+      href: "/horarios",
+      icon: <Clock className="h-5 w-5" />,
+      description: "Áreas comuns, mudanças e convivência",
+    },
+    {
+      title: "Clima",
+      href: "/clima",
+      icon: <Gauge className="h-5 w-5" />,
+      description: "Pesquisas de clima organizacional",
+    },
+    {
+      title: "Melhorias",
+      href: "/melhorias",
+      icon: <Lightbulb className="h-5 w-5" />,
+      description: "Sugestões para o Portal",
+    },
+  ];
+
+  const moreHrefs = moreLinks.map((l) => l.href);
+  const onMoreRoute = moreHrefs.some(
+    (href) => location.pathname === href || location.pathname.startsWith(`${href}/`),
+  );
+
+  // Dock enxuto no celular: atalhos principais + "Mais" (sheet) + Admin (staff).
+  // Evita 9–10 ícones estourando ~390px de largura.
   const items: FloatingDockItem[] = [
     { title: "Início", icon: <Home className="h-full w-full" />, href: "/" },
     { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/pautas" },
     { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
-    { title: "Recomendações", icon: <Star className="h-full w-full" />, href: "/recomendacoes" },
-    { title: "FAQ", icon: <HelpCircle className="h-full w-full" />, href: "/faq" },
-    { title: "Horários", icon: <Clock className="h-full w-full" />, href: "/horarios" },
     { title: "Perguntar", icon: <MessageCircleQuestion className="h-full w-full" />, href: "/perguntar" },
-    { title: "Clima", icon: <Gauge className="h-full w-full" />, href: "/clima" },
-    { title: "Melhorias", icon: <Lightbulb className="h-full w-full" />, href: "/melhorias" },
+    {
+      title: "Mais",
+      icon: <Ellipsis className="h-full w-full" />,
+      onClick: () => setMoreOpen(true),
+      active: onMoreRoute || moreOpen,
+    },
     ...(isStaff
       ? [
           {
@@ -112,7 +154,7 @@ export function BottomDock() {
       : []),
   ];
 
-  const adminLinks: AdminLink[] = [
+  const adminLinks: SheetLink[] = [
     {
       title: "Painel",
       href: "/admin",
@@ -167,16 +209,55 @@ export function BottomDock() {
       : []),
   ];
 
-  function goAdmin(href: string) {
-    setAdminOpen(false);
+  function goTo(href: string, close: () => void) {
+    close();
     navigate(href);
+  }
+
+  function renderSheetLinks(links: SheetLink[], close: () => void) {
+    return (
+      <ul className="space-y-1">
+        {links.map((link) => {
+          const active =
+            location.pathname === link.href || location.pathname.startsWith(`${link.href}/`);
+          return (
+            <li key={`${link.href}-${link.title}`}>
+              <button
+                type="button"
+                onClick={() => goTo(link.href, close)}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${
+                  active ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                }`}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-navy/90 text-white">
+                  {link.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{link.title}</span>
+                  <span className="block text-xs text-muted-foreground">{link.description}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
   }
 
   return (
     <>
-      <div className="sticky bottom-4 z-30 mt-6 flex justify-center px-4 [padding-bottom:env(safe-area-inset-bottom)]">
-        <FloatingDock items={items} />
+      <div className="sticky bottom-4 z-30 mt-6 flex w-full max-w-full justify-center px-3 [padding-bottom:env(safe-area-inset-bottom)] sm:px-4">
+        <FloatingDock items={items} className="max-w-full" />
       </div>
+
+      <BottomSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title="Mais"
+        description="Outras áreas do condomínio."
+      >
+        {renderSheetLinks(moreLinks, () => setMoreOpen(false))}
+      </BottomSheet>
 
       <BottomSheet
         open={adminOpen}
@@ -184,30 +265,7 @@ export function BottomDock() {
         title="Administração"
         description="Atalhos do painel — pensado para o celular."
       >
-        <ul className="space-y-1">
-          {adminLinks.map((link) => {
-            const active = location.pathname === link.href;
-            return (
-              <li key={link.href}>
-                <button
-                  type="button"
-                  onClick={() => goAdmin(link.href)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors ${
-                    active ? "bg-primary/10 text-primary" : "hover:bg-muted"
-                  }`}
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-navy/90 text-white">
-                    {link.icon}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-medium">{link.title}</span>
-                    <span className="block text-xs text-muted-foreground">{link.description}</span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {renderSheetLinks(adminLinks, () => setAdminOpen(false))}
       </BottomSheet>
     </>
   );

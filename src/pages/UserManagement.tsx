@@ -339,7 +339,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Usuários</h1>
         {isAdmin && (
@@ -396,14 +396,14 @@ export default function UserManagement() {
           </CardHeader>
           <CardContent className="space-y-2">
             {pendingData.users.map((u) => (
-              <div key={u.id} className="flex items-center justify-between gap-3 rounded-md border bg-card p-3 text-sm">
-                <div>
-                  <p className="font-medium">{u.name}</p>
-                  <p className="text-xs text-muted-foreground">
+              <div key={u.id} className="flex flex-col gap-3 rounded-md border bg-card p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{u.name}</p>
+                  <p className="break-words text-xs text-muted-foreground">
                     {u.email} · {u.tower ? `Torre ${u.tower} - ${u.apartmentCode}` : "Sem apartamento"}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <Button size="sm" disabled={approveMutation.isPending} onClick={() => approveMutation.mutate(u.id)}>
                     Aprovar
                   </Button>
@@ -425,10 +425,10 @@ export default function UserManagement() {
         </Card>
       )}
 
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <CardTitle className="text-base">Moradores e equipe</CardTitle>
               <CardDescription>
                 Tabela paginada — filtre por torre e apartamento.
@@ -442,8 +442,8 @@ export default function UserManagement() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="min-w-0 space-y-1">
               <Label>Torre</Label>
               <div className="flex flex-wrap gap-1">
                 <Button
@@ -473,15 +473,15 @@ export default function UserManagement() {
                 ))}
               </div>
             </div>
-            <form onSubmit={applyApartmentFilter} className="flex items-end gap-2">
-              <div className="space-y-1">
+            <form onSubmit={applyApartmentFilter} className="flex min-w-0 flex-wrap items-end gap-2">
+              <div className="min-w-0 flex-1 space-y-1 sm:flex-none">
                 <Label htmlFor="apartmentFilter">Apartamento</Label>
                 <Input
                   id="apartmentFilter"
                   placeholder="Ex.: 101"
                   value={apartmentDraft}
                   onChange={(e) => setApartmentDraft(e.target.value)}
-                  className="h-9 w-32"
+                  className="h-9 w-full sm:w-32"
                 />
               </div>
               <Button type="submit" size="sm" variant="outline">
@@ -505,12 +505,12 @@ export default function UserManagement() {
             </form>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="min-w-0 space-y-3">
           {isLoading && <p className="text-muted-foreground">Carregando...</p>}
           {isError && <QueryError onRetry={() => refetch()} />}
           {roleError && <p className="text-sm text-destructive">{roleError}</p>}
 
-          <div className="overflow-x-auto rounded-md border">
+          <div className="-mx-1 max-w-full overflow-x-auto overscroll-x-contain rounded-md border [-webkit-overflow-scrolling:touch] sm:mx-0">
             <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>

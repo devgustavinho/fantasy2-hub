@@ -136,8 +136,8 @@ export default function AuditLog() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-      <div>
+    <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-4 py-8">
+      <div className="min-w-0">
         <h1 className="text-2xl font-semibold">Auditoria</h1>
         <p className="text-sm text-muted-foreground">
           Ações administrativas, de segurança e de conteúdo. Clique no alvo para abrir o registro.
@@ -145,7 +145,7 @@ export default function AuditLog() {
       </div>
 
       <div className="flex flex-wrap items-end gap-4">
-        <div className="min-w-[200px] max-w-xs flex-1 space-y-2">
+        <div className="min-w-0 w-full max-w-xs flex-1 space-y-2 sm:min-w-[200px]">
           <Label htmlFor="actorFilter">Filtrar por pessoa</Label>
           <select
             id="actorFilter"
@@ -181,7 +181,7 @@ export default function AuditLog() {
         )}
       </div>
 
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">
             Histórico
@@ -195,12 +195,12 @@ export default function AuditLog() {
             </span>
           )}
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="min-w-0 space-y-3">
           {isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
           {isError && <QueryError onRetry={() => refetch()} />}
 
           {data && (
-            <div className="overflow-x-auto rounded-md border">
+            <div className="-mx-1 max-w-full overflow-x-auto overscroll-x-contain rounded-md border [-webkit-overflow-scrolling:touch] sm:mx-0">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
