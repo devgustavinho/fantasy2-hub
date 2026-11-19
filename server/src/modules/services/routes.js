@@ -357,18 +357,32 @@ export function servicesRoutes() {
       setWhatsappVisible.run(parsed.data.whatsapp, ownerId);
     }
 
+    // Insert antes da foto — se o upload (sharp/R2) falhar, faz rollback do serviço pra não
+    // deixar órfão com UNIQUE(user_id) e o morador preso em 409 "já tem serviço" sem resposta
+    // útil. Sem try/catch, rejeição async no Express 4 derruba o processo (visto em create com
+    // foto no fluxo de "Meu serviço"; o cadastro admin não manda foto).
     const id = randomUUID();
-    insertService.run({
-      id,
-      user_id: ownerId,
-      name: parsed.data.name,
-      description: parsed.data.description || null,
-      instagram: normalizeInstagram(parsed.data.instagram),
-    });
+    try {
+      insertService.run({
+        id,
+        user_id: ownerId,
+        name: parsed.data.name,
+        description: parsed.data.description || null,
+        instagram: normalizeInstagram(parsed.data.instagram),
+      });
 
-    if (req.file) {
-      const imagePath = await processAndSaveImage(req.file.buffer);
-      setServiceImage.run({ id, image_path: imagePath, updated_at: nowIso() });
+      if (req.file) {
+        const imagePath = await processAndSaveImage(req.file.buffer);
+        setServiceImage.run({ id, image_path: imagePath, updated_at: nowIso() });
+      }
+    } catch (err) {
+      console.error("[services.create] falha ao processar foto:", err?.message || err);
+      if (getServiceById.get(id)) deleteServiceById.run(id);
+      return res.status(400).json({
+        message: req.file
+          ? "Não foi possível processar a foto enviada. Tente outra imagem ou cadastre sem foto."
+          : "Não foi possível cadastrar o serviço. Tente de novo.",
+      });
     }
 
     recordAudit({
@@ -454,7 +468,13 @@ export function servicesRoutes() {
     if (!req.file) return res.status(400).json({ message: "Envie uma foto." });
 
     const oldPath = service.image_path;
-    const imagePath = await processAndSaveImage(req.file.buffer);
+    let imagePath;
+    try {
+      imagePath = await processAndSaveImage(req.file.buffer);
+    } catch (err) {
+      console.error("[services.photo_set] falha ao processar foto:", err?.message || err);
+      return res.status(400).json({ message: "Não foi possível processar a foto enviada." });
+    }
     setServiceImage.run({ id: service.id, image_path: imagePath, updated_at: nowIso() });
     if (oldPath) deleteImageFile(oldPath);
 
