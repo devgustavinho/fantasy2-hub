@@ -73,8 +73,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(message, res.status);
   }
 
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  // 204/205 e também 201 (ex. POST /push/subscribe) podem vir sem corpo — `res.json()`
+  // quebra com "Unexpected end of JSON input".
+  if (res.status === 204 || res.status === 205) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError("Resposta inválida do servidor.", res.status);
+  }
 }
 
 export const api = {
