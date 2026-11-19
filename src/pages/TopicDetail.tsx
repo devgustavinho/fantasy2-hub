@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import * as topicsService from "@/services/topics";
-import type { VoteValue } from "@/lib/types";
+import type { TopicCloseKind, VoteValue } from "@/lib/types";
 import { buildWhatsAppShareLink, cn, formatDateOnly } from "@/lib/utils";
 
 export default function TopicDetail() {
@@ -30,7 +30,10 @@ export default function TopicDetail() {
   const [noteText, setNoteText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState("");
-
+  const [isClosing, setIsClosing] = useState(false);
+  const [closeKind, setCloseKind] = useState<TopicCloseKind>("debated");
+  const [closeReason, setCloseReason] = useState("");
+  const [closeError, setCloseError] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["topic", id],
     queryFn: () => topicsService.getTopic(id!),
@@ -68,6 +71,19 @@ export default function TopicDetail() {
     onSuccess: invalidate,
   });
 
+  const closeMutation = useMutation({
+    mutationFn: () =>
+      topicsService.closeTopic(id!, { kind: closeKind, reason: closeReason.trim() }),
+    onSuccess: () => {
+      setIsClosing(false);
+      setCloseReason("");
+      setCloseError(null);
+      invalidate();
+    },
+    onError: (err) =>
+      setCloseError(err instanceof Error ? err.message : "Erro ao fechar a pauta."),
+  });
+
   const editMutation = useMutation({
     mutationFn: () => topicsService.editTopic(id!, { title: editTitle, description: editDescription }),
     onSuccess: () => {
@@ -99,13 +115,45 @@ export default function TopicDetail() {
   }
 
   const { topic, comments, events } = data;
+  const isClosed = topic.status === "closed";
   const isStaff = user?.role === "admin" || user?.role === "sindico";
   const isOwner = user?.id === topic.createdById;
-  const canEdit = !!user && (isOwner || user.role === "admin" || user.role === "sindico");
+  const canEdit =
+    !isClosed && !!user && (isOwner || user.role === "admin" || user.role === "sindico");
   const canDelete = !!user && (isOwner || user.role === "admin");
   const shareLink = buildWhatsAppShareLink(
     `📋 Vote nesta pauta do condomínio: "${topic.title}"\n${window.location.origin}/topics/${topic.id}`,
   );
+
+  function statusBadge() {
+    if (topic.status === "closed") {
+      const kind =
+        topic.closeKind === "debated"
+          ? "Debatida"
+          : topic.closeKind === "not_scheduled"
+            ? "Não pautada"
+            : "Fechada";
+      return <Badge variant="secondary">Fechada · {kind}</Badge>;
+    }
+    if (topic.status === "scheduled") {
+      return (
+        <Badge variant="success">
+          Pautada em {topic.assemblyDate ? formatDateOnly(topic.assemblyDate) : "-"}
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary">Em aberto</Badge>;
+  }
+
+  function handleCloseSubmit(e: FormEvent) {
+    e.preventDefault();
+    setCloseError(null);
+    if (closeReason.trim().length < 4) {
+      setCloseError("Escreva o motivo (mínimo 4 caracteres).");
+      return;
+    }
+    closeMutation.mutate();
+  }
 
   function handleDeleteOwn() {
     if (window.confirm("Tem certeza que deseja excluir esta pauta? Essa ação não pode ser desfeita.")) {
@@ -170,13 +218,7 @@ export default function TopicDetail() {
           <div className="flex items-center justify-between gap-2">
             {!isEditing && <CardTitle>{topic.title}</CardTitle>}
             <div className="ml-auto flex items-center gap-2">
-              {topic.status === "scheduled" ? (
-                <Badge variant="success">
-                  Pautada em {topic.assemblyDate ? formatDateOnly(topic.assemblyDate) : "-"}
-                </Badge>
-              ) : (
-                <Badge variant="secondary">Em aberto</Badge>
-              )}
+              {statusBadge()}
               <Button variant="outline" size="sm" asChild>
                 <a href={shareLink} target="_blank" rel="noreferrer">
                   <Share2 className="mr-1.5 h-3.5 w-3.5" />
@@ -240,6 +282,25 @@ export default function TopicDetail() {
             </>
           )}
 
+          {isClosed && topic.closeReason && (
+            <div className="rounded-md border bg-muted/50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Motivo do fechamento
+                {topic.closeKind === "debated"
+                  ? " · debatida"
+                  : topic.closeKind === "not_scheduled"
+                    ? " · não pautada"
+                    : ""}
+              </p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{topic.closeReason}</p>
+              {topic.closedAt && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Fechada em {new Date(topic.closedAt).toLocaleString("pt-BR")}
+                </p>
+              )}
+            </div>
+          )}
+
           {topic.statusNote && !isEditingNote && (
             <div className="rounded-md border border-brand-gold/40 bg-brand-gold/10 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-brand-gold">
@@ -249,7 +310,11 @@ export default function TopicDetail() {
             </div>
           )}
 
-          {user?.householdRole === "family" ? (
+          {isClosed ? (
+            <p className="text-sm text-muted-foreground">
+              👍 {topic.favorCount} · 👎 {topic.contraCount} — votação encerrada (pauta fechada).
+            </p>
+          ) : user?.householdRole === "family" ? (
             <p className="text-sm text-muted-foreground">
               👍 {topic.favorCount} · 👎 {topic.contraCount} — membros da família não votam (é um voto por
               apartamento), mas podem comentar normalmente.
@@ -276,54 +341,121 @@ export default function TopicDetail() {
           {isStaff && (
             <div className="space-y-3 rounded-md border bg-muted/40 p-4">
               <p className="text-sm font-medium">Administração</p>
-              {topic.status === "scheduled" ? (
-                <Button variant="outline" size="sm" onClick={() => scheduleMutation.mutate(null)}>
-                  Reabrir pauta
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="date"
-                    value={assemblyDate}
-                    onChange={(e) => setAssemblyDate(e.target.value)}
-                    className="w-auto"
-                  />
-                  <Button
-                    size="sm"
-                    disabled={!assemblyDate || scheduleMutation.isPending}
-                    onClick={() => scheduleMutation.mutate(assemblyDate)}
-                  >
-                    Marcar como pautada
+              {!isClosed &&
+                (topic.status === "scheduled" ? (
+                  <Button variant="outline" size="sm" onClick={() => scheduleMutation.mutate(null)}>
+                    Reabrir pauta
                   </Button>
-                </div>
-              )}
-
-              {isEditingNote ? (
-                <form onSubmit={handleNoteSubmit} className="space-y-2 border-t pt-3">
-                  <Label htmlFor="statusNote">Atualização da administração</Label>
-                  <Textarea
-                    id="statusNote"
-                    rows={3}
-                    placeholder='Ex: "Será levada para a assembleia de novembro"'
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <Button type="submit" size="sm" disabled={statusNoteMutation.isPending}>
-                      Salvar atualização
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setIsEditingNote(false)}>
-                      Cancelar
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="date"
+                      value={assemblyDate}
+                      onChange={(e) => setAssemblyDate(e.target.value)}
+                      className="w-auto"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!assemblyDate || scheduleMutation.isPending}
+                      onClick={() => scheduleMutation.mutate(assemblyDate)}
+                    >
+                      Marcar como pautada
                     </Button>
                   </div>
-                </form>
-              ) : (
-                <div className="border-t pt-3">
-                  <Button variant="outline" size="sm" onClick={startEditingNote}>
-                    {topic.statusNote ? "Editar atualização" : "Adicionar atualização"}
-                  </Button>
-                </div>
-              )}
+                ))}
+
+              {!isClosed &&
+                (isClosing ? (
+                  <form onSubmit={handleCloseSubmit} className="space-y-3 border-t pt-3">
+                    <p className="text-sm font-medium">Fechar pauta</p>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="closeKind"
+                          checked={closeKind === "debated"}
+                          onChange={() => setCloseKind("debated")}
+                        />
+                        Debatida
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="closeKind"
+                          checked={closeKind === "not_scheduled"}
+                          onChange={() => setCloseKind("not_scheduled")}
+                        />
+                        Não pautada
+                      </label>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="closeReason">Motivo</Label>
+                      <Textarea
+                        id="closeReason"
+                        rows={3}
+                        placeholder="Por que esta pauta foi fechada?"
+                        value={closeReason}
+                        onChange={(e) => setCloseReason(e.target.value)}
+                      />
+                    </div>
+                    {closeError && <p className="text-sm text-destructive">{closeError}</p>}
+                    <div className="flex gap-2">
+                      <Button type="submit" size="sm" disabled={closeMutation.isPending}>
+                        {closeMutation.isPending ? "Fechando..." : "Confirmar fechamento"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsClosing(false);
+                          setCloseError(null);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="border-t pt-3">
+                    <Button variant="outline" size="sm" onClick={() => setIsClosing(true)}>
+                      Fechar pauta
+                    </Button>
+                  </div>
+                ))}
+
+              {!isClosed &&
+                (isEditingNote ? (
+                  <form onSubmit={handleNoteSubmit} className="space-y-2 border-t pt-3">
+                    <Label htmlFor="statusNote">Atualização da administração</Label>
+                    <Textarea
+                      id="statusNote"
+                      rows={3}
+                      placeholder='Ex: "Será levada para a assembleia de novembro"'
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <Button type="submit" size="sm" disabled={statusNoteMutation.isPending}>
+                        Salvar atualização
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditingNote(false)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="border-t pt-3">
+                    <Button variant="outline" size="sm" onClick={startEditingNote}>
+                      {topic.statusNote ? "Editar atualização" : "Adicionar atualização"}
+                    </Button>
+                  </div>
+                ))}
 
               {!isOwner && user?.role === "admin" && (
                 <div className="border-t pt-3">

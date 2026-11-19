@@ -38,6 +38,7 @@ npm run dev
 | Criar pauta, votar, comentar | ✅ (exceto votar, se `household_role='family'`) | ✅ | ✅ |
 | Editar título/descrição de uma pauta | só a própria | ✅ (qualquer) | ✅ (qualquer) |
 | Marcar/reabrir pauta como pautada, definir "atualização da administração" | ❌ | ✅ | ✅ |
+| Fechar pauta (debatida / não pautada + motivo) | ❌ | ✅ | ✅ |
 | Ver painel `/admin` (pautas por engajamento) | ❌ | ✅ | ✅ |
 | Ver lista de usuários (`GET /users`) | ❌ | ✅ | ✅ |
 | Resetar senha de um morador | ❌ | ✅ | ✅ |

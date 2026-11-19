@@ -27,6 +27,11 @@ const patchSchema = z.object({
   assemblyDate: z.string().trim().min(1).nullable(),
 });
 
+const closeSchema = z.object({
+  kind: z.enum(["debated", "not_scheduled"]),
+  reason: z.string().trim().min(4).max(2000),
+});
+
 const statusNoteSchema = z.object({
   note: z.string().trim().min(1).max(500).nullable(),
 });
@@ -35,10 +40,18 @@ const deleteSchema = z.object({
   reason: z.string().trim().min(10, "O motivo precisa ter pelo menos 10 caracteres."),
 });
 
+const CLOSE_KIND_LABEL = {
+  debated: "debatida",
+  not_scheduled: "não pautada",
+};
+
+const LIST_STATUS_VALUES = new Set(["open", "scheduled", "closed", "history"]);
+
 const topicListSelect = `
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
     t.status_note AS statusNote,
+    t.close_kind AS closeKind, t.close_reason AS closeReason, t.closed_at AS closedAt,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
     u.name AS createdByName,
     COALESCE(SUM(CASE WHEN v.value = 'favor' THEN 1 ELSE 0 END), 0) AS favorCount,
@@ -61,13 +74,19 @@ const TOPIC_SORT_ORDER = {
 
 const DEFAULT_STATUS_ORDER = `
   CASE WHEN t.status = 'scheduled' THEN t.assembly_date END DESC,
+  CASE WHEN t.status = 'closed' THEN t.closed_at END DESC,
   t.updated_at DESC,
   t.created_at DESC
 `;
 
 function prepareTopicList({ status, sort }) {
   const orderBy = sort ? TOPIC_SORT_ORDER[sort] : status ? DEFAULT_STATUS_ORDER : "t.created_at DESC";
-  const where = status ? "WHERE t.status = ?" : "";
+  let where = "";
+  if (status === "history") {
+    where = "WHERE t.status IN ('scheduled', 'closed')";
+  } else if (status) {
+    where = "WHERE t.status = ?";
+  }
   return sqlite.prepare(`
     ${topicListSelect}
     ${where}
@@ -80,11 +99,22 @@ const getTopic = sqlite.prepare(`
   SELECT
     t.id, t.title, t.description, t.status, t.assembly_date AS assemblyDate,
     t.status_note AS statusNote,
+    t.close_kind AS closeKind, t.close_reason AS closeReason, t.closed_at AS closedAt,
     t.created_at AS createdAt, t.updated_at AS updatedAt,
     t.created_by AS createdById, u.name AS createdByName
   FROM topics t
   JOIN users u ON u.id = t.created_by
   WHERE t.id = ?
+`);
+
+const closeTopic = sqlite.prepare(`
+  UPDATE topics
+  SET status = 'closed',
+      close_kind = @close_kind,
+      close_reason = @close_reason,
+      closed_at = @closed_at,
+      updated_at = @updated_at
+  WHERE id = @id
 `);
 
 const getVoteCounts = sqlite.prepare(`
@@ -176,8 +206,10 @@ export function topicsRoutes() {
 
   router.get("/", (req, res) => {
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
-    if (status && status !== "open" && status !== "scheduled") {
-      return res.status(400).json({ message: "Status inválido. Use open ou scheduled." });
+    if (status && !LIST_STATUS_VALUES.has(status)) {
+      return res.status(400).json({
+        message: "Status inválido. Use open, scheduled, closed ou history.",
+      });
     }
     const sort = typeof req.query.sort === "string" ? req.query.sort : undefined;
     if (sort && !(sort in TOPIC_SORT_ORDER)) {
@@ -187,7 +219,8 @@ export function topicsRoutes() {
       });
     }
     const stmt = prepareTopicList({ status, sort });
-    const raw = status ? stmt.all(status) : stmt.all();
+    const raw =
+      status && status !== "history" ? stmt.all(status) : stmt.all();
     const rows = raw.map((row) => ({
       ...row,
       favorCount: Number(row.favorCount),
@@ -237,9 +270,51 @@ export function topicsRoutes() {
     });
   });
 
+  router.post("/:id/close", requireStaff, (req, res) => {
+    const topic = getTopic.get(req.params.id);
+    if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+    if (topic.status === "closed") {
+      return res.status(400).json({ message: "Esta pauta já está fechada." });
+    }
+
+    const parsed = closeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Informe o tipo (debatida ou não pautada) e o motivo (mín. 4 caracteres).",
+      });
+    }
+
+    const closedAt = nowIso();
+    closeTopic.run({
+      id: topic.id,
+      close_kind: parsed.data.kind,
+      close_reason: parsed.data.reason,
+      closed_at: closedAt,
+      updated_at: closedAt,
+    });
+
+    const kindLabel = CLOSE_KIND_LABEL[parsed.data.kind];
+    const message = `${req.user.name} fechou a pauta como ${kindLabel}: ${parsed.data.reason}`;
+    recordEvent(topic.id, req.user.id, message);
+    notifyTopicWatchers({ topicId: topic.id, actorUserId: req.user.id, message });
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "topics.close",
+      entityType: "topic",
+      entityId: topic.id,
+      details: { kind: parsed.data.kind, reason: parsed.data.reason },
+    });
+
+    res.json({ topic: getTopic.get(topic.id) });
+  });
+
   router.patch("/:id", requireStaff, (req, res) => {
     const topic = getTopic.get(req.params.id);
     if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+    if (topic.status === "closed") {
+      return res.status(400).json({ message: "Pauta fechada — não dá para pautar/reabrir." });
+    }
 
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -274,6 +349,9 @@ export function topicsRoutes() {
   router.patch("/:id/content", (req, res) => {
     const topic = getTopic.get(req.params.id);
     if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+    if (topic.status === "closed") {
+      return res.status(400).json({ message: "Pauta fechada — não dá para editar." });
+    }
 
     const isOwner = topic.createdById === req.user.id;
     const isStaff = req.user.role === "admin" || req.user.role === "sindico";
@@ -378,6 +456,9 @@ export function topicsRoutes() {
 
     const topic = getTopic.get(req.params.id);
     if (!topic) return res.status(404).json({ message: "Pauta não encontrada." });
+    if (topic.status === "closed") {
+      return res.status(400).json({ message: "Pauta fechada — votação encerrada." });
+    }
 
     const parsed = voteSchema.safeParse(req.body);
     if (!parsed.success) {

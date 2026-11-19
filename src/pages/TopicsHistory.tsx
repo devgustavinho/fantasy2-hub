@@ -7,16 +7,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TopicSortControl } from "@/components/TopicSortControl";
 import { QueryError } from "@/components/QueryError";
 import { DEFAULT_TOPIC_SORT, parseTopicSort } from "@/lib/topicSort";
+import type { Topic } from "@/lib/types";
 import { formatDateOnly } from "@/lib/utils";
 import * as topicsService from "@/services/topics";
+
+function historyBadge(topic: Topic) {
+  if (topic.status === "closed") {
+    const label =
+      topic.closeKind === "debated"
+        ? "Fechada · debatida"
+        : topic.closeKind === "not_scheduled"
+          ? "Fechada · não pautada"
+          : "Fechada";
+    return <Badge variant="secondary">{label}</Badge>;
+  }
+  return (
+    <Badge variant="success">
+      Pautada {topic.assemblyDate ? `em ${formatDateOnly(topic.assemblyDate)}` : ""}
+    </Badge>
+  );
+}
 
 export default function TopicsHistory() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sort = parseTopicSort(searchParams.get("sort"));
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["topics", "scheduled", sort],
-    queryFn: () => topicsService.listTopics("scheduled", sort),
+    queryKey: ["topics", "history", sort],
+    queryFn: () => topicsService.listTopics("history", sort),
   });
 
   function handleSortChange(next: typeof sort) {
@@ -37,7 +55,7 @@ export default function TopicsHistory() {
         <div>
           <h1 className="text-2xl font-semibold">Histórico de pautas</h1>
           <p className="text-sm text-muted-foreground">
-            Pautas já marcadas como pautadas para assembleia.
+            Pautas marcadas para assembleia e pautas já fechadas (debatidas ou não pautadas).
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
@@ -60,22 +78,25 @@ export default function TopicsHistory() {
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-base">{topic.title}</CardTitle>
-                  <Badge variant="success">
-                    Pautada {topic.assemblyDate ? `em ${formatDateOnly(topic.assemblyDate)}` : ""}
-                  </Badge>
+                  {historyBadge(topic)}
                 </div>
               </CardHeader>
-              <CardContent className="flex items-center gap-4 pt-0 text-sm text-muted-foreground">
-                <span>👍 {topic.favorCount}</span>
-                <span>👎 {topic.contraCount}</span>
-                <span>💬 {topic.commentCount ?? 0}</span>
-                <span className="ml-auto">por {topic.createdByName}</span>
+              <CardContent className="space-y-1 pt-0 text-sm text-muted-foreground">
+                <div className="flex items-center gap-4">
+                  <span>👍 {topic.favorCount}</span>
+                  <span>👎 {topic.contraCount}</span>
+                  <span>💬 {topic.commentCount ?? 0}</span>
+                  <span className="ml-auto">por {topic.createdByName}</span>
+                </div>
+                {topic.status === "closed" && topic.closeReason && (
+                  <p className="line-clamp-2 text-xs">Motivo: {topic.closeReason}</p>
+                )}
               </CardContent>
             </Card>
           </Link>
         ))}
         {data && data.topics.length === 0 && (
-          <p className="text-muted-foreground">Nenhuma pauta pautada ainda.</p>
+          <p className="text-muted-foreground">Nenhuma pauta no histórico ainda.</p>
         )}
       </div>
     </div>

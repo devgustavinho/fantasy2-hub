@@ -2,7 +2,7 @@ import { api } from "@/lib/api";
 import type { TopicSort } from "@/lib/topicSort";
 import type { Comment, Topic, TopicEvent, VoteValue } from "@/lib/types";
 
-export type TopicListStatus = "open" | "scheduled";
+export type TopicListStatus = "open" | "scheduled" | "closed" | "history";
 
 export const listTopics = (status?: TopicListStatus, sort?: TopicSort) => {
   const params = new URLSearchParams();
@@ -31,6 +31,11 @@ export const editComment = (topicId: string, commentId: string, body: string) =>
 
 export const scheduleTopic = (id: string, assemblyDate: string | null) =>
   api.patch<{ topic: Topic }>(`/topics/${id}`, { assemblyDate });
+
+export const closeTopic = (
+  id: string,
+  data: { kind: "debated" | "not_scheduled"; reason: string },
+) => api.post<{ topic: Topic }>(`/topics/${id}/close`, data);
 
 export const editTopic = (id: string, data: { title: string; description: string }) =>
   api.patch<{ topic: Topic }>(`/topics/${id}/content`, data);

@@ -77,7 +77,7 @@ Moradores **não** precisam deste fluxo.
 
 ### Staff (+ `sindico`)
 
-`schedule_topic`, `update_topic_status_note`, `move_improvement_status`, `list_users`,
+`schedule_topic`, `close_topic`, `update_topic_status_note`, `move_improvement_status`, `list_users`,
 `reset_user_password`
 
 ### Admin (+ `admin`)
