@@ -68,6 +68,17 @@ const countUsers = sqlite.prepare(`
 const getUserById = sqlite.prepare(
   "SELECT id, name, email, role, apartment_id, approval_status FROM users WHERE id = ?",
 );
+
+const getManagedUserById = sqlite.prepare(`
+  SELECT
+    u.id, u.name, u.email, u.role, u.created_at AS createdAt,
+    u.approval_status AS approvalStatus, u.whatsapp, u.whatsapp_visible AS whatsappVisible,
+    u.household_role AS householdRole,
+    a.tower, a.code AS apartmentCode
+  FROM users u
+  LEFT JOIN apartments a ON a.id = u.apartment_id
+  WHERE u.id = ?
+`);
 const countAdmins = sqlite.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
@@ -150,6 +161,13 @@ export function usersRoutes() {
       .map((u) => ({ ...u, whatsappVisible: Boolean(u.whatsappVisible) }));
 
     res.json({ users, total, page, pageSize });
+  });
+
+  // Detalhe pra deep-link da auditoria (/admin/usuarios?user=…).
+  router.get("/:id", requireStaff, (req, res) => {
+    const user = getManagedUserById.get(req.params.id);
+    if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+    res.json({ user: { ...user, whatsappVisible: Boolean(user.whatsappVisible) } });
   });
 
   router.post("/", requireAdmin, async (req, res) => {
