@@ -40,7 +40,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col bg-background" style={{ minHeight: "100dvh" }}>
       <TopBar />
       <OnboardingBanner />
-      <main className="flex-1">{children}</main>
+      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
       <BottomDock />
     </div>
   );
