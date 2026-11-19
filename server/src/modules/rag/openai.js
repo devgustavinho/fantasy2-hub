@@ -64,6 +64,7 @@ export async function embedTexts(input) {
 /**
  * Resposta curta só com o contexto fornecido.
  * @param {{ question: string, contextBlocks: { title: string, sourceType: string, content: string }[] }} args
+ * @returns {Promise<{ answer: string, usedIndices: number[] }>} usedIndices = 1-based [#n] realmente usados
  */
 export async function answerFromContext({ question, contextBlocks }) {
   const context = contextBlocks
@@ -83,7 +84,9 @@ export async function answerFromContext({ question, contextBlocks }) {
         content:
           "Você é o assistente do condomínio Fantasy 2. Responda em português do Brasil, de forma curta e clara. " +
           "Use APENAS o contexto fornecido. Se o contexto não tiver a resposta, diga que não encontrou essa informação no material do condomínio. " +
-          "Não invente regras, horários ou contatos. Quando citar, mencione o título da fonte entre aspas.",
+          "Não invente regras, horários ou contatos. Ignore blocos que não ajudam a responder. " +
+          "Quando citar, mencione o título da fonte entre aspas. " +
+          "Na ÚLTIMA linha da resposta, escreva exatamente: FONTES: n,m (números [#n] que você usou de verdade; se nenhum, FONTES: nenhum).",
       },
       {
         role: "user",
@@ -92,9 +95,27 @@ export async function answerFromContext({ question, contextBlocks }) {
     ],
   });
 
-  const answer = data.choices?.[0]?.message?.content?.trim();
-  if (!answer) throw new Error("Resposta vazia do modelo.");
-  return answer;
+  const raw = data.choices?.[0]?.message?.content?.trim();
+  if (!raw) throw new Error("Resposta vazia do modelo.");
+
+  const fontesMatch = raw.match(/\nFONTES:\s*(.+)\s*$/i);
+  let usedIndices = [];
+  let answer = raw;
+  if (fontesMatch) {
+    answer = raw.slice(0, fontesMatch.index).trim();
+    const list = fontesMatch[1].trim().toLowerCase();
+    if (list !== "nenhum" && list !== "none") {
+      usedIndices = [...list.matchAll(/\d+/g)]
+        .map((m) => Number(m[0]))
+        .filter((n) => n >= 1 && n <= contextBlocks.length);
+    }
+  }
+  // Fallback: se o modelo esqueceu FONTES, assume só o 1º bloco (o mais similar).
+  if (usedIndices.length === 0 && contextBlocks.length > 0 && !/não encontrei/i.test(answer)) {
+    usedIndices = [1];
+  }
+
+  return { answer, usedIndices };
 }
 
 /** Serializa Float32Array → Buffer (BLOB). Cópia alinhada pra SQLite. */
