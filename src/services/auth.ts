@@ -24,6 +24,15 @@ export const confirmTotpSetup = (token: string, code: string) =>
 export const verifyTotp = (token: string, code: string) =>
   api.post<LoginResult>("/auth/2fa/verify", { token, code });
 
+export const startSessionTotpSetup = () =>
+  api.post<{ otpauthUrl: string; qrDataUrl: string }>("/auth/2fa/setup/start");
+
+export const confirmSessionTotpSetup = (code: string) =>
+  api.post<{ user: User }>("/auth/2fa/setup/confirm-session", { code });
+
+export const setActiveRole = (role: import("@/lib/types").Role) =>
+  api.post<{ user: User }>("/auth/active-role", { role });
+
 export const updateMyProfile = (data: { whatsapp?: string | null; whatsappVisible?: boolean }) =>
   api.patch<{ user: User }>("/auth/me", data);
 

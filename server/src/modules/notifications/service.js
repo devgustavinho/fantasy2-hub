@@ -49,11 +49,18 @@ export function notifyUser({ userId, topicId, linkUrl, message }) {
   sendPushToUser(userId, { title: "Fantasy 2 Hub", body: message, url: link ?? "/" });
 }
 
-const getAdminIds = sqlite.prepare("SELECT id FROM users WHERE role = 'admin'");
+const getAdminIds = sqlite.prepare(`
+  SELECT DISTINCT u.id
+  FROM users u
+  JOIN user_roles ur ON ur.user_id = u.id
+  WHERE ur.role = 'admin'
+`);
 
 const getCounselorIds = sqlite.prepare(`
-  SELECT id FROM users
-  WHERE role = 'conselheiro' AND approval_status = 'approved'
+  SELECT DISTINCT u.id
+  FROM users u
+  JOIN user_roles ur ON ur.user_id = u.id
+  WHERE ur.role = 'conselheiro' AND u.approval_status = 'approved'
 `);
 
 // Notifica todos os admins atuais (pode ser mais de um) — usado quando alguém tenta se

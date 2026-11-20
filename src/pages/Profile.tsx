@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { Monitor, Moon, Sun } from "lucide-react";
@@ -15,21 +15,16 @@ import * as authService from "@/services/auth";
 import { AdvancedSettingsCard } from "@/components/AdvancedSettingsCard";
 import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
 import { cn } from "@/lib/utils";
+import {
+  hasAnyPrivilegedRole,
+  needsTotpSetup,
+  roleBadgeVariant,
+  roleLabel,
+  roleRequires2fa,
+  userRoles,
+} from "@/lib/roles";
 import type { Role } from "@/lib/types";
-
-function roleLabel(role: Role) {
-  if (role === "admin") return "Administrador";
-  if (role === "sindico") return "Síndico";
-  if (role === "conselheiro") return "Conselheiro";
-  return "Morador";
-}
-
-function roleBadgeVariant(role: Role) {
-  if (role === "admin") return "default" as const;
-  if (role === "sindico") return "success" as const;
-  if (role === "conselheiro") return "gold" as const;
-  return "secondary" as const;
-}
+import { ApiError } from "@/lib/api";
 
 export default function Profile() {
   const { user, setUser } = useAuth();
@@ -126,7 +121,58 @@ export default function Profile() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["push-subscription"] }),
   });
 
+  const [roleSwitchError, setRoleSwitchError] = useState<string | null>(null);
+  const [totpOpen, setTotpOpen] = useState(false);
+  const [totpQr, setTotpQr] = useState<string | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpError, setTotpError] = useState<string | null>(null);
+
+  const startTotpMutation = useMutation({
+    mutationFn: authService.startSessionTotpSetup,
+    onSuccess: (data) => {
+      setTotpError(null);
+      setTotpQr(data.qrDataUrl);
+      setTotpOpen(true);
+    },
+    onError: (err) => setTotpError(err instanceof Error ? err.message : "Erro ao iniciar 2FA."),
+  });
+
+  const confirmTotpMutation = useMutation({
+    mutationFn: () => authService.confirmSessionTotpSetup(totpCode),
+    onSuccess: ({ user: next }) => {
+      setUser(next);
+      setTotpCode("");
+      setTotpQr(null);
+      setTotpOpen(false);
+      setTotpError(null);
+    },
+    onError: (err) => setTotpError(err instanceof Error ? err.message : "Código inválido."),
+  });
+
+  const activeRoleMutation = useMutation({
+    mutationFn: (role: Role) => authService.setActiveRole(role),
+    onSuccess: ({ user: next }) => {
+      setRoleSwitchError(null);
+      setUser(next);
+    },
+    onError: (err) => {
+      setRoleSwitchError(err instanceof Error ? err.message : "Não foi possível trocar o modo.");
+      if (err instanceof ApiError && err.code === "totp_required") {
+        startTotpMutation.mutate();
+      }
+    },
+  });
+
+  function handleTotpConfirm(e: FormEvent) {
+    e.preventDefault();
+    confirmTotpMutation.mutate();
+  }
+
   if (!user) return null;
+
+  const assignedRoles = userRoles(user);
+  const multiRole = assignedRoles.length > 1;
+  const totpNeeded = needsTotpSetup(user);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
@@ -136,20 +182,113 @@ export default function Profile() {
         <CardHeader>
           <CardTitle className="text-base">Minha conta</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm">
+        <CardContent className="space-y-3 text-sm">
           <p>
             <span className="text-muted-foreground">Nome:</span> {user.name}
           </p>
           <p>
             <span className="text-muted-foreground">E-mail:</span> {user.email}
           </p>
-          <p className="flex items-center gap-2">
-            <span className="text-muted-foreground">Cargo:</span>{" "}
-            <Badge variant={roleBadgeVariant(user.role)}>{roleLabel(user.role)}</Badge>
-            {user.householdRole === "family" && <Badge variant="secondary">Familiar</Badge>}
-          </p>
+          <div className="space-y-2">
+            <p className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">Cargos:</span>
+              {assignedRoles.map((r) => (
+                <Badge key={r} variant={roleBadgeVariant(r)}>
+                  {roleLabel(r)}
+                </Badge>
+              ))}
+              {user.householdRole === "family" && <Badge variant="secondary">Familiar</Badge>}
+            </p>
+            <p className="text-muted-foreground">
+              Modo ativo: <strong className="text-foreground">{roleLabel(user.role)}</strong>
+              {roleRequires2fa(user.role) ? " · ações privilegiadas" : " · visão de morador"}
+            </p>
+          </div>
         </CardContent>
       </Card>
+
+      {multiRole && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Modo de visualização</CardTitle>
+            <CardDescription>
+              Troque o cargo ativo para ver o app como morador, conselheiro ou administração — sem
+              perder os outros cargos.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {assignedRoles.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  disabled={activeRoleMutation.isPending || role === user.role}
+                  onClick={() => activeRoleMutation.mutate(role)}
+                  aria-pressed={role === user.role}
+                  className={cn(
+                    "rounded-xl border px-3 py-3 text-left text-sm font-medium transition-colors",
+                    role === user.role
+                      ? "border-brand-navy bg-brand-navy text-white"
+                      : "hover:bg-muted",
+                  )}
+                >
+                  {roleLabel(role)}
+                  {role === user.role && (
+                    <span className="mt-0.5 block text-xs font-normal opacity-80">Ativo agora</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {roleSwitchError && <p className="text-sm text-destructive">{roleSwitchError}</p>}
+          </CardContent>
+        </Card>
+      )}
+
+      {(totpNeeded || totpOpen || user.totpEnabled) && hasAnyPrivilegedRole(user) && (
+        <Card className={totpNeeded ? "border-amber-500/50 bg-amber-500/5" : undefined}>
+          <CardHeader>
+            <CardTitle className="text-base">Autenticação em duas etapas</CardTitle>
+            <CardDescription>
+              {user.totpEnabled
+                ? "2FA ativo. Obrigatório para conselheiro, síndico e administrador."
+                : "Obrigatório para conselheiro, síndico e administrador. Configure antes de usar esses cargos."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!user.totpEnabled && !totpQr && (
+              <Button
+                onClick={() => startTotpMutation.mutate()}
+                disabled={startTotpMutation.isPending}
+              >
+                {startTotpMutation.isPending ? "Gerando QR..." : "Configurar 2FA"}
+              </Button>
+            )}
+            {totpQr && (
+              <form onSubmit={handleTotpConfirm} className="space-y-3">
+                <img src={totpQr} alt="QR code do 2FA" className="mx-auto h-48 w-48" />
+                <div className="space-y-2">
+                  <Label htmlFor="totp-code">Código de 6 dígitos</Label>
+                  <Input
+                    id="totp-code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={confirmTotpMutation.isPending}>
+                  {confirmTotpMutation.isPending ? "Confirmando..." : "Ativar 2FA"}
+                </Button>
+              </form>
+            )}
+            {totpError && <p className="text-sm text-destructive">{totpError}</p>}
+            {user.totpEnabled && (
+              <p className="text-sm text-muted-foreground">Status: ativo nesta conta.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

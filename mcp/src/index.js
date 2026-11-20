@@ -55,7 +55,7 @@ async function main() {
 
   const tools = registerToolsForUser(server, api, user);
   console.error(
-    `fantasy2-hub MCP: ${user.email} role=${user.role} tier=${permissionTier(user.role)} tools=${tools.length} api=${baseUrl}`,
+    `fantasy2-hub MCP: ${user.email} role=${user.role} roles=${(user.roles ?? [user.role]).join("+")} tier=${permissionTier(user)} tools=${tools.length} api=${baseUrl}`,
   );
 
   const transport = new StdioServerTransport();

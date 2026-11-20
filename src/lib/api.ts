@@ -9,9 +9,11 @@ export function resolveMediaUrl(path: string) {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -64,13 +66,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let message = `Erro ${res.status}`;
+    let code: string | undefined;
     try {
       const body = await res.json();
       if (body?.message) message = body.message;
+      if (typeof body?.code === "string") code = body.code;
     } catch {
       // resposta sem corpo JSON
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, code);
   }
 
   // 204/205 e também 201 (ex. POST /push/subscribe) podem vir sem corpo — `res.json()`

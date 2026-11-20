@@ -308,7 +308,7 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
                 {revealed && token ? token : maskedToken}
               </pre>
               <p className="text-xs text-muted-foreground">
-                Equivale a estar logado. Não compartilhe nem committe. Admin: só após o 2FA.
+                Equivale a estar logado. Não compartilhe nem committe. Cargos privilegiados: só após o 2FA.
               </p>
             </div>
 
