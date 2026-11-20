@@ -31,3 +31,9 @@ export async function saveVideo(buffer, mimetype, folder) {
   const key = `${folder}/${randomUUID()}.${extension}`;
   return uploadToR2(key, buffer, mimetype);
 }
+
+// PDF de balancete — sem processamento; sobe o buffer original pro R2.
+export async function savePdf(buffer, folder) {
+  const key = `${folder}/${randomUUID()}.pdf`;
+  return uploadToR2(key, buffer, "application/pdf");
+}

@@ -46,6 +46,15 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+// conselheiro: pareceres de balancete (única permissão além da tag de cargo).
+export function requireConselheiro(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
+  if (req.user.role !== "conselheiro") {
+    return res.status(403).json({ message: "Apenas conselheiros podem dar parecer." });
+  }
+  next();
+}
+
 // cadastro precisa ter sido aprovado pela administração pra usar o app de verdade
 // (pautas, notificações, etc.) — pendente/recusado só enxerga o próprio status via /auth/me.
 export function requireApproved(req, res, next) {
