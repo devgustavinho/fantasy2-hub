@@ -5,6 +5,7 @@ import { requireAuth, requireApproved, requireStaff, requireConselheiro } from "
 import { deleteFromR2 } from "../../lib/r2.js";
 import { savePdf } from "../../lib/media.js";
 import { recordAudit } from "../audit/service.js";
+import { notifyCounselors } from "../notifications/service.js";
 import {
   listBalancetes,
   buildDetail,
@@ -91,6 +92,11 @@ export function contabilRoutes() {
         entityType: "balancete",
         entityId: balancete.id,
         details: { referenceMonth: balancete.referenceMonth, title: balancete.title },
+      });
+
+      notifyCounselors({
+        message: `${balancete.title} foi publicado e aguarda seu parecer.`,
+        url: `/contabil/${balancete.id}`,
       });
 
       res.status(201).json({ balancete });

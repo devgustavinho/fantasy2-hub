@@ -51,6 +51,11 @@ export function notifyUser({ userId, topicId, linkUrl, message }) {
 
 const getAdminIds = sqlite.prepare("SELECT id FROM users WHERE role = 'admin'");
 
+const getCounselorIds = sqlite.prepare(`
+  SELECT id FROM users
+  WHERE role = 'conselheiro' AND approval_status = 'approved'
+`);
+
 // Notifica todos os admins atuais (pode ser mais de um) — usado quando alguém tenta se
 // cadastrar, pra avisar que há uma aprovação pendente.
 export function notifyAdmins({ message, url }) {
@@ -64,6 +69,25 @@ export function notifyAdmins({ message, url }) {
   insertMany(admins);
 
   for (const row of admins) {
+    sendPushToUser(row.id, { title: "Fantasy 2 Hub", body: message, url: linkUrl });
+  }
+}
+
+// Notifica conselheiros aprovados — usado ao publicar balancete pra análise do conselho.
+// Mesmo padrão de notifyAdmins: in-app + push (sem e-mail; e-mail no Hub é transacional).
+export function notifyCounselors({ message, url }) {
+  const counselors = getCounselorIds.all();
+  if (!counselors.length) return;
+
+  const linkUrl = url ?? "/contabil";
+  const insertMany = sqlite.transaction((rows) => {
+    for (const row of rows) {
+      insertNotification.run({ id: randomUUID(), user_id: row.id, topic_id: null, link_url: linkUrl, message });
+    }
+  });
+  insertMany(counselors);
+
+  for (const row of counselors) {
     sendPushToUser(row.id, { title: "Fantasy 2 Hub", body: message, url: linkUrl });
   }
 }
