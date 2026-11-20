@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { sqlite } from "../src/db/client.js";
 import { hashPassword } from "../src/auth/password.js";
+import { setUserRoles } from "../src/auth/roles.js";
 
 function parseArgs() {
   const args = {};
@@ -29,6 +30,7 @@ if (existing) {
   sqlite
     .prepare("UPDATE users SET role = 'admin', password_hash = ? WHERE id = ?")
     .run(passwordHash, existing.id);
+  setUserRoles(existing.id, ["admin"], { activeRole: "admin" });
   console.log(`Usuário existente promovido a admin: ${normalizedEmail}`);
 } else {
   const id = randomUUID();
@@ -37,5 +39,6 @@ if (existing) {
       "INSERT INTO users (id, apartment_id, name, email, password_hash, role) VALUES (?, NULL, ?, ?, ?, 'admin')",
     )
     .run(id, name || "Administração", normalizedEmail, passwordHash);
+  setUserRoles(id, ["admin"], { activeRole: "admin" });
   console.log(`Admin criado: ${normalizedEmail}`);
 }

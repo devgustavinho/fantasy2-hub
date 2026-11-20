@@ -238,8 +238,8 @@ export default function Login() {
                 <CardHeader>
                   <CardTitle>Configurar autenticação em duas etapas</CardTitle>
                   <CardDescription>
-                    Contas de administrador exigem 2FA. Escaneie o QR code com o Google Authenticator
-                    (ou similar) e digite o código de 6 dígitos gerado.
+                    Conselheiro, síndico e administrador exigem 2FA. Escaneie o QR code com o Google
+                    Authenticator (ou similar) e digite o código de 6 dígitos gerado.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

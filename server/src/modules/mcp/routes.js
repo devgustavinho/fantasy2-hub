@@ -68,7 +68,7 @@ async function handleMcpPost(req, res) {
     await transport.handleRequest(req, res, req.body);
     if (process.env.NODE_ENV !== "production") {
       console.error(
-        `mcp http: ${user.email} role=${user.role} tier=${permissionTier(user.role)} tools=${tools.length}`,
+        `mcp http: ${user.email} role=${user.role} roles=${(user.roles ?? [user.role]).join("+")} tier=${permissionTier(user)} tools=${tools.length}`,
       );
     }
   } catch (err) {

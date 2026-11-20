@@ -25,6 +25,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { roleLabel, userRoles } from "@/lib/roles";
 
 export function TopBar() {
   const { user, logout } = useAuth();
@@ -37,6 +38,9 @@ export function TopBar() {
 
   if (!user) return null;
 
+  const roles = userRoles(user);
+  const multiRole = roles.length > 1;
+
   return (
     <header className="border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
@@ -45,6 +49,15 @@ export function TopBar() {
           <span className="hidden truncate text-brand-gold sm:inline">Fantasy 2 Hub</span>
         </Link>
         <div className="flex shrink-0 items-center gap-2 text-sm sm:gap-3">
+          {multiRole && (
+            <Link
+              to="/perfil"
+              className="max-w-[7.5rem] truncate rounded-full border border-brand-gold/40 bg-white/10 px-2.5 py-1 text-xs text-brand-gold transition-colors hover:bg-white/15"
+              title="Trocar modo de visualização"
+            >
+              {roleLabel(user.role)}
+            </Link>
+          )}
           <NotificationBell />
           <Link
             to="/perfil"

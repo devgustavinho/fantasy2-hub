@@ -95,8 +95,27 @@ function roleBadge(role: Role) {
   return <Badge variant="secondary">Morador</Badge>;
 }
 
-function isResidentLike(role: Role) {
-  return role === "morador" || role === "conselheiro";
+function rolesOf(user: Pick<ManagedUser, "role" | "roles">): Role[] {
+  if (Array.isArray(user.roles) && user.roles.length) return user.roles;
+  return user.role ? [user.role] : ["morador"];
+}
+
+function rolesBadges(user: Pick<ManagedUser, "role" | "roles">) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {rolesOf(user).map((r) => (
+        <span key={r}>{roleBadge(r)}</span>
+      ))}
+    </div>
+  );
+}
+
+function isResidentLike(user: Pick<ManagedUser, "role" | "roles">) {
+  return rolesOf(user).every((r) => r === "morador" || r === "conselheiro");
+}
+
+function hasAdminRole(user: Pick<ManagedUser, "role" | "roles">) {
+  return rolesOf(user).includes("admin");
 }
 
 function approvalBadge(status: ManagedUser["approvalStatus"]) {
@@ -105,7 +124,7 @@ function approvalBadge(status: ManagedUser["approvalStatus"]) {
   return null;
 }
 
-type RoleAction = { id: string; name: string; from: Role; to: Role };
+type RolesEditor = { id: string; name: string; roles: Role[] };
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
@@ -148,7 +167,7 @@ export default function UserManagement() {
   const [rejectReason, setRejectReason] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [actionsUser, setActionsUser] = useState<ManagedUser | null>(null);
-  const [roleConfirm, setRoleConfirm] = useState<RoleAction | null>(null);
+  const [rolesEditor, setRolesEditor] = useState<RolesEditor | null>(null);
   const [serviceUser, setServiceUser] = useState<ManagedUser | null>(null);
   const [emailUser, setEmailUser] = useState<ManagedUser | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
@@ -229,14 +248,14 @@ export default function UserManagement() {
 
   const [roleError, setRoleError] = useState<string | null>(null);
   const roleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: Role }) => usersService.changeUserRole(id, role),
+    mutationFn: ({ id, roles }: { id: string; roles: Role[] }) => usersService.changeUserRoles(id, roles),
     onSuccess: () => {
       setRoleError(null);
-      setRoleConfirm(null);
+      setRolesEditor(null);
       setActionsUser(null);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: (err) => setRoleError(err instanceof Error ? err.message : "Erro ao mudar o cargo."),
+    onError: (err) => setRoleError(err instanceof Error ? err.message : "Erro ao mudar os cargos."),
   });
 
   const resetPasswordMutation = useMutation({
@@ -311,9 +330,21 @@ export default function UserManagement() {
     setApartmentFilter(apartmentDraft.trim());
   }
 
-  function requestRoleChange(user: ManagedUser, to: Role) {
+  function openRolesEditor(user: ManagedUser) {
     setActionsUser(null);
-    setRoleConfirm({ id: user.id, name: user.name, from: user.role, to });
+    setRolesEditor({ id: user.id, name: user.name, roles: [...rolesOf(user)] });
+  }
+
+  function toggleEditorRole(role: Role) {
+    setRolesEditor((prev) => {
+      if (!prev) return prev;
+      const has = prev.roles.includes(role);
+      if (has) {
+        if (prev.roles.length <= 1) return prev;
+        return { ...prev, roles: prev.roles.filter((r) => r !== role) };
+      }
+      return { ...prev, roles: [...prev.roles, role] };
+    });
   }
 
   function openEmailEdit(user: ManagedUser) {
@@ -333,9 +364,8 @@ export default function UserManagement() {
     changeEmailMutation.mutate({ id: emailUser.id, email: next });
   }
 
-  function roleOptionsFor(user: ManagedUser): Role[] {
-    if (!isAdmin || user.id === currentUser?.id) return [];
-    return ALL_ROLES.filter((r) => r !== user.role);
+  function canEditRoles(user: ManagedUser) {
+    return isAdmin && user.id !== currentUser?.id;
   }
 
   return (
@@ -526,7 +556,7 @@ export default function UserManagement() {
                 {data?.users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
                   const hasActions =
-                    !isSelf && (isAdmin || isResidentLike(u.role));
+                    !isSelf && (isAdmin || isResidentLike(u));
                   return (
                     <tr key={u.id} className="border-b last:border-0">
                       <td className="px-3 py-3">
@@ -541,7 +571,7 @@ export default function UserManagement() {
                       <td className="px-3 py-3 text-muted-foreground">{u.email}</td>
                       <td className="px-3 py-3 tabular-nums">{u.tower ?? "—"}</td>
                       <td className="px-3 py-3">{u.apartmentCode ?? "—"}</td>
-                      <td className="px-3 py-3">{roleBadge(u.role)}</td>
+                      <td className="px-3 py-3">{rolesBadges(u)}</td>
                       <td className="px-3 py-3">
                         {hasActions ? (
                           <Button
@@ -718,17 +748,16 @@ export default function UserManagement() {
       >
         {actionsUser && (
           <div className="space-y-1">
-            {roleOptionsFor(actionsUser).map((to) => (
+            {canEditRoles(actionsUser) && (
               <button
-                key={to}
                 type="button"
                 className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
-                onClick={() => requestRoleChange(actionsUser, to)}
+                onClick={() => openRolesEditor(actionsUser)}
               >
-                Alterar para {ROLE_LABEL[to]}
+                Gerenciar cargos
               </button>
-            ))}
-            {isAdmin && actionsUser.role !== "admin" && (
+            )}
+            {isAdmin && !hasAdminRole(actionsUser) && (
               <button
                 type="button"
                 className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
@@ -737,7 +766,7 @@ export default function UserManagement() {
                 Alterar e-mail
               </button>
             )}
-            {actionsUser.role !== "admin" && (isAdmin || isResidentLike(actionsUser.role)) && (
+            {!hasAdminRole(actionsUser) && (isAdmin || isResidentLike(actionsUser)) && (
               <button
                 type="button"
                 className="flex w-full rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-muted"
@@ -763,38 +792,50 @@ export default function UserManagement() {
         )}
       </BottomSheet>
 
-      {/* Confirmação de promoção/rebaixamento */}
+      {/* Editor de múltiplos cargos */}
       <BottomSheet
-        open={!!roleConfirm}
-        onClose={() => setRoleConfirm(null)}
-        title="Confirmar alteração de cargo"
+        open={!!rolesEditor}
+        onClose={() => setRolesEditor(null)}
+        title="Gerenciar cargos"
+        description={rolesEditor ? rolesEditor.name : undefined}
       >
-        {roleConfirm && (
+        {rolesEditor && (
           <div className="space-y-4">
-            <p className="text-sm">
-              Alterar <strong>{roleConfirm.name}</strong> de{" "}
-              <strong>{ROLE_LABEL[roleConfirm.from]}</strong> para{" "}
-              <strong>{ROLE_LABEL[roleConfirm.to]}</strong>?
+            <p className="text-sm text-muted-foreground">
+              Uma pessoa pode ter vários cargos ao mesmo tempo (ex.: morador + conselheiro +
+              administrador). Conselheiro, síndico e administrador exigem 2FA.
             </p>
-            {roleConfirm.to === "admin" && (
-              <p className="text-sm text-muted-foreground">
-                Admins precisam de 2FA e têm acesso total ao condomínio.
-              </p>
-            )}
-            {roleConfirm.to === "conselheiro" && (
-              <p className="text-sm text-muted-foreground">
-                Conselheiro é só uma tag de reconhecimento — sem poderes de síndico ou admin.
-              </p>
-            )}
+            <div className="space-y-1">
+              {ALL_ROLES.map((role) => {
+                const checked = rolesEditor.roles.includes(role);
+                return (
+                  <label
+                    key={role}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-navy"
+                      checked={checked}
+                      disabled={checked && rolesEditor.roles.length <= 1}
+                      onChange={() => toggleEditorRole(role)}
+                    />
+                    <span className="text-sm font-medium capitalize">{ROLE_LABEL[role]}</span>
+                  </label>
+                );
+              })}
+            </div>
             <div className="flex gap-2">
               <Button
                 className="flex-1"
-                disabled={roleMutation.isPending}
-                onClick={() => roleMutation.mutate({ id: roleConfirm.id, role: roleConfirm.to })}
+                disabled={roleMutation.isPending || rolesEditor.roles.length < 1}
+                onClick={() =>
+                  roleMutation.mutate({ id: rolesEditor.id, roles: rolesEditor.roles })
+                }
               >
-                {roleMutation.isPending ? "Salvando..." : "Confirmar"}
+                {roleMutation.isPending ? "Salvando..." : "Salvar cargos"}
               </Button>
-              <Button className="flex-1" variant="outline" onClick={() => setRoleConfirm(null)}>
+              <Button className="flex-1" variant="outline" onClick={() => setRolesEditor(null)}>
                 Cancelar
               </Button>
             </div>
