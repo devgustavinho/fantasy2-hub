@@ -32,6 +32,8 @@ import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
 import AskCondo from "@/pages/AskCondo";
 import Horarios from "@/pages/Horarios";
+import ContabilList from "@/pages/ContabilList";
+import ContabilDetail from "@/pages/ContabilDetail";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -196,6 +198,22 @@ export default function App() {
                 element={
                   <AppLayout>
                     <ImprovementsBoard />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/contabil"
+                element={
+                  <AppLayout>
+                    <ContabilList />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/contabil/:id"
+                element={
+                  <AppLayout>
+                    <ContabilDetail />
                   </AppLayout>
                 }
               />

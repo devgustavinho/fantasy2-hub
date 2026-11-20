@@ -316,6 +316,70 @@ export interface Improvement {
   createdByName: string;
 }
 
+export type BalanceteStatus = "em_analise" | "aprovado" | "aprovado_ressalvas" | "reprovado";
+export type ParecerDecision = "aprovado" | "aprovado_ressalvas" | "reprovado";
+export type ParecerStatus = "pendente" | "rascunho" | "finalizado";
+export type ObservacaoTipo = "ressalva" | "conferido" | "pendencia";
+
+export interface BalanceteSummary {
+  id: string;
+  referenceMonth: string;
+  title: string;
+  pdfUrl: string;
+  status: BalanceteStatus;
+  publishedAt: string;
+  publishedById: string;
+  publishedByName: string;
+  parecerTotal: number;
+  parecerFinalizados: number;
+}
+
+export interface BalanceteObservacao {
+  id: string;
+  parecerId: string;
+  tipo: ObservacaoTipo;
+  body: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface BalanceteAnalysisItem {
+  id: string;
+  counselorId: string;
+  counselorName: string;
+  status: ParecerStatus;
+  decision: ParecerDecision | null;
+  finalizedAt: string | null;
+}
+
+export interface BalanceteFinalizedParecer {
+  id: string;
+  counselorId: string;
+  counselorName: string;
+  decision: ParecerDecision;
+  finalizedAt: string | null;
+  observacoes: BalanceteObservacao[];
+}
+
+export interface BalanceteMyParecer {
+  id: string;
+  balanceteId: string;
+  counselorId: string;
+  counselorName: string;
+  decision: ParecerDecision | null;
+  status: ParecerStatus;
+  finalizedAt: string | null;
+  updatedAt: string;
+  observacoes: BalanceteObservacao[];
+}
+
+export interface BalanceteDetail {
+  balancete: BalanceteSummary;
+  analysis: BalanceteAnalysisItem[];
+  finalizedPareceres: BalanceteFinalizedParecer[];
+  myParecer: BalanceteMyParecer | null;
+}
+
 // Resultado de login (senha ou passkey) — o backend pode responder de 3 formas diferentes
 // dependendo do estado da conta (2FA obrigatório pra admin). Aprovação pendente/recusada não
 // afeta o login em si — sempre libera sessão; quem bloqueia o app é o `ApprovalGate` no front,

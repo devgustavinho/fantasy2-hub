@@ -6,6 +6,7 @@ import {
   Clock,
   Columns3,
   Ellipsis,
+  FileSpreadsheet,
   Gauge,
   HelpCircle,
   Home,
@@ -121,6 +122,12 @@ export function BottomDock() {
       href: "/melhorias",
       icon: <Lightbulb className="h-5 w-5" />,
       description: "Sugestões para o Portal",
+    },
+    {
+      title: "Organização contábil",
+      href: "/contabil",
+      icon: <FileSpreadsheet className="h-5 w-5" />,
+      description: "Balancetes e pareceres do conselho",
     },
   ];
 
