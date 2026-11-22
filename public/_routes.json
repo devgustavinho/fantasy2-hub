@@ -1,5 +1,11 @@
 {
   "version": 1,
-  "include": ["/t/*", "/topics/*"],
-  "exclude": ["/topics/*.*"]
+  "include": [
+    "/t/*",
+    "/topics/*",
+    "/n/*",
+    "/negocios/*",
+    "/servicos/*"
+  ],
+  "exclude": ["/topics/*.*", "/negocios/*.*", "/servicos/*.*"]
 }

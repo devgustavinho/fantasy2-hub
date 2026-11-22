@@ -54,7 +54,7 @@ export function buildMetaHtml({ title, description, url, image, twitterCard = "s
   ].join("");
 }
 
-/** Remove title padrão e injeta OG no <head>. */
+/** Remove title/OG padrão e injeta OG no <head> (crawlers usam a 1ª meta — sem duplicar). */
 export function injectOg(htmlResponse, meta) {
   const tags = buildMetaHtml(meta);
   return new HTMLRewriter()
@@ -64,6 +64,16 @@ export function injectOg(htmlResponse, meta) {
       },
     })
     .on('meta[name="description"]', {
+      element(el) {
+        el.remove();
+      },
+    })
+    .on('meta[property^="og:"]', {
+      element(el) {
+        el.remove();
+      },
+    })
+    .on('meta[name^="twitter:"]', {
       element(el) {
         el.remove();
       },
@@ -94,13 +104,18 @@ export async function serveSpaWithOg(context, payload) {
   const title = payload.title || payload.name;
   const description =
     payload.description?.trim() ||
-    `Vote na pauta do condomínio no ${DEFAULT_APP_NAME}.`;
+    (payload.slug != null
+      ? `Negócio no ${DEFAULT_APP_NAME}. Peça pelo hub.`
+      : `Vote na pauta do condomínio no ${DEFAULT_APP_NAME}.`);
+
+  const imageSource = payload.image || payload.imagePath;
+  const image = absoluteImage(origin, imageSource);
 
   return injectOg(assetRes, {
     title,
     description,
     url: request.url.split("?")[0],
-    image: absoluteImage(origin, payload.image || payload.imagePath),
-    twitterCard: payload.image || payload.imagePath ? "summary_large_image" : "summary",
+    image,
+    twitterCard: imageSource ? "summary_large_image" : "summary",
   });
 }

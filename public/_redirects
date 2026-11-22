@@ -1,2 +1,2 @@
-# Cloudflare Pages — SPA fallback (inclui /t/<code> e /topics/:id)
+# Cloudflare Pages — SPA fallback (Functions em /t, /topics, /n, /negocios, /servicos têm precedência)
 /*    /index.html   200
