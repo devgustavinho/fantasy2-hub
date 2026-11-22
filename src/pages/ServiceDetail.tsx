@@ -355,11 +355,13 @@ export default function ServiceDetail() {
 
   const service = data.service;
   const modes = service.fulfillmentModes;
-  const canCheckout = cart.length > 0 && !!fulfillmentMode;
+  const sellerWhatsapp = service.owner.whatsapp?.trim() || null;
+  const canOrderViaWhatsapp = !!sellerWhatsapp;
+  const canCheckout = canOrderViaWhatsapp && cart.length > 0 && !!fulfillmentMode;
   const whatsappLink =
-    canCheckout && service.owner.whatsapp
+    canCheckout && sellerWhatsapp
       ? buildWhatsAppLink(
-          service.owner.whatsapp,
+          sellerWhatsapp,
           buildCheckoutMessage(service, cart, fulfillmentMode!, buyerApt),
         )
       : null;
@@ -449,6 +451,12 @@ export default function ServiceDetail() {
             ))}
           </div>
         )}
+        {!canOrderViaWhatsapp && (
+          <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+            Este negócio ainda não liberou pedidos pelo WhatsApp. Você pode ver o cardápio, mas o
+            carrinho fica desativado até o vendedor cadastrar um número.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -456,8 +464,14 @@ export default function ServiceDetail() {
           <button
             key={item.id}
             type="button"
-            onClick={() => setConfiguring(item)}
-            className="group flex flex-col overflow-hidden rounded-md border text-left transition-colors hover:border-primary/50"
+            disabled={!canOrderViaWhatsapp}
+            onClick={() => canOrderViaWhatsapp && setConfiguring(item)}
+            className={cn(
+              "group flex flex-col overflow-hidden rounded-md border text-left transition-colors",
+              canOrderViaWhatsapp
+                ? "hover:border-primary/50"
+                : "cursor-not-allowed opacity-60",
+            )}
           >
             <div className="flex aspect-square items-center justify-center bg-muted/40">
               {item.images.length > 0 ? (
@@ -483,7 +497,7 @@ export default function ServiceDetail() {
         )}
       </div>
 
-      {cart.length > 0 && (
+      {cart.length > 0 && canOrderViaWhatsapp && (
         <Card className="border-primary/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -561,10 +575,16 @@ export default function ServiceDetail() {
                   <MessageCircle className="mr-2 h-4 w-4" /> Pedir no WhatsApp
                 </a>
               </Button>
-            ) : !service.owner.whatsapp ? (
-              <p className="text-center text-sm text-muted-foreground">
-                Este negócio não tem WhatsApp cadastrado para pedidos.
-              </p>
+            ) : !canOrderViaWhatsapp ? (
+              <div className="space-y-2">
+                <Button type="button" className="w-full" disabled>
+                  <MessageCircle className="mr-2 h-4 w-4" /> Pedir no WhatsApp
+                </Button>
+                <p className="text-center text-sm text-muted-foreground">
+                  Este negócio não tem WhatsApp visível pra pedidos. Peça ao vendedor pra cadastrar
+                  o número em Meu negócio.
+                </p>
+              </div>
             ) : (
               <p className="text-center text-sm text-muted-foreground">
                 Escolha como quer receber antes de pedir.
