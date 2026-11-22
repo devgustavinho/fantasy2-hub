@@ -141,10 +141,11 @@ apagados em cascata (`ON DELETE CASCADE`) quando o serviço é excluído.
 
 - Redes sociais do serviço: WhatsApp (`users.whatsapp`, compartilhado com o perfil) e Instagram
   (`condo_services.instagram`, só um handle normalizado — aceita `@handle`, link completo ou só o
-  handle, tudo vira o mesmo formato salvo). **Ambos opcionais**, independentes um do outro — um
-  serviço pode divulgar só um dos dois. Se o WhatsApp for preenchido (na criação ou depois, editando
-  o serviço), marca `whatsapp_visible = 1` automaticamente — é assim que os outros moradores
-  conseguem falar com o dono. Preencher o Instagram não mexe no WhatsApp do perfil.
+  handle, tudo vira o mesmo formato salvo). **WhatsApp é obrigatório** pra cadastrar/editar
+  negócio (atendimento e “Pedir no WhatsApp”); Instagram continua opcional. Ao salvar o WhatsApp
+  no serviço, marca `whatsapp_visible = 1` automaticamente. Na listagem/detalhe públicos, o
+  número do dono só sai no JSON se estiver visível — sem isso o carrinho do front fica
+  desativado. Preencher o Instagram não mexe no WhatsApp do perfil.
 - Fotos de item (até 5, `condo_service_item_images`, ordenadas por `position`): upload via
   `multipart/form-data` (`multer`, `memoryStorage`), **sempre processadas pelo `sharp`** antes de
   salvar — decodifica qualquer formato de entrada (JPEG/PNG/WebP/**HEIC/HEIF**, o formato que

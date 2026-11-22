@@ -157,6 +157,7 @@ const SERVICE_JOIN_SELECT = `
          s.fulfillment_modes AS fulfillmentModesRaw, s.slug,
          s.created_at AS createdAt,
          u.id AS ownerId, u.name AS ownerName, u.whatsapp AS ownerWhatsapp,
+         u.whatsapp_visible AS ownerWhatsappVisible,
          a.tower, a.code AS apartmentCode
   FROM condo_services s
   JOIN users u ON u.id = s.user_id
@@ -291,6 +292,11 @@ function serializeItem(row) {
 // Listagem pública (`GET /services`) não traz os itens — só o suficiente pra escolher o
 // serviço; os itens (e as opções de cada um) só vêm no detalhe (`GET /services/:id`), que tem
 // seu próprio link dedicado no front.
+function publicOwnerWhatsapp(row) {
+  // Pedidos / "Pedir no WhatsApp" só com número preenchido e visível — mesmo padrão do perfil.
+  return row.ownerWhatsapp && row.ownerWhatsappVisible ? row.ownerWhatsapp : null;
+}
+
 function serializeServiceSummary(row) {
   return {
     id: row.id,
@@ -304,7 +310,7 @@ function serializeServiceSummary(row) {
     owner: {
       id: row.ownerId,
       name: row.ownerName,
-      whatsapp: row.ownerWhatsapp,
+      whatsapp: publicOwnerWhatsapp(row),
       tower: row.tower,
       apartmentCode: row.apartmentCode,
     },
@@ -403,7 +409,7 @@ export function servicesRoutes() {
     res.json({ service: serializeServiceDetail(service) });
   });
 
-  // WhatsApp e Instagram são opcionais: um serviço pode divulgar só um dos dois (ou os dois).
+  // WhatsApp obrigatório (atendimento/carrinho); Instagram opcional.
   // Foto também é opcional aqui — antes só dava pra anexar depois de já ter criado o serviço
   // (a tela de edição só aparece depois do cadastro), o que fazia parecer que a opção nem
   // existia. `handlePhotoUpload` faz o multipart virar `req.body` (strings) + `req.file`.
@@ -440,9 +446,13 @@ export function servicesRoutes() {
     const slug = allocateUniqueSlug(requestedSlug);
     if (!slug) return res.status(409).json({ message: "Esse link curto já está em uso. Escolha outro." });
 
-    if (parsed.data.whatsapp) {
-      setWhatsappVisible.run(parsed.data.whatsapp, ownerId);
+    const whatsapp = (parsed.data.whatsapp || "").trim() || (ownerId === req.user.id ? req.user.whatsapp : null);
+    if (!whatsapp) {
+      return res.status(400).json({
+        message: "Cadastre um WhatsApp pra oferecer atendimento e receber pedidos.",
+      });
     }
+    setWhatsappVisible.run(whatsapp, ownerId);
 
     // Insert antes da foto — se o upload (sharp/R2) falhar, faz rollback do serviço pra não
     // deixar órfão com UNIQUE(user_id) e o morador preso em 409 "já tem negócio" sem resposta
@@ -519,9 +529,13 @@ export function servicesRoutes() {
       return res.status(409).json({ message: "Esse link curto já está em uso. Escolha outro." });
     }
 
-    if (parsed.data.whatsapp) {
-      setWhatsappVisible.run(parsed.data.whatsapp, req.user.id);
+    const whatsapp = (parsed.data.whatsapp || "").trim() || req.user.whatsapp;
+    if (!whatsapp) {
+      return res.status(400).json({
+        message: "Cadastre um WhatsApp pra oferecer atendimento e receber pedidos.",
+      });
     }
+    setWhatsappVisible.run(whatsapp, req.user.id);
 
     updateService.run({
       id: service.id,
@@ -547,7 +561,7 @@ export function servicesRoutes() {
     res.json({
       service: {
         ...serializeServiceDetail(getServiceWithOwnerById.get(service.id)),
-        whatsapp: parsed.data.whatsapp || req.user.whatsapp,
+        whatsapp,
       },
     });
   });

@@ -32,7 +32,7 @@ const ALL_ROLES: Role[] = ["admin", "sindico", "conselheiro", "morador"];
 function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
+  const [whatsapp, setWhatsapp] = useState(user.whatsapp ?? "");
   const [instagram, setInstagram] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone:
     mutationFn: () =>
       servicesApi.createService({
         name,
-        whatsapp: whatsapp || undefined,
+        whatsapp: whatsapp.trim(),
         instagram: instagram || undefined,
         userId: user.id,
       }),
@@ -58,16 +58,27 @@ function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone:
       setError("Preencha o nome do negócio.");
       return;
     }
+    if (!whatsapp.trim()) {
+      setError("Cadastre um WhatsApp pra oferecer atendimento e receber pedidos.");
+      return;
+    }
     createMutation.mutate();
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        {user.name} vai poder editar tudo depois em "Meu negócio".
+        {user.name} vai poder editar tudo depois em &quot;Meu negócio&quot;. WhatsApp é obrigatório
+        pra pedidos.
       </p>
       <Input placeholder="Nome do negócio" value={name} onChange={(e) => setName(e.target.value)} />
-      <Input placeholder="WhatsApp (opcional)" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
+      <Input
+        placeholder="WhatsApp"
+        value={whatsapp}
+        onChange={(e) => setWhatsapp(e.target.value)}
+        required
+        aria-required="true"
+      />
       <Input placeholder="Instagram (opcional)" value={instagram} onChange={(e) => setInstagram(e.target.value)} />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-2">

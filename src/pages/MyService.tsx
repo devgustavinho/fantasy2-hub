@@ -217,6 +217,7 @@ export default function MyService() {
   }
 
   const service = data?.service ?? null;
+  const hasWhatsapp = whatsapp.trim().length > 0;
   const shortUrl = service?.slug
     ? buildBusinessShortUrl(window.location.origin, service.slug)
     : slug
@@ -227,6 +228,11 @@ export default function MyService() {
   function validateBusinessFields() {
     if (!name.trim()) {
       setError("Preencha o nome do negócio.");
+      setTab("dados");
+      return false;
+    }
+    if (!whatsapp.trim()) {
+      setError("Cadastre um WhatsApp pra oferecer atendimento e receber pedidos.");
       setTab("dados");
       return false;
     }
@@ -266,11 +272,17 @@ export default function MyService() {
               <label
                 key={mode}
                 className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm",
-                  checked && "border-primary bg-primary/5",
+                  "flex items-center gap-2 rounded-md border p-2 text-sm",
+                  hasWhatsapp ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+                  checked && hasWhatsapp && "border-primary bg-primary/5",
                 )}
               >
-                <input type="checkbox" checked={checked} onChange={() => toggleMode(mode)} />
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!hasWhatsapp}
+                  onChange={() => toggleMode(mode)}
+                />
                 <Icon className="h-4 w-4 text-muted-foreground" />
                 {FULFILLMENT_LABELS[mode]}
               </label>
@@ -382,8 +394,8 @@ export default function MyService() {
         <CardHeader>
           <CardTitle className="text-base">Dados do negócio</CardTitle>
           <CardDescription>
-            WhatsApp e Instagram são opcionais — informe pelo menos um pra outros moradores
-            conseguirem te encontrar. Se preencher o WhatsApp, ele fica visível pros outros moradores.
+            WhatsApp é obrigatório pra receber pedidos. Ao salvar, ele fica visível pros outros
+            moradores. Instagram continua opcional.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -405,12 +417,18 @@ export default function MyService() {
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label>WhatsApp (opcional)</Label>
+            <Label htmlFor="negocio-whatsapp">WhatsApp</Label>
             <Input
+              id="negocio-whatsapp"
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
               placeholder="(11) 91234-5678"
+              required
+              aria-required="true"
             />
+            <p className="text-[11px] text-muted-foreground">
+              Usado no botão &quot;Pedir no WhatsApp&quot; do carrinho. Fica visível no negócio.
+            </p>
           </div>
           <div className="space-y-1">
             <Label>Instagram (opcional)</Label>
@@ -438,6 +456,20 @@ export default function MyService() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!hasWhatsapp && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+              <p>
+                Sem WhatsApp cadastrado você não pode oferecer atendimento nem receber pedidos.
+              </p>
+              <button
+                type="button"
+                className="mt-1.5 font-medium text-primary underline-offset-2 hover:underline"
+                onClick={() => setTab("dados")}
+              >
+                Cadastrar WhatsApp em Dados
+              </button>
+            </div>
+          )}
           {renderModes()}
           {service && error && tab === "atendimento" && <p className="text-sm text-destructive">{error}</p>}
           {renderSaveActions()}
