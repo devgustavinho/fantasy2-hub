@@ -31,6 +31,15 @@ const MODE_ICONS: Record<FulfillmentMode, typeof DoorOpen> = {
   online: Globe,
 };
 
+const TABS = [
+  { id: "dados", label: "Dados" },
+  { id: "atendimento", label: "Atendimento" },
+  { id: "itens", label: "Itens" },
+  { id: "divulgacao", label: "Divulgação" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
 function suggestSlug(name: string) {
   const cleaned = name
     .normalize("NFD")
@@ -48,6 +57,7 @@ function suggestSlug(name: string) {
 export default function MyService() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<TabId>("dados");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [whatsapp, setWhatsapp] = useState(user?.whatsapp ?? "");
@@ -170,7 +180,10 @@ export default function MyService() {
 
   const deleteMutation = useMutation({
     mutationFn: servicesApi.deleteService,
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setTab("dados");
+      invalidate();
+    },
   });
 
   const setPhotoMutation = useMutation({
@@ -204,28 +217,37 @@ export default function MyService() {
   }
 
   const service = data?.service ?? null;
-  const shortUrl = service?.slug ? buildBusinessShortUrl(window.location.origin, service.slug) : null;
+  const shortUrl = service?.slug
+    ? buildBusinessShortUrl(window.location.origin, service.slug)
+    : slug
+      ? buildBusinessShortUrl(window.location.origin, slug)
+      : null;
+  const previewUrl = slug ? buildBusinessShortUrl(window.location.origin, slug) : shortUrl;
 
-  function handleCreate(e: FormEvent) {
-    e.preventDefault();
+  function validateBusinessFields() {
     if (!name.trim()) {
       setError("Preencha o nome do negócio.");
-      return;
+      setTab("dados");
+      return false;
     }
     if (fulfillmentModes.length === 0) {
       setError("Escolha ao menos uma forma de atendimento.");
-      return;
+      setTab("atendimento");
+      return false;
     }
+    setError(null);
+    return true;
+  }
+
+  function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    if (!validateBusinessFields()) return;
     createMutation.mutate();
   }
 
   function handleUpdate(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
-    if (fulfillmentModes.length === 0) {
-      setError("Escolha ao menos uma forma de atendimento.");
-      return;
-    }
+    if (!validateBusinessFields()) return;
     updateMutation.mutate();
   }
 
@@ -317,68 +339,225 @@ export default function MyService() {
     );
   }
 
-  return (
-    <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Meu negócio</h1>
-        <Link to="/negocios" className="text-sm text-primary underline">
-          Ver todos os negócios
-        </Link>
+  function renderSaveActions() {
+    if (!service) return null;
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={updateMutation.isPending}>
+          {updateMutation.isPending ? "Salvando..." : "Salvar"}
+        </Button>
+        {tab === "dados" && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (window.confirm("Excluir seu negócio e todos os itens cadastrados?")) {
+                deleteMutation.mutate();
+              }
+            }}
+          >
+            Excluir negócio
+          </Button>
+        )}
       </div>
+    );
+  }
 
-      {!service && (
+  function renderCreateFooter() {
+    if (service) return null;
+    return (
+      <div className="sticky bottom-16 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur sm:bottom-0">
+        {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+        <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+          {createMutation.isPending ? "Cadastrando..." : "Cadastrar negócio"}
+        </Button>
+      </div>
+    );
+  }
+
+  function renderDadosTab() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Dados do negócio</CardTitle>
+          <CardDescription>
+            WhatsApp e Instagram são opcionais — informe pelo menos um pra outros moradores
+            conseguirem te encontrar. Se preencher o WhatsApp, ele fica visível pros outros moradores.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1">
+            <Label>Nome do negócio</Label>
+            <Input
+              value={name}
+              onChange={(e) => {
+                const next = e.target.value;
+                setName(next);
+                if (!service && !slugTouched) setSlug(suggestSlug(next));
+              }}
+              placeholder="Ex: Doces da Maria"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Descrição{service ? "" : " (opcional)"}</Label>
+            <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label>WhatsApp (opcional)</Label>
+            <Input
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              placeholder="(11) 91234-5678"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Instagram (opcional)</Label>
+            <Input
+              value={instagram}
+              onChange={(e) => setInstagram(e.target.value)}
+              placeholder="@doces.da.maria"
+            />
+          </div>
+          {renderTags()}
+          {service && error && tab === "dados" && <p className="text-sm text-destructive">{error}</p>}
+          {renderSaveActions()}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function renderAtendimentoTab() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Formas de atendimento</CardTitle>
+          <CardDescription>
+            Escolha como os moradores podem receber ou retirar. O pedido sempre fecha no WhatsApp.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {renderModes()}
+          {service && error && tab === "atendimento" && <p className="text-sm text-destructive">{error}</p>}
+          {renderSaveActions()}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function renderItensTab() {
+    if (!service) {
+      return (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Cadastrar negócio</CardTitle>
-            <CardDescription>
-              WhatsApp e Instagram são opcionais — informe pelo menos um pra outros moradores
-              conseguirem te encontrar. Se preencher o WhatsApp, ele fica visível pros outros moradores.
-            </CardDescription>
+            <CardTitle className="text-base">Itens</CardTitle>
+            <CardDescription>Cadastre o negócio primeiro pra poder adicionar itens ao cardápio.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreate} className="space-y-3">
-              <div className="space-y-1">
-                <Label>Nome do negócio</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setName(next);
-                    if (!slugTouched) setSlug(suggestSlug(next));
-                  }}
-                  placeholder="Ex: Doces da Maria"
-                  required
-                />
+        </Card>
+      );
+    }
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Itens ({service.items.length})</CardTitle>
+          <CardDescription>Cardápio ou lista do que você oferece. Pedidos fecham no WhatsApp.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {service.items.map((item) =>
+            editingItemId === item.id ? (
+              <ItemEditor
+                key={item.id}
+                serviceId={service.id}
+                initial={item}
+                onCancel={() => setEditingItemId(null)}
+                onSaved={() => setEditingItemId(null)}
+              />
+            ) : (
+              <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-md border p-2">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
+                  {item.images.length > 0 ? (
+                    <img
+                      src={resolveMediaUrl(item.images[0].path)}
+                      alt={item.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Sem foto</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.isNegotiable ? "A negociar" : formatCentsToBRL(item.priceCents)}
+                    {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
+                    {item.optionGroups.length > 0 ? ` · ${item.optionGroups.length} grupo(s) de opção` : ""}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
+                  Editar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={deleteItemMutation.isPending}
+                  onClick={() => deleteItemMutation.mutate(item.id)}
+                >
+                  Excluir
+                </Button>
               </div>
-              {renderSlugField()}
-              <div className="space-y-1">
-                <Label>Descrição (opcional)</Label>
-                <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>WhatsApp (opcional)</Label>
-                <Input
-                  value={whatsapp}
-                  onChange={(e) => setWhatsapp(e.target.value)}
-                  placeholder="(11) 91234-5678"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Instagram (opcional)</Label>
-                <Input
-                  value={instagram}
-                  onChange={(e) => setInstagram(e.target.value)}
-                  placeholder="@doces.da.maria"
-                />
-              </div>
-              {renderModes()}
-              {renderTags()}
-              <div className="space-y-2">
-                <Label>Capa pro compartilhamento (WhatsApp)</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Essa foto vira a miniatura quando alguém cola o link /n/… no WhatsApp. Prefira
-                  algo horizontal, com o produto ou a marca bem no centro.
-                </p>
+            ),
+          )}
+          {service.items.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhum item cadastrado ainda.</p>
+          )}
+
+          {addingItem ? (
+            <ItemEditor
+              serviceId={service.id}
+              onCancel={() => setAddingItem(false)}
+              onSaved={() => setAddingItem(false)}
+            />
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setAddingItem(true)}>
+              Adicionar item
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function renderDivulgacaoTab() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Divulgação</CardTitle>
+          <CardDescription>
+            Link curto e capa pra compartilhar no WhatsApp. O hub só intermedia — o contato fecha lá.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {renderSlugField()}
+          {service?.slug && (
+            <p className="text-xs text-muted-foreground">
+              Link atual:{" "}
+              <a href={shortUrl!} className="text-primary underline-offset-2 hover:underline">
+                /n/{service.slug}
+              </a>
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <Label>Capa pro compartilhamento (WhatsApp)</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Essa foto vira a miniatura quando alguém cola o link /n/… no WhatsApp. Prefira algo
+              horizontal, com o produto ou a marca bem no centro.
+            </p>
+
+            {!service && (
+              <>
                 {newServicePhoto && newPhotoPreview ? (
                   <div className="space-y-2">
                     <div className="relative aspect-[1.91/1] w-full overflow-hidden rounded-md border">
@@ -392,62 +571,28 @@ export default function MyService() {
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <WhatsAppShareCard
-                      title={name || "Seu negócio"}
-                      description={description}
-                      imagePath={newPhotoPreview}
-                      url={slug ? buildBusinessShortUrl(window.location.origin, slug) : null}
-                    />
                   </div>
                 ) : (
-                  <>
-                    <ShareCoverPicker
-                      pickLabel="+ adicionar capa"
-                      onReady={(file) => setNewServicePhoto(file)}
-                    />
-                    <WhatsAppShareCard
-                      title={name || "Seu negócio"}
-                      description={description}
-                      imagePath={null}
-                      url={slug ? buildBusinessShortUrl(window.location.origin, slug) : null}
-                    />
-                  </>
+                  <ShareCoverPicker
+                    pickLabel="+ adicionar capa"
+                    onReady={(file) => setNewServicePhoto(file)}
+                  />
                 )}
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Cadastrando..." : "Cadastrar negócio"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+                <WhatsAppShareCard
+                  title={name || "Seu negócio"}
+                  description={description}
+                  imagePath={newPhotoPreview}
+                  url={previewUrl}
+                />
+              </>
+            )}
 
-      {service && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Dados do negócio</CardTitle>
-              {shortUrl && (
-                <CardDescription>
-                  Link pra compartilhar:{" "}
-                  <a href={shortUrl} className="text-primary underline-offset-2 hover:underline">
-                    /n/{service.slug}
-                  </a>
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Capa pro compartilhamento (WhatsApp)</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  A capa do negócio é a imagem do card quando o link é colado no WhatsApp ou
-                  Facebook. Recorte em formato largo (1.91:1).
-                </p>
+            {service && (
+              <>
                 {!service.imagePath && !replacingCover && (
                   <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-                    Sem capa ainda — ao compartilhar, o preview fica genérico (logo do hub) e
-                    quase ninguém clica. Adicione uma foto agora.
+                    Sem capa ainda — ao compartilhar, o preview fica genérico (logo do hub) e quase
+                    ninguém clica. Adicione uma foto agora.
                   </p>
                 )}
                 {service.imagePath && !replacingCover ? (
@@ -496,126 +641,87 @@ export default function MyService() {
                   title={name || service.name}
                   description={description || service.description}
                   imagePath={replacingCover ? null : service.imagePath}
-                  url={shortUrl}
+                  url={previewUrl}
                 />
-              </div>
-              <form onSubmit={handleUpdate} className="space-y-3">
-                <div className="space-y-1">
-                  <Label>Nome do negócio</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
-                </div>
-                {renderSlugField()}
-                <div className="space-y-1">
-                  <Label>Descrição</Label>
-                  <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>WhatsApp (opcional)</Label>
-                  <Input
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    placeholder="(11) 91234-5678"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Instagram (opcional)</Label>
-                  <Input
-                    value={instagram}
-                    onChange={(e) => setInstagram(e.target.value)}
-                    placeholder="@doces.da.maria"
-                  />
-                </div>
-                {renderModes()}
-                {renderTags()}
-                {error && <p className="text-sm text-destructive">{error}</p>}
-                <div className="flex gap-2">
-                  <Button type="submit" size="sm" disabled={updateMutation.isPending}>
-                    {updateMutation.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (window.confirm("Excluir seu negócio e todos os itens cadastrados?")) {
-                        deleteMutation.mutate();
-                      }
-                    }}
-                  >
-                    Excluir negócio
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+              </>
+            )}
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Itens ({service.items.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {service.items.map((item) =>
-                editingItemId === item.id ? (
-                  <ItemEditor
-                    key={item.id}
-                    serviceId={service.id}
-                    initial={item}
-                    onCancel={() => setEditingItemId(null)}
-                    onSaved={() => setEditingItemId(null)}
-                  />
-                ) : (
-                  <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-md border p-2">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
-                      {item.images.length > 0 ? (
-                        <img
-                          src={resolveMediaUrl(item.images[0].path)}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">Sem foto</span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.isNegotiable ? "A negociar" : formatCentsToBRL(item.priceCents)}
-                        {item.images.length > 1 ? ` · ${item.images.length} fotos` : ""}
-                        {item.optionGroups.length > 0 ? ` · ${item.optionGroups.length} grupo(s) de opção` : ""}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => setEditingItemId(item.id)}>
-                      Editar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={deleteItemMutation.isPending}
-                      onClick={() => deleteItemMutation.mutate(item.id)}
-                    >
-                      Excluir
-                    </Button>
-                  </div>
-                ),
-              )}
-              {service.items.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nenhum item cadastrado ainda.</p>
-              )}
+          {service && error && tab === "divulgacao" && <p className="text-sm text-destructive">{error}</p>}
+          {renderSaveActions()}
+        </CardContent>
+      </Card>
+    );
+  }
 
-              {addingItem ? (
-                <ItemEditor
-                  serviceId={service.id}
-                  onCancel={() => setAddingItem(false)}
-                  onSaved={() => setAddingItem(false)}
-                />
-              ) : (
-                <Button size="sm" variant="outline" onClick={() => setAddingItem(true)}>
-                  Adicionar item
-                </Button>
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-8 pb-28">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold">Meu negócio</h1>
+        <Link to="/negocios" className="shrink-0 text-sm text-primary underline">
+          Ver todos
+        </Link>
+      </div>
+
+      {!service && (
+        <p className="text-sm text-muted-foreground">
+          Preencha as abas e cadastre. Pedidos e contato continuam no WhatsApp — o hub só
+          intermedia.
+        </p>
+      )}
+
+      <div className="sticky top-0 z-10 -mx-4 border-b bg-background/95 px-4 backdrop-blur">
+        <div className="flex gap-1 overflow-x-auto pb-px" role="tablist" aria-label="Seções do negócio">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                tab === t.id
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
-            </CardContent>
-          </Card>
-        </>
+            >
+              {t.label}
+              {t.id === "itens" && service ? ` (${service.items.length})` : ""}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "itens" ? (
+        <div role="tabpanel">{renderItensTab()}</div>
+      ) : (
+        <form onSubmit={service ? handleUpdate : handleCreate} className="space-y-4">
+          <div role="tabpanel">
+            {tab === "dados" && renderDadosTab()}
+            {tab === "atendimento" && renderAtendimentoTab()}
+            {tab === "divulgacao" && renderDivulgacaoTab()}
+          </div>
+          {renderCreateFooter()}
+        </form>
+      )}
+
+      {/* Cadastro: CTA sticky também na aba Itens (ainda sem negócio). */}
+      {!service && tab === "itens" && (
+        <div className="sticky bottom-16 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur sm:bottom-0">
+          {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+          <Button
+            type="button"
+            className="w-full"
+            disabled={createMutation.isPending}
+            onClick={() => {
+              if (!validateBusinessFields()) return;
+              createMutation.mutate();
+            }}
+          >
+            {createMutation.isPending ? "Cadastrando..." : "Cadastrar negócio"}
+          </Button>
+        </div>
       )}
     </div>
   );
