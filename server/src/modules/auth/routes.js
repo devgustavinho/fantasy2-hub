@@ -5,7 +5,20 @@ import { sqlite } from "../../db/client.js";
 import { hashPassword, verifyPassword } from "../../auth/password.js";
 import { requireAuth, requireApproved } from "../../auth/guards.js";
 import { toPublicUser } from "../../auth/publicUser.js";
-import { establishSession, confirmTotpSetup, verifyTotpLogin } from "../../auth/twoFactor.js";
+import {
+  establishSession,
+  confirmTotpSetup,
+  verifyTotpLogin,
+  startTotpSetupForUser,
+  confirmTotpSetupForUser,
+} from "../../auth/twoFactor.js";
+import {
+  ensureUserRole,
+  listUserRoles,
+  roleRequires2fa,
+  setActiveRole,
+  setUserRoles,
+} from "../../auth/roles.js";
 import {
   createPasswordResetToken,
   consumePasswordResetToken,
@@ -37,6 +50,14 @@ const totpSchema = z.object({
 const meUpdateSchema = z.object({
   whatsapp: z.string().trim().max(30).nullable().optional(),
   whatsappVisible: z.boolean().optional(),
+});
+
+const activeRoleSchema = z.object({
+  role: z.enum(["admin", "sindico", "conselheiro", "morador"]),
+});
+
+const totpCodeSchema = z.object({
+  code: z.string().trim().min(6).max(6),
 });
 
 const familyMemberSchema = z.object({
@@ -139,6 +160,7 @@ export function authRoutes() {
           return res.status(409).json({ message: "Já existe uma conta com este e-mail." });
         }
         userId = existing.id;
+        setUserRoles(userId, ["morador"]);
       } else {
         userId = randomUUID();
         insertUser.run({
@@ -148,6 +170,7 @@ export function authRoutes() {
           email,
           password_hash: passwordHash,
         });
+        ensureUserRole(userId, "morador");
       }
     } catch (err) {
       if (String(err.message).includes("UNIQUE")) {
@@ -345,6 +368,7 @@ export function authRoutes() {
         password_hash: passwordHash,
         invited_by: req.user.id,
       });
+      ensureUserRole(id, "morador");
     } catch (err) {
       if (String(err.message).includes("UNIQUE")) {
         return res.status(409).json({ message: "Este apartamento já tem um familiar cadastrado, ou o e-mail já existe." });
@@ -362,6 +386,71 @@ export function authRoutes() {
     });
 
     res.status(201).json({ familyMember: { id, name: parsed.data.name, email: parsed.data.email } });
+  });
+
+  // Troca o modo/visão ativa entre os cargos que o usuário já possui.
+  router.post("/active-role", requireAuth, (req, res) => {
+    const parsed = activeRoleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Cargo inválido." });
+    }
+
+    const roles = listUserRoles(req.user.id);
+    if (!roles.includes(parsed.data.role)) {
+      return res.status(400).json({ message: "Você não possui este cargo." });
+    }
+
+    if (roleRequires2fa(parsed.data.role) && !req.user.totp_enabled) {
+      return res.status(403).json({
+        code: "totp_required",
+        message: "Configure a autenticação em duas etapas antes de usar este cargo.",
+      });
+    }
+
+    const result = setActiveRole(req.user.id, parsed.data.role);
+    if (result.error) return res.status(400).json({ message: result.error });
+
+    const fresh = { ...req.user, role: result.activeRole, roles: result.roles };
+    recordAudit({
+      actorUserId: req.user.id,
+      actorName: req.user.name,
+      action: "auth.active_role_change",
+      entityType: "user",
+      entityId: req.user.id,
+      details: { from: req.user.role, to: result.activeRole },
+    });
+    res.json({ user: toPublicUser(fresh) });
+  });
+
+  // Setup de 2FA com sessão já autenticada (promoção pós-login ou cargo privilegiado novo).
+  router.post("/2fa/setup/start", requireAuth, async (req, res) => {
+    const roles = listUserRoles(req.user.id);
+    if (!roles.some(roleRequires2fa)) {
+      return res.status(400).json({
+        message: "2FA é obrigatório para conselheiro, síndico e administrador.",
+      });
+    }
+
+    const result = await startTotpSetupForUser(req.user);
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result);
+  });
+
+  router.post("/2fa/setup/confirm-session", requireAuth, (req, res) => {
+    const parsed = totpCodeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Informe o código de 6 dígitos." });
+
+    const result = confirmTotpSetupForUser(req.user, parsed.data.code);
+    if (result.error) return res.status(400).json({ message: result.error });
+
+    recordAudit({
+      actorUserId: result.user.id,
+      actorName: result.user.name,
+      action: "auth.2fa_enabled",
+      entityType: "user",
+      entityId: result.user.id,
+    });
+    res.json({ user: result.user });
   });
 
   return router;

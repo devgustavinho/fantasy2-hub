@@ -37,17 +37,18 @@ export function registerToolsForUser(server, api, user) {
   // —— Always (authenticated + approved) ————————————————
   tool(server, "whoami", "Retorna o usuário autenticado e o nível de permissão do MCP.", {}, async () => ({
     user,
-    permissionTier: permissionTier(user.role),
+    permissionTier: permissionTier(user),
     note:
-      user.role === "conselheiro"
-        ? "conselheiro é só tag — mesmas tools de morador, sem poderes de staff."
+      (user.roles ?? [user.role]).includes("conselheiro") && !isStaff(user)
+        ? "conselheiro: pareceres contábeis; sem poderes de síndico/admin no MCP."
         : undefined,
   }));
   add("whoami");
 
-  tool(server, "list_my_capabilities", "Lista as tools MCP disponíveis para o seu cargo atual.", {}, async () => ({
+  tool(server, "list_my_capabilities", "Lista as tools MCP disponíveis para os seus cargos.", {}, async () => ({
     role: user.role,
-    permissionTier: permissionTier(user.role),
+    roles: user.roles ?? [user.role],
+    permissionTier: permissionTier(user),
     tools: registered.slice(),
   }));
   add("list_my_capabilities");
@@ -246,7 +247,7 @@ export function registerToolsForUser(server, api, user) {
   add("update_my_profile");
 
   // —— Staff (admin + síndico) ————————————————
-  if (isStaff(user.role)) {
+  if (isStaff(user)) {
     tool(
       server,
       "schedule_topic",
@@ -325,16 +326,16 @@ export function registerToolsForUser(server, api, user) {
   }
 
   // —— Admin only ————————————————
-  if (isAdmin(user.role)) {
+  if (isAdmin(user)) {
     tool(
       server,
       "change_user_role",
-      "Altera o cargo de um usuário (admin | sindico | conselheiro | morador).",
+      "Altera os cargos de um usuário (um ou mais: admin, sindico, conselheiro, morador).",
       {
         id: z.string().min(1),
-        role: z.enum(["admin", "sindico", "conselheiro", "morador"]),
+        roles: z.array(z.enum(["admin", "sindico", "conselheiro", "morador"])).min(1),
       },
-      async ({ id, role }) => api.patch(`/users/${id}/role`, { role }),
+      async ({ id, roles }) => api.patch(`/users/${id}/role`, { roles }),
     );
     add("change_user_role");
 

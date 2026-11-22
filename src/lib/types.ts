@@ -6,12 +6,16 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  /** Modo/visão ativa (um dos `roles`). */
   role: Role;
+  /** Todos os cargos atribuídos. */
+  roles: Role[];
   apartmentId: string | null;
   approvalStatus: ApprovalStatus;
   whatsapp: string | null;
   whatsappVisible: boolean;
   householdRole: HouseholdRole;
+  totpEnabled: boolean;
 }
 
 export interface ManagedUser {
@@ -19,6 +23,7 @@ export interface ManagedUser {
   name: string;
   email: string;
   role: Role;
+  roles: Role[];
   createdAt: string;
   approvalStatus: ApprovalStatus;
   whatsapp: string | null;

@@ -5,6 +5,11 @@ import { sqlite } from "../../db/client.js";
 import { env } from "../../env.js";
 import { hashPassword } from "../../auth/password.js";
 import { requireAdmin, requireStaff } from "../../auth/guards.js";
+import {
+  countAdminsExcluding,
+  listUserRoles,
+  setUserRoles,
+} from "../../auth/roles.js";
 import { createPasswordResetToken } from "../auth/passwordReset.js";
 import { recordAudit } from "../audit/service.js";
 import { notifyUser } from "../notifications/service.js";
@@ -23,9 +28,16 @@ const createSindicoSchema = z.object({
   apartmentId: z.string().min(1).nullable().optional(),
 });
 
-const changeRoleSchema = z.object({
-  role: z.enum(["admin", "sindico", "conselheiro", "morador"]),
-});
+const roleEnum = z.enum(["admin", "sindico", "conselheiro", "morador"]);
+
+const changeRoleSchema = z
+  .object({
+    role: roleEnum.optional(),
+    roles: z.array(roleEnum).min(1).optional(),
+  })
+  .refine((data) => data.roles?.length || data.role, {
+    message: "Informe role ou roles.",
+  });
 
 const changeEmailSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -79,12 +91,21 @@ const getManagedUserById = sqlite.prepare(`
   LEFT JOIN apartments a ON a.id = u.apartment_id
   WHERE u.id = ?
 `);
-const countAdmins = sqlite.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
 const getApartment = sqlite.prepare("SELECT id FROM apartments WHERE id = ?");
 const getApartmentOwner = sqlite.prepare("SELECT id FROM users WHERE apartment_id = ?");
 const getUserByEmail = sqlite.prepare("SELECT id FROM users WHERE email = ?");
 const updateEmail = sqlite.prepare("UPDATE users SET email = ? WHERE id = ?");
 const getAdminNameById = sqlite.prepare("SELECT name FROM users WHERE id = ?");
+
+function withRoles(user) {
+  if (!user) return user;
+  const roles = listUserRoles(user.id);
+  return {
+    ...user,
+    roles: roles.length ? roles : user.role ? [user.role] : ["morador"],
+    whatsappVisible: Boolean(user.whatsappVisible ?? user.whatsapp_visible),
+  };
+}
 
 // Quem tomou a última decisão de aprovação/recusa (nome gravado no audit no momento da ação;
 // se o admin ainda existir, preferimos o nome atual da conta).
@@ -103,7 +124,6 @@ const insertUser = sqlite.prepare(`
   VALUES (@id, @apartment_id, @name, @email, @password_hash, 'sindico', 'approved')
 `);
 
-const updateRole = sqlite.prepare("UPDATE users SET role = ? WHERE id = ?");
 // Só aplica se ainda estiver pendente — evita corrida entre dois admins.
 const approveUser = sqlite.prepare(
   "UPDATE users SET approval_status = 'approved', rejection_reason = NULL WHERE id = ? AND approval_status = 'pending'",
@@ -158,7 +178,7 @@ export function usersRoutes() {
     const total = countUsers.get(filters).c;
     const users = listUsersPage
       .all({ ...filters, limit: pageSize, offset: (page - 1) * pageSize })
-      .map((u) => ({ ...u, whatsappVisible: Boolean(u.whatsappVisible) }));
+      .map(withRoles);
 
     res.json({ users, total, page, pageSize });
   });
@@ -167,7 +187,7 @@ export function usersRoutes() {
   router.get("/:id", requireStaff, (req, res) => {
     const user = getManagedUserById.get(req.params.id);
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-    res.json({ user: { ...user, whatsappVisible: Boolean(user.whatsappVisible) } });
+    res.json({ user: withRoles(user) });
   });
 
   router.post("/", requireAdmin, async (req, res) => {
@@ -200,6 +220,8 @@ export function usersRoutes() {
         email,
         password_hash: passwordHash,
       });
+      const roles = apartmentId ? ["sindico", "morador"] : ["sindico"];
+      setUserRoles(id, roles, { activeRole: "sindico" });
     } catch (err) {
       if (String(err.message).includes("UNIQUE")) {
         return res.status(409).json({ message: "Apartamento ou e-mail já cadastrado." });
@@ -216,7 +238,17 @@ export function usersRoutes() {
       details: { email },
     });
 
-    res.status(201).json({ user: { id, name, email, role: "sindico", apartmentId: apartmentId ?? null } });
+    const roles = listUserRoles(id);
+    res.status(201).json({
+      user: {
+        id,
+        name,
+        email,
+        role: "sindico",
+        roles,
+        apartmentId: apartmentId ?? null,
+      },
+    });
   });
 
   router.patch("/:id/role", requireAdmin, (req, res) => {
@@ -231,20 +263,38 @@ export function usersRoutes() {
       return res.status(400).json({ message: "Cargo inválido." });
     }
 
-    if (target.role === "admin" && parsed.data.role !== "admin" && countAdmins.get().c <= 1) {
+    const fromRoles = listUserRoles(target.id);
+    const nextRoles = parsed.data.roles?.length
+      ? [...new Set(parsed.data.roles)]
+      : [parsed.data.role];
+
+    const losingAdmin = fromRoles.includes("admin") && !nextRoles.includes("admin");
+    if (losingAdmin && countAdminsExcluding(target.id) < 1) {
       return res.status(400).json({ message: "Não é possível remover o último administrador." });
     }
 
-    updateRole.run(parsed.data.role, target.id);
+    let applied;
+    try {
+      applied = setUserRoles(target.id, nextRoles);
+    } catch (err) {
+      return res.status(400).json({ message: err.message || "Cargo inválido." });
+    }
+
     recordAudit({
       actorUserId: req.user.id,
       actorName: req.user.name,
       action: "users.role_change",
       entityType: "user",
       entityId: target.id,
-      details: { from: target.role, to: parsed.data.role },
+      details: { from: fromRoles, to: applied.roles, activeRole: applied.activeRole },
     });
-    res.json({ user: { id: target.id, role: parsed.data.role } });
+    res.json({
+      user: {
+        id: target.id,
+        role: applied.activeRole,
+        roles: applied.roles,
+      },
+    });
   });
 
   router.patch("/:id/approve", requireAdmin, (req, res) => {
@@ -316,7 +366,7 @@ export function usersRoutes() {
   router.patch("/:id/email", requireAdmin, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
-    if (target.role === "admin") {
+    if (listUserRoles(target.id).includes("admin")) {
       return res.status(400).json({ message: "Não é possível alterar o e-mail do administrador por aqui." });
     }
 
@@ -375,13 +425,17 @@ export function usersRoutes() {
   router.patch("/:id/reset-password", requireStaff, (req, res) => {
     const target = getUserById.get(req.params.id);
     if (!target) return res.status(404).json({ message: "Usuário não encontrado." });
-    if (target.role === "admin") {
+    const targetRoles = listUserRoles(target.id);
+    if (targetRoles.includes("admin")) {
       return res.status(400).json({ message: "Não é possível resetar a senha do administrador." });
     }
+    const actorRoles = listUserRoles(req.user.id);
+    const isActorAdmin = actorRoles.includes("admin");
+    const isActorSindico = actorRoles.includes("sindico");
     if (
-      req.user.role === "sindico" &&
-      target.role !== "morador" &&
-      target.role !== "conselheiro"
+      isActorSindico &&
+      !isActorAdmin &&
+      !targetRoles.every((r) => r === "morador" || r === "conselheiro")
     ) {
       return res.status(403).json({ message: "Síndico só pode resetar a senha de moradores." });
     }

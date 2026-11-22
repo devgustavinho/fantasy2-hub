@@ -32,9 +32,11 @@ export function computeBalanceteStatus(decisions) {
 }
 
 const listCounselors = sqlite.prepare(`
-  SELECT id, name FROM users
-  WHERE role = 'conselheiro' AND approval_status = 'approved'
-  ORDER BY name COLLATE NOCASE
+  SELECT DISTINCT u.id, u.name
+  FROM users u
+  JOIN user_roles ur ON ur.user_id = u.id
+  WHERE ur.role = 'conselheiro' AND u.approval_status = 'approved'
+  ORDER BY u.name COLLATE NOCASE
 `);
 
 const insertBalancete = sqlite.prepare(`

@@ -1,8 +1,18 @@
 import { sqlite } from "../db/client.js";
 import { verifySession } from "./jwt.js";
+import {
+  attachRoles,
+  roleRequires2fa,
+  userHasRole,
+  userIsAdmin,
+  userIsConselheiro,
+  userIsStaff,
+} from "./roles.js";
 
 const getUserById = sqlite.prepare(
-  "SELECT id, apartment_id, name, email, role, approval_status, whatsapp, whatsapp_visible, household_role FROM users WHERE id = ?",
+  `SELECT id, apartment_id, name, email, role, approval_status, whatsapp, whatsapp_visible,
+          household_role, totp_enabled
+   FROM users WHERE id = ?`,
 );
 
 // Token via header (não mais cookie) — cookie cross-site (front no Cloudflare Pages, API na
@@ -17,7 +27,7 @@ export function loadSession(req, _res, next) {
     const payload = verifySession(token);
     if (payload) {
       const user = getUserById.get(payload.sub);
-      if (user) req.user = user;
+      if (user) req.user = attachRoles(user);
     }
   }
   next();
@@ -28,29 +38,59 @@ export function requireAuth(req, res, next) {
   next();
 }
 
-// admin + sindico: tarefas operacionais do dia a dia (marcar pauta como agendada, etc.)
+/** Bloqueia ações privilegiadas até o 2FA estar configurado. */
+export function requireTotpForPrivileged(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
+  if (roleRequires2fa(req.user.role) && !req.user.totp_enabled) {
+    return res.status(403).json({
+      code: "totp_required",
+      message: "Configure a autenticação em duas etapas para usar este cargo.",
+    });
+  }
+  next();
+}
+
+// admin + sindico (membership): tarefas operacionais do dia a dia.
 export function requireStaff(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
-  if (req.user.role !== "admin" && req.user.role !== "sindico") {
+  if (!userIsStaff(req.user)) {
     return res.status(403).json({ message: "Apenas a administração pode fazer isso." });
   }
-  next();
-}
-
-// admin (pode ser mais de um — promovido por outro admin): gerenciar contas e cargos.
-export function requireAdmin(req, res, next) {
-  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
-  if (req.user.role !== "admin") {
-    return res.status(403).json({ message: "Apenas o administrador pode fazer isso." });
+  if (!req.user.totp_enabled) {
+    return res.status(403).json({
+      code: "totp_required",
+      message: "Configure a autenticação em duas etapas para ações de administração.",
+    });
   }
   next();
 }
 
-// conselheiro: pareceres de balancete (única permissão além da tag de cargo).
+// admin (membership): gerenciar contas e cargos.
+export function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
+  if (!userIsAdmin(req.user)) {
+    return res.status(403).json({ message: "Apenas o administrador pode fazer isso." });
+  }
+  if (!req.user.totp_enabled) {
+    return res.status(403).json({
+      code: "totp_required",
+      message: "Configure a autenticação em duas etapas para ações de administrador.",
+    });
+  }
+  next();
+}
+
+// conselheiro (membership): pareceres de balancete.
 export function requireConselheiro(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
-  if (req.user.role !== "conselheiro") {
+  if (!userIsConselheiro(req.user)) {
     return res.status(403).json({ message: "Apenas conselheiros podem dar parecer." });
+  }
+  if (!req.user.totp_enabled) {
+    return res.status(403).json({
+      code: "totp_required",
+      message: "Configure a autenticação em duas etapas para dar parecer.",
+    });
   }
   next();
 }
@@ -64,3 +104,5 @@ export function requireApproved(req, res, next) {
   }
   next();
 }
+
+export { userHasRole, userIsAdmin, userIsStaff, userIsConselheiro };

@@ -37,7 +37,10 @@ export const createSindico = (data: {
 }) => api.post<{ user: ManagedUser }>("/users", data);
 
 export const changeUserRole = (id: string, role: Role) =>
-  api.patch<{ user: { id: string; role: Role } }>(`/users/${id}/role`, { role });
+  api.patch<{ user: { id: string; role: Role; roles: Role[] } }>(`/users/${id}/role`, { role });
+
+export const changeUserRoles = (id: string, roles: Role[]) =>
+  api.patch<{ user: { id: string; role: Role; roles: Role[] } }>(`/users/${id}/role`, { roles });
 
 export const changeUserEmail = (id: string, email: string) =>
   api.patch<{ user: { id: string; email: string } }>(`/users/${id}/email`, { email });
