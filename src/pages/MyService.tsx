@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ItemEditor } from "@/components/ItemEditor";
 import { QueryError } from "@/components/QueryError";
+import { ShareCoverPicker } from "@/components/ShareCoverPicker";
+import { WhatsAppShareCard } from "@/components/WhatsAppShareCard";
 import { useAuth } from "@/contexts/AuthContext";
 import * as servicesApi from "@/services/services";
 import * as tagsApi from "@/services/tags";
@@ -58,7 +60,19 @@ export default function MyService() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [newServicePhoto, setNewServicePhoto] = useState<File | null>(null);
+  const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
+  const [replacingCover, setReplacingCover] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
+
+  useEffect(() => {
+    if (!newServicePhoto) {
+      setNewPhotoPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(newServicePhoto);
+    setNewPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [newServicePhoto]);
 
   const {
     data,
@@ -359,38 +373,45 @@ export default function MyService() {
               </div>
               {renderModes()}
               {renderTags()}
-              <div className="space-y-1">
-                <Label>Foto do negócio (opcional)</Label>
-                {newServicePhoto ? (
-                  <div className="relative h-32 w-full max-w-xs overflow-hidden rounded-md border">
-                    <img
-                      src={URL.createObjectURL(newServicePhoto)}
-                      alt=""
-                      className="h-full w-full object-cover"
+              <div className="space-y-2">
+                <Label>Capa pro compartilhamento (WhatsApp)</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Essa foto vira a miniatura quando alguém cola o link /n/… no WhatsApp. Prefira
+                  algo horizontal, com o produto ou a marca bem no centro.
+                </p>
+                {newServicePhoto && newPhotoPreview ? (
+                  <div className="space-y-2">
+                    <div className="relative aspect-[1.91/1] w-full overflow-hidden rounded-md border">
+                      <img src={newPhotoPreview} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setNewServicePhoto(null)}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                        aria-label="Remover foto"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <WhatsAppShareCard
+                      title={name || "Seu negócio"}
+                      description={description}
+                      imagePath={newPhotoPreview}
+                      url={slug ? buildBusinessShortUrl(window.location.origin, slug) : null}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setNewServicePhoto(null)}
-                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
-                      aria-label="Remover foto"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
                   </div>
                 ) : (
-                  <label className="flex h-32 w-full max-w-xs cursor-pointer items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground hover:border-primary/50">
-                    + adicionar foto
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) setNewServicePhoto(file);
-                        e.target.value = "";
-                      }}
+                  <>
+                    <ShareCoverPicker
+                      pickLabel="+ adicionar capa"
+                      onReady={(file) => setNewServicePhoto(file)}
                     />
-                  </label>
+                    <WhatsAppShareCard
+                      title={name || "Seu negócio"}
+                      description={description}
+                      imagePath={null}
+                      url={slug ? buildBusinessShortUrl(window.location.origin, slug) : null}
+                    />
+                  </>
                 )}
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
@@ -418,35 +439,65 @@ export default function MyService() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Foto do negócio (opcional)</Label>
-                {service.imagePath ? (
-                  <div className="relative h-32 w-full max-w-xs overflow-hidden rounded-md border">
-                    <img src={resolveMediaUrl(service.imagePath)} alt="" className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removePhotoMutation.mutate()}
-                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
-                      aria-label="Remover foto"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                <Label>Capa pro compartilhamento (WhatsApp)</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  A capa do negócio é a imagem do card quando o link é colado no WhatsApp ou
+                  Facebook. Recorte em formato largo (1.91:1).
+                </p>
+                {!service.imagePath && !replacingCover && (
+                  <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                    Sem capa ainda — ao compartilhar, o preview fica genérico (logo do hub) e
+                    quase ninguém clica. Adicione uma foto agora.
+                  </p>
+                )}
+                {service.imagePath && !replacingCover ? (
+                  <div className="space-y-2">
+                    <div className="relative aspect-[1.91/1] w-full overflow-hidden rounded-md border">
+                      <img
+                        src={resolveMediaUrl(service.imagePath)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setReplacingCover(true)}
+                      >
+                        Trocar / recortar capa
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={removePhotoMutation.isPending}
+                        onClick={() => removePhotoMutation.mutate()}
+                      >
+                        Remover capa
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <label className="flex h-32 w-full max-w-xs cursor-pointer items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground hover:border-primary/50">
-                    {setPhotoMutation.isPending ? "Enviando..." : "+ adicionar foto"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) setPhotoMutation.mutate(file);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
+                  <ShareCoverPicker
+                    pickLabel={service.imagePath ? "Escolher nova capa" : "+ adicionar capa"}
+                    busy={setPhotoMutation.isPending}
+                    onReady={(file) => {
+                      setPhotoMutation.mutate(file, {
+                        onSuccess: () => setReplacingCover(false),
+                      });
+                    }}
+                    onCancel={() => setReplacingCover(false)}
+                  />
                 )}
                 {photoError && <p className="text-xs text-destructive">{photoError}</p>}
+                <WhatsAppShareCard
+                  title={name || service.name}
+                  description={description || service.description}
+                  imagePath={replacingCover ? null : service.imagePath}
+                  url={shortUrl}
+                />
               </div>
               <form onSubmit={handleUpdate} className="space-y-3">
                 <div className="space-y-1">
