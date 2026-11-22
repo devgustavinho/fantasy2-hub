@@ -49,13 +49,13 @@ function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone:
       queryClient.invalidateQueries({ queryKey: ["services"] });
       onDone();
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Erro ao cadastrar serviço."),
+    onError: (err) => setError(err instanceof Error ? err.message : "Erro ao cadastrar negócio."),
   });
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Preencha o nome do serviço.");
+      setError("Preencha o nome do negócio.");
       return;
     }
     createMutation.mutate();
@@ -64,15 +64,15 @@ function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone:
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        {user.name} vai poder editar tudo depois em "Meu serviço".
+        {user.name} vai poder editar tudo depois em "Meu negócio".
       </p>
-      <Input placeholder="Nome do serviço" value={name} onChange={(e) => setName(e.target.value)} />
+      <Input placeholder="Nome do negócio" value={name} onChange={(e) => setName(e.target.value)} />
       <Input placeholder="WhatsApp (opcional)" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
       <Input placeholder="Instagram (opcional)" value={instagram} onChange={(e) => setInstagram(e.target.value)} />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? "Criando..." : "Criar serviço"}
+          {createMutation.isPending ? "Criando..." : "Criar negócio"}
         </Button>
         <Button type="button" variant="outline" onClick={onDone}>
           Cancelar
@@ -785,7 +785,7 @@ export default function UserManagement() {
                   setActionsUser(null);
                 }}
               >
-                Criar serviço
+                Criar negócio
               </button>
             )}
           </div>
@@ -924,7 +924,7 @@ export default function UserManagement() {
       <BottomSheet
         open={!!serviceUser}
         onClose={() => setServiceUser(null)}
-        title="Criar serviço"
+        title="Criar negócio"
         description={serviceUser?.name}
       >
         {serviceUser && (

@@ -92,7 +92,7 @@ export function resolveAuditTarget(entry: AuditEntry): AuditTarget {
       const name = str(details, "name");
       return {
         label: name ? `${typeLabel}: ${name}` : typeLabel,
-        href: deleted ? null : `/servicos/${entityId}`,
+        href: deleted ? null : `/negocios/${entityId}`,
       };
     }
     case "service_item": {
@@ -100,7 +100,7 @@ export function resolveAuditTarget(entry: AuditEntry): AuditTarget {
       const name = str(details, "name");
       return {
         label: name ? `${typeLabel}: ${name}` : typeLabel,
-        href: serviceId && !deleted ? `/servicos/${serviceId}` : null,
+        href: serviceId && !deleted ? `/negocios/${serviceId}` : null,
       };
     }
     case "recommendation": {

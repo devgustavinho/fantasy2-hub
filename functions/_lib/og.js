@@ -19,7 +19,7 @@ export function escapeAttr(value) {
     .replace(/>/g, "&gt;");
 }
 
-export async function fetchTopicOg(env, path) {
+export async function fetchOgJson(env, path) {
   const url = `${apiBase(env)}${path}`;
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -29,11 +29,15 @@ export async function fetchTopicOg(env, path) {
   return res.json();
 }
 
-export function buildMetaHtml({ title, description, url, image }) {
+/** @deprecated use fetchOgJson */
+export const fetchTopicOg = fetchOgJson;
+
+export function buildMetaHtml({ title, description, url, image, twitterCard = "summary" }) {
   const t = escapeAttr(title);
   const d = escapeAttr(description);
   const u = escapeAttr(url);
   const img = escapeAttr(image);
+  const card = escapeAttr(twitterCard);
   return [
     `<title>${t}</title>`,
     `<meta name="description" content="${d}" />`,
@@ -43,7 +47,7 @@ export function buildMetaHtml({ title, description, url, image }) {
     `<meta property="og:description" content="${d}" />`,
     `<meta property="og:url" content="${u}" />`,
     `<meta property="og:image" content="${img}" />`,
-    `<meta name="twitter:card" content="summary" />`,
+    `<meta name="twitter:card" content="${card}" />`,
     `<meta name="twitter:title" content="${t}" />`,
     `<meta name="twitter:description" content="${d}" />`,
     `<meta name="twitter:image" content="${img}" />`,
@@ -72,23 +76,31 @@ export function injectOg(htmlResponse, meta) {
     .transform(htmlResponse);
 }
 
-export async function serveSpaWithOg(context, topic) {
+function absoluteImage(origin, imagePath) {
+  if (!imagePath) return `${origin}/logo.png`;
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  return `${origin}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+}
+
+export async function serveSpaWithOg(context, payload) {
   const { request, env } = context;
   const origin = new URL(request.url).origin;
   const assetRes = await env.ASSETS.fetch(new URL("/index.html", request.url));
 
-  if (!topic) {
+  if (!payload) {
     return assetRes;
   }
 
+  const title = payload.title || payload.name;
   const description =
-    topic.description?.trim() ||
+    payload.description?.trim() ||
     `Vote na pauta do condomínio no ${DEFAULT_APP_NAME}.`;
 
   return injectOg(assetRes, {
-    title: topic.title,
+    title,
     description,
     url: request.url.split("?")[0],
-    image: `${origin}/logo.png`,
+    image: absoluteImage(origin, payload.image || payload.imagePath),
+    twitterCard: payload.image || payload.imagePath ? "summary_large_image" : "summary",
   });
 }

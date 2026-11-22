@@ -154,7 +154,7 @@ export function BottomDock() {
   const items: FloatingDockItem[] = [
     { title: "Início", icon: <Home className="h-full w-full" />, href: "/" },
     { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/pautas" },
-    { title: "Serviços", icon: <ShoppingBag className="h-full w-full" />, href: "/servicos" },
+    { title: "Negócios", icon: <ShoppingBag className="h-full w-full" />, href: "/negocios" },
     { title: "Perguntar", icon: <MessageCircleQuestion className="h-full w-full" />, href: "/perguntar" },
     {
       title: "Mais",

@@ -7,13 +7,15 @@ const listFaq = sqlite.prepare("SELECT id, question, body FROM faq_entries");
 const getWelcome = sqlite.prepare("SELECT title, body FROM welcome_page WHERE id = 1");
 
 const getService = sqlite.prepare(`
-  SELECT s.id, s.name, s.description, s.instagram, u.whatsapp AS whatsapp
+  SELECT s.id, s.name, s.description, s.instagram, s.fulfillment_modes AS fulfillmentModes,
+         s.slug, u.whatsapp AS whatsapp
   FROM condo_services s
   JOIN users u ON u.id = s.user_id
   WHERE s.id = ?
 `);
 const listServices = sqlite.prepare(`
-  SELECT s.id, s.name, s.description, s.instagram, u.whatsapp AS whatsapp
+  SELECT s.id, s.name, s.description, s.instagram, s.fulfillment_modes AS fulfillmentModes,
+         s.slug, u.whatsapp AS whatsapp
   FROM condo_services s
   JOIN users u ON u.id = s.user_id
 `);
@@ -76,15 +78,38 @@ export function buildWelcomeDocument() {
   return { sourceType: "welcome", sourceId: "1", title: row.title, body };
 }
 
+const FULFILLMENT_LABELS = {
+  door: "entrega na porta",
+  pickup: "retirada no apartamento",
+  lobby: "entrega na portaria",
+  online: "serviço online",
+};
+
+function formatFulfillmentModes(raw) {
+  let list = [];
+  try {
+    list = typeof raw === "string" ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
+  } catch {
+    list = [];
+  }
+  return list
+    .map((m) => FULFILLMENT_LABELS[m])
+    .filter(Boolean)
+    .join(", ");
+}
+
 export function buildServiceDocument(id) {
   const row = getService.get(id);
   if (!row) return null;
   const tags = listServiceTags.all(id).map((t) => t.name);
   const items = listServiceItems.all(id);
+  const modes = formatFulfillmentModes(row.fulfillmentModes);
   const lines = [
-    `Serviço: ${row.name}`,
+    `Negócio: ${row.name}`,
     row.description ? `Descrição: ${row.description}` : null,
     tags.length ? `Tags: ${tags.join(", ")}` : null,
+    modes ? `Formas de atendimento: ${modes}` : null,
+    row.slug ? `Link: /n/${row.slug}` : null,
     row.whatsapp ? `WhatsApp: ${row.whatsapp}` : null,
     row.instagram ? `Instagram: @${row.instagram}` : null,
   ].filter(Boolean);

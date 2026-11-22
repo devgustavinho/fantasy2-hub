@@ -10,9 +10,12 @@ import {
 } from "./roles.js";
 
 const getUserById = sqlite.prepare(
-  `SELECT id, apartment_id, name, email, role, approval_status, whatsapp, whatsapp_visible,
-          household_role, totp_enabled
-   FROM users WHERE id = ?`,
+  `SELECT u.id, u.apartment_id, u.name, u.email, u.role, u.approval_status, u.whatsapp, u.whatsapp_visible,
+          u.household_role, u.totp_enabled,
+          a.tower AS tower, a.code AS apartment_code
+   FROM users u
+   LEFT JOIN apartments a ON a.id = u.apartment_id
+   WHERE u.id = ?`,
 );
 
 // Token via header (não mais cookie) — cookie cross-site (front no Cloudflare Pages, API na
