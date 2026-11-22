@@ -59,17 +59,17 @@ export default function ServiceTagsAdmin() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div>
-        <h1 className="text-2xl font-semibold">Tags de serviços</h1>
+        <h1 className="text-2xl font-semibold">Tags de negócios</h1>
         <p className="text-sm text-muted-foreground">
-          Cadastre as tags disponíveis e atribua a cada serviço — os moradores usam elas pra filtrar em
-          "Serviços".
+          Cadastre as tags disponíveis (ex. Comida) e atribua a cada negócio — os moradores também
+          podem escolher tags existentes em Meu negócio, e usam elas pra filtrar em Negócios.
         </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Tags cadastradas</CardTitle>
-          <CardDescription>Excluir uma tag remove ela de todos os serviços que a usam.</CardDescription>
+          <CardDescription>Excluir uma tag remove ela de todos os negócios que a usam.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <form onSubmit={handleCreateTag} className="flex gap-2">
@@ -109,7 +109,7 @@ export default function ServiceTagsAdmin() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Atribuir tags aos serviços</CardTitle>
+          <CardTitle className="text-base">Atribuir tags aos negócios</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {services.map((service) => {
@@ -145,7 +145,7 @@ export default function ServiceTagsAdmin() {
               </div>
             );
           })}
-          {services.length === 0 && <p className="text-sm text-muted-foreground">Nenhum serviço cadastrado ainda.</p>}
+          {services.length === 0 && <p className="text-sm text-muted-foreground">Nenhum negócio cadastrado ainda.</p>}
         </CardContent>
       </Card>
     </div>

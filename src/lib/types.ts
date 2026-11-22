@@ -11,6 +11,8 @@ export interface User {
   /** Todos os cargos atribuídos. */
   roles: Role[];
   apartmentId: string | null;
+  tower: number | null;
+  apartmentCode: string | null;
   approvalStatus: ApprovalStatus;
   whatsapp: string | null;
   whatsappVisible: boolean;
@@ -162,14 +164,19 @@ export interface Tag {
   name: string;
 }
 
+export type FulfillmentMode = "door" | "pickup" | "lobby" | "online";
+
 // Listagem pública (`GET /services`) não traz os itens — só o suficiente pra escolher o
-// serviço e ir pro link dedicado (`GET /services/:id`, que é o `CondoService` com `items`).
+// negócio e ir pro link dedicado (`GET /services/:id`, que é o `CondoService` com `items`).
 export interface ServiceSummary {
   id: string;
   name: string;
   description: string | null;
   instagram: string | null;
   imagePath: string | null;
+  fulfillmentModes: FulfillmentMode[];
+  /** Link curto escolhido pelo vendedor (`/n/<slug>`). */
+  slug: string | null;
   createdAt: string;
   owner: ServiceOwner;
   tags: Tag[];
@@ -185,6 +192,8 @@ export interface MyService {
   description: string | null;
   instagram: string | null;
   imagePath: string | null;
+  fulfillmentModes: FulfillmentMode[];
+  slug: string | null;
   whatsapp: string | null;
   tags: Tag[];
   items: ServiceItem[];

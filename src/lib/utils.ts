@@ -46,6 +46,14 @@ export function buildTopicShortUrl(origin: string, shareCode: string) {
   return `${origin.replace(/\/+$/, "")}/t/${shareCode}`;
 }
 
+export function buildBusinessShortUrl(origin: string, slug: string) {
+  return `${origin.replace(/\/+$/, "")}/n/${encodeURIComponent(slug)}`;
+}
+
+export function buildBusinessShareMessage(name: string, shortUrl: string) {
+  return `Olha esse negócio no hub: ${name}\n${shortUrl}`;
+}
+
 export function buildInstagramLink(handle: string) {
   return `https://instagram.com/${handle.replace(/^@/, "")}`;
 }

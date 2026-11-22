@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
@@ -18,6 +18,7 @@ import UserManagement from "@/pages/UserManagement";
 import Profile from "@/pages/Profile";
 import Services from "@/pages/Services";
 import ServiceDetail from "@/pages/ServiceDetail";
+import ServiceShortLink from "@/pages/ServiceShortLink";
 import MyService from "@/pages/MyService";
 import AuditLog from "@/pages/AuditLog";
 import ServiceTagsAdmin from "@/pages/ServiceTagsAdmin";
@@ -37,6 +38,11 @@ import ContabilDetail from "@/pages/ContabilDetail";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function RedirectServicoToNegocio() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/negocios/${id}`} replace />;
+}
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -114,7 +120,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/servicos"
+                path="/negocios"
                 element={
                   <AppLayout>
                     <Services />
@@ -122,7 +128,7 @@ export default function App() {
                 }
               />
               <Route
-                path="/servicos/meu"
+                path="/negocios/meu"
                 element={
                   <AppLayout>
                     <MyService />
@@ -130,13 +136,24 @@ export default function App() {
                 }
               />
               <Route
-                path="/servicos/:id"
+                path="/negocios/:id"
                 element={
                   <AppLayout>
                     <ServiceDetail />
                   </AppLayout>
                 }
               />
+              <Route
+                path="/n/:slug"
+                element={
+                  <AppLayout>
+                    <ServiceShortLink />
+                  </AppLayout>
+                }
+              />
+              <Route path="/servicos" element={<Navigate to="/negocios" replace />} />
+              <Route path="/servicos/meu" element={<Navigate to="/negocios/meu" replace />} />
+              <Route path="/servicos/:id" element={<RedirectServicoToNegocio />} />
               <Route
                 path="/recomendacoes"
                 element={

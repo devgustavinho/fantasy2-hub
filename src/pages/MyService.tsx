@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { DoorOpen, Globe, HandMetal, Package, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,37 @@ import { ItemEditor } from "@/components/ItemEditor";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import * as servicesApi from "@/services/services";
+import * as tagsApi from "@/services/tags";
 import { resolveMediaUrl } from "@/lib/api";
-import { formatCentsToBRL } from "@/lib/utils";
+import {
+  FULFILLMENT_LABELS,
+  FULFILLMENT_MODES,
+  FOOD_TAG_NAME,
+  isFoodTagName,
+  type FulfillmentMode,
+} from "@/lib/fulfillment";
+import { buildBusinessShortUrl, cn, formatCentsToBRL } from "@/lib/utils";
+
+const MODE_ICONS: Record<FulfillmentMode, typeof DoorOpen> = {
+  door: DoorOpen,
+  pickup: Package,
+  lobby: HandMetal,
+  online: Globe,
+};
+
+function suggestSlug(name: string) {
+  const cleaned = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim();
+  if (!cleaned) return "";
+  return cleaned
+    .split(/\s+/)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join("")
+    .slice(0, 48);
+}
 
 export default function MyService() {
   const { user } = useAuth();
@@ -21,11 +50,15 @@ export default function MyService() {
   const [description, setDescription] = useState("");
   const [whatsapp, setWhatsapp] = useState(user?.whatsapp ?? "");
   const [instagram, setInstagram] = useState("");
+  const [slug, setSlug] = useState("");
+  const [fulfillmentModes, setFulfillmentModes] = useState<FulfillmentMode[]>(["door", "pickup", "lobby"]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [newServicePhoto, setNewServicePhoto] = useState<File | null>(null);
+  const [slugTouched, setSlugTouched] = useState(false);
 
   const {
     data,
@@ -34,18 +67,49 @@ export default function MyService() {
     refetch,
   } = useQuery({ queryKey: ["my-service"], queryFn: servicesApi.getMyService });
 
+  const { data: tagsData } = useQuery({ queryKey: ["tags"], queryFn: tagsApi.listTags });
+  const tags = tagsData?.tags ?? [];
+
   useEffect(() => {
     if (data?.service) {
       setName(data.service.name);
       setDescription(data.service.description ?? "");
       setInstagram(data.service.instagram ?? "");
       setWhatsapp(data.service.whatsapp ?? "");
+      setSlug(data.service.slug ?? "");
+      setFulfillmentModes(data.service.fulfillmentModes?.length ? data.service.fulfillmentModes : ["door", "pickup", "lobby"]);
+      setSelectedTagIds(data.service.tags.map((t) => t.id));
+      setSlugTouched(true);
     }
   }, [data?.service]);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["my-service"] });
     queryClient.invalidateQueries({ queryKey: ["services"] });
+  }
+
+  function toggleMode(mode: FulfillmentMode) {
+    setFulfillmentModes((current) => {
+      if (current.includes(mode)) {
+        if (current.length === 1) return current;
+        return current.filter((m) => m !== mode);
+      }
+      return [...current, mode];
+    });
+  }
+
+  function toggleTag(tagId: string, tagName: string) {
+    setSelectedTagIds((current) => {
+      const next = current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId];
+      // Sugestão leve: marcar Comida → porta/portaria/retirada; se só online e marcou comida, mantém os modos.
+      if (!current.includes(tagId) && isFoodTagName(tagName)) {
+        setFulfillmentModes((modes) => {
+          const extras: FulfillmentMode[] = ["door", "lobby", "pickup"];
+          return [...new Set([...modes.filter((m) => m !== "online" || modes.length > 1), ...extras])];
+        });
+      }
+      return next;
+    });
   }
 
   const createMutation = useMutation({
@@ -55,20 +119,39 @@ export default function MyService() {
         description,
         whatsapp: whatsapp || undefined,
         instagram: instagram || undefined,
+        fulfillmentModes,
+        slug: slug || undefined,
         photo: newServicePhoto ?? undefined,
       }),
-    onSuccess: () => {
+    onSuccess: async (res) => {
       setError(null);
       setNewServicePhoto(null);
+      if (selectedTagIds.length > 0) {
+        await servicesApi.assignMyServiceTags(selectedTagIds);
+      }
       invalidate();
+      return res;
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Erro ao cadastrar serviço."),
+    onError: (err) => setError(err instanceof Error ? err.message : "Erro ao cadastrar negócio."),
   });
 
   const updateMutation = useMutation({
-    mutationFn: () =>
-      servicesApi.updateService({ name, description, whatsapp: whatsapp || undefined, instagram: instagram || undefined }),
-    onSuccess: invalidate,
+    mutationFn: async () => {
+      await servicesApi.updateService({
+        name,
+        description,
+        whatsapp: whatsapp || undefined,
+        instagram: instagram || undefined,
+        fulfillmentModes,
+        slug: slug || undefined,
+      });
+      await servicesApi.assignMyServiceTags(selectedTagIds);
+    },
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Erro ao salvar."),
   });
 
   const deleteMutation = useMutation({
@@ -107,11 +190,16 @@ export default function MyService() {
   }
 
   const service = data?.service ?? null;
+  const shortUrl = service?.slug ? buildBusinessShortUrl(window.location.origin, service.slug) : null;
 
   function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Preencha o nome do serviço.");
+      setError("Preencha o nome do negócio.");
+      return;
+    }
+    if (fulfillmentModes.length === 0) {
+      setError("Escolha ao menos uma forma de atendimento.");
       return;
     }
     createMutation.mutate();
@@ -120,22 +208,114 @@ export default function MyService() {
   function handleUpdate(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    if (fulfillmentModes.length === 0) {
+      setError("Escolha ao menos uma forma de atendimento.");
+      return;
+    }
     updateMutation.mutate();
+  }
+
+  function renderModes() {
+    return (
+      <div className="space-y-2">
+        <Label>Como você atende?</Label>
+        <p className="text-xs text-muted-foreground">
+          O hub só mostra as opções; combinar horário e pagamento é no WhatsApp.
+        </p>
+        <div className="space-y-1.5">
+          {FULFILLMENT_MODES.map((mode) => {
+            const Icon = MODE_ICONS[mode];
+            const checked = fulfillmentModes.includes(mode);
+            return (
+              <label
+                key={mode}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm",
+                  checked && "border-primary bg-primary/5",
+                )}
+              >
+                <input type="checkbox" checked={checked} onChange={() => toggleMode(mode)} />
+                <Icon className="h-4 w-4 text-muted-foreground" />
+                {FULFILLMENT_LABELS[mode]}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderTags() {
+    if (tags.length === 0) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          Nenhuma tag cadastrada ainda. Peça ao admin para criar (ex. {FOOD_TAG_NAME}).
+        </p>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        <Label>Tags</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => {
+            const active = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => toggleTag(tag.id, tag.name)}
+                className={cn(
+                  "rounded-md border px-2.5 py-1 text-xs transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderSlugField() {
+    return (
+      <div className="space-y-1">
+        <Label>Link curto</Label>
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 text-xs text-muted-foreground">/n/</span>
+          <Input
+            value={slug}
+            onChange={(e) => {
+              setSlugTouched(true);
+              setSlug(e.target.value.replace(/\s+/g, ""));
+            }}
+            placeholder="NomeDoMeuNegocio"
+            maxLength={48}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Letras, números, _ ou - (3–48). Único no condomínio. Ex.: /n/DocesDaAna
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Meu serviço</h1>
-        <Link to="/servicos" className="text-sm text-primary underline">
-          Ver todos os serviços
+        <h1 className="text-2xl font-semibold">Meu negócio</h1>
+        <Link to="/negocios" className="text-sm text-primary underline">
+          Ver todos os negócios
         </Link>
       </div>
 
       {!service && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Cadastrar serviço</CardTitle>
+            <CardTitle className="text-base">Cadastrar negócio</CardTitle>
             <CardDescription>
               WhatsApp e Instagram são opcionais — informe pelo menos um pra outros moradores
               conseguirem te encontrar. Se preencher o WhatsApp, ele fica visível pros outros moradores.
@@ -144,9 +324,19 @@ export default function MyService() {
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-3">
               <div className="space-y-1">
-                <Label>Nome do serviço</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Doces da Maria" required />
+                <Label>Nome do negócio</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setName(next);
+                    if (!slugTouched) setSlug(suggestSlug(next));
+                  }}
+                  placeholder="Ex: Doces da Maria"
+                  required
+                />
               </div>
+              {renderSlugField()}
               <div className="space-y-1">
                 <Label>Descrição (opcional)</Label>
                 <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -167,8 +357,10 @@ export default function MyService() {
                   placeholder="@doces.da.maria"
                 />
               </div>
+              {renderModes()}
+              {renderTags()}
               <div className="space-y-1">
-                <Label>Foto do serviço (opcional)</Label>
+                <Label>Foto do negócio (opcional)</Label>
                 {newServicePhoto ? (
                   <div className="relative h-32 w-full max-w-xs overflow-hidden rounded-md border">
                     <img
@@ -203,7 +395,7 @@ export default function MyService() {
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Cadastrando..." : "Cadastrar serviço"}
+                {createMutation.isPending ? "Cadastrando..." : "Cadastrar negócio"}
               </Button>
             </form>
           </CardContent>
@@ -214,20 +406,19 @@ export default function MyService() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Dados do serviço</CardTitle>
-              {service.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {service.tags.map((tag) => (
-                    <span key={tag.id} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
+              <CardTitle className="text-base">Dados do negócio</CardTitle>
+              {shortUrl && (
+                <CardDescription>
+                  Link pra compartilhar:{" "}
+                  <a href={shortUrl} className="text-primary underline-offset-2 hover:underline">
+                    /n/{service.slug}
+                  </a>
+                </CardDescription>
               )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Foto do serviço (opcional)</Label>
+                <Label>Foto do negócio (opcional)</Label>
                 {service.imagePath ? (
                   <div className="relative h-32 w-full max-w-xs overflow-hidden rounded-md border">
                     <img src={resolveMediaUrl(service.imagePath)} alt="" className="h-full w-full object-cover" />
@@ -259,9 +450,10 @@ export default function MyService() {
               </div>
               <form onSubmit={handleUpdate} className="space-y-3">
                 <div className="space-y-1">
-                  <Label>Nome do serviço</Label>
+                  <Label>Nome do negócio</Label>
                   <Input value={name} onChange={(e) => setName(e.target.value)} required />
                 </div>
+                {renderSlugField()}
                 <div className="space-y-1">
                   <Label>Descrição</Label>
                   <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -282,21 +474,24 @@ export default function MyService() {
                     placeholder="@doces.da.maria"
                   />
                 </div>
+                {renderModes()}
+                {renderTags()}
+                {error && <p className="text-sm text-destructive">{error}</p>}
                 <div className="flex gap-2">
                   <Button type="submit" size="sm" disabled={updateMutation.isPending}>
-                    Salvar
+                    {updateMutation.isPending ? "Salvando..." : "Salvar"}
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      if (window.confirm("Excluir seu serviço e todos os itens cadastrados?")) {
+                      if (window.confirm("Excluir seu negócio e todos os itens cadastrados?")) {
                         deleteMutation.mutate();
                       }
                     }}
                   >
-                    Excluir serviço
+                    Excluir negócio
                   </Button>
                 </div>
               </form>

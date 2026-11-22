@@ -3,11 +3,23 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { sqlite } from "../../db/client.js";
-import { requireAuth, requireApproved, requireAdmin } from "../../auth/guards.js";
+import { requireAuth, requireApproved } from "../../auth/guards.js";
+import { userIsAdmin } from "../../auth/roles.js";
 import { recordAudit } from "../audit/service.js";
 import { deleteFromR2 } from "../../lib/r2.js";
 import { processAndSaveImage as processAndSaveImageShared } from "../../lib/media.js";
 import { ingestService, removeDocument, scheduleIngest } from "../rag/ingest.js";
+import { FULFILLMENT_MODES, parseFulfillmentModes, serializeFulfillmentModes } from "./fulfillment.js";
+import {
+  allocateUniqueSlug,
+  ensureServiceSlugs,
+  isValidSlug,
+  normalizeSlugInput,
+  slugValidationMessage,
+  suggestSlugFromName,
+} from "./slug.js";
+
+ensureServiceSlugs();
 
 const MAX_IMAGES_PER_ITEM = 5;
 
@@ -60,11 +72,34 @@ function normalizeInstagram(value) {
   return cleaned || null;
 }
 
+const fulfillmentModesSchema = z
+  .preprocess((val) => {
+    if (typeof val === "string") {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return val.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    return val;
+  }, z.array(z.enum(FULFILLMENT_MODES)).min(1).max(4))
+  .optional();
+
+const slugField = z
+  .string()
+  .trim()
+  .min(3)
+  .max(48)
+  .optional()
+  .nullable();
+
 const serviceSchema = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(1000).optional().nullable(),
   whatsapp: z.string().trim().max(30).optional().nullable(),
   instagram: z.string().trim().max(60).optional().nullable(),
+  fulfillmentModes: fulfillmentModesSchema,
+  slug: slugField,
 });
 
 // `z.coerce.boolean()` usa `Boolean(valor)` — pra uma STRING (é assim que chega de
@@ -118,13 +153,19 @@ const getServiceByUser = sqlite.prepare("SELECT * FROM condo_services WHERE user
 const getServiceById = sqlite.prepare("SELECT * FROM condo_services WHERE id = ?");
 
 const SERVICE_JOIN_SELECT = `
-  SELECT s.id, s.name, s.description, s.instagram, s.image_path AS imagePath, s.created_at AS createdAt,
+  SELECT s.id, s.name, s.description, s.instagram, s.image_path AS imagePath,
+         s.fulfillment_modes AS fulfillmentModesRaw, s.slug,
+         s.created_at AS createdAt,
          u.id AS ownerId, u.name AS ownerName, u.whatsapp AS ownerWhatsapp,
          a.tower, a.code AS apartmentCode
   FROM condo_services s
   JOIN users u ON u.id = s.user_id
   LEFT JOIN apartments a ON a.id = u.apartment_id
 `;
+
+const getServiceIdBySlug = sqlite.prepare(
+  "SELECT id, slug FROM condo_services WHERE slug = ? COLLATE NOCASE",
+);
 
 const listServicesBase = sqlite.prepare(`${SERVICE_JOIN_SELECT} ORDER BY s.created_at DESC`);
 
@@ -164,12 +205,14 @@ const listTagsByService = sqlite.prepare(`
 `);
 
 const insertService = sqlite.prepare(`
-  INSERT INTO condo_services (id, user_id, name, description, instagram)
-  VALUES (@id, @user_id, @name, @description, @instagram)
+  INSERT INTO condo_services (id, user_id, name, description, instagram, fulfillment_modes, slug)
+  VALUES (@id, @user_id, @name, @description, @instagram, @fulfillment_modes, @slug)
 `);
 
 const updateService = sqlite.prepare(`
-  UPDATE condo_services SET name = @name, description = @description, instagram = @instagram, updated_at = @updated_at
+  UPDATE condo_services
+  SET name = @name, description = @description, instagram = @instagram,
+      fulfillment_modes = @fulfillment_modes, slug = @slug, updated_at = @updated_at
   WHERE id = @id
 `);
 
@@ -255,6 +298,8 @@ function serializeServiceSummary(row) {
     description: row.description,
     instagram: row.instagram,
     imagePath: row.imagePath,
+    fulfillmentModes: parseFulfillmentModes(row.fulfillmentModesRaw),
+    slug: row.slug,
     createdAt: row.createdAt,
     owner: {
       id: row.ownerId,
@@ -265,6 +310,12 @@ function serializeServiceSummary(row) {
     },
     tags: listTagsByService.all(row.id),
   };
+}
+
+const FOOD_TAG_NAME = "Comida";
+
+function hasFoodTag(service) {
+  return service.tags.some((t) => t.name.localeCompare(FOOD_TAG_NAME, "pt", { sensitivity: "accent" }) === 0);
 }
 
 function serializeServiceDetail(row) {
@@ -294,10 +345,30 @@ export function servicesRoutes() {
 
   router.get("/", (req, res) => {
     const tagFilter = typeof req.query.tags === "string" ? req.query.tags.split(",").filter(Boolean) : [];
+    const modeFilter =
+      typeof req.query.modes === "string" ? req.query.modes.split(",").filter((m) => FULFILLMENT_MODES.includes(m)) : [];
+    const segment = typeof req.query.segment === "string" ? req.query.segment : "all";
+    const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
 
     let services = listServicesBase.all().map(serializeServiceSummary);
     if (tagFilter.length > 0) {
       services = services.filter((s) => s.tags.some((t) => tagFilter.includes(t.id)));
+    }
+    if (modeFilter.length > 0) {
+      services = services.filter((s) => modeFilter.some((m) => s.fulfillmentModes.includes(m)));
+    }
+    if (segment === "food") {
+      services = services.filter(hasFoodTag);
+    } else if (segment === "services") {
+      services = services.filter((s) => !hasFoodTag(s));
+    }
+    if (q) {
+      services = services.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          (s.description && s.description.toLowerCase().includes(q)) ||
+          s.owner.name.toLowerCase().includes(q),
+      );
     }
 
     res.json({ services });
@@ -314,11 +385,21 @@ export function servicesRoutes() {
     });
   });
 
-  // Link dedicado do serviço — mostra os itens (com fotos, preço/"a negociar" e as opções de
+  router.get("/by-slug/:slug", (req, res) => {
+    const slug = normalizeSlugInput(req.params.slug);
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ message: "Link curto inválido." });
+    }
+    const row = getServiceIdBySlug.get(slug);
+    if (!row) return res.status(404).json({ message: "Negócio não encontrado." });
+    res.json({ serviceId: row.id, slug: row.slug });
+  });
+
+  // Link dedicado do negócio — mostra os itens (com fotos, preço/"a negociar" e as opções de
   // configuração de cada um). Antes disso, a listagem pública não mostra nenhum item.
   router.get("/:id", (req, res) => {
     const service = getServiceWithOwnerById.get(req.params.id);
-    if (!service) return res.status(404).json({ message: "Serviço não encontrado." });
+    if (!service) return res.status(404).json({ message: "Negócio não encontrado." });
     res.json({ service: serializeServiceDetail(service) });
   });
 
@@ -344,24 +425,33 @@ export function servicesRoutes() {
 
     if (getServiceByUser.get(ownerId)) {
       return res.status(409).json({
-        message: ownerId === req.user.id ? "Você já tem um serviço cadastrado." : "Esse morador já tem um serviço cadastrado.",
+        message: ownerId === req.user.id ? "Você já tem um negócio cadastrado." : "Esse morador já tem um negócio cadastrado.",
       });
     }
 
     const parsed = serviceSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Preencha ao menos o nome do serviço." });
+      return res.status(400).json({ message: "Preencha ao menos o nome do negócio." });
     }
+
+    const requestedSlug = normalizeSlugInput(parsed.data.slug || "") || suggestSlugFromName(parsed.data.name);
+    const slugError = slugValidationMessage(requestedSlug);
+    if (slugError) return res.status(400).json({ message: slugError });
+    const slug = allocateUniqueSlug(requestedSlug);
+    if (!slug) return res.status(409).json({ message: "Esse link curto já está em uso. Escolha outro." });
 
     if (parsed.data.whatsapp) {
       setWhatsappVisible.run(parsed.data.whatsapp, ownerId);
     }
 
     // Insert antes da foto — se o upload (sharp/R2) falhar, faz rollback do serviço pra não
-    // deixar órfão com UNIQUE(user_id) e o morador preso em 409 "já tem serviço" sem resposta
+    // deixar órfão com UNIQUE(user_id) e o morador preso em 409 "já tem negócio" sem resposta
     // útil. Sem try/catch, rejeição async no Express 4 derruba o processo (visto em create com
-    // foto no fluxo de "Meu serviço"; o cadastro admin não manda foto).
+    // foto no fluxo de "Meu negócio"; o cadastro admin não manda foto).
     const id = randomUUID();
+    const fulfillmentModes = serializeFulfillmentModes(
+      parsed.data.fulfillmentModes ?? ["door", "pickup", "lobby"],
+    );
     try {
       insertService.run({
         id,
@@ -369,6 +459,8 @@ export function servicesRoutes() {
         name: parsed.data.name,
         description: parsed.data.description || null,
         instagram: normalizeInstagram(parsed.data.instagram),
+        fulfillment_modes: fulfillmentModes,
+        slug,
       });
 
       if (req.file) {
@@ -381,7 +473,7 @@ export function servicesRoutes() {
       return res.status(400).json({
         message: req.file
           ? "Não foi possível processar a foto enviada. Tente outra imagem ou cadastre sem foto."
-          : "Não foi possível cadastrar o serviço. Tente de novo.",
+          : "Não foi possível cadastrar o negócio. Tente de novo.",
       });
     }
 
@@ -400,11 +492,31 @@ export function servicesRoutes() {
 
   router.patch("/mine", (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Cadastre seu serviço primeiro." });
+    if (!service) return res.status(404).json({ message: "Cadastre seu negócio primeiro." });
 
-    const parsed = serviceSchema.pick({ name: true, description: true, whatsapp: true, instagram: true }).safeParse(req.body);
+    const parsed = serviceSchema
+      .pick({
+        name: true,
+        description: true,
+        whatsapp: true,
+        instagram: true,
+        fulfillmentModes: true,
+        slug: true,
+      })
+      .safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Preencha o nome do serviço." });
+      return res.status(400).json({ message: "Preencha o nome do negócio." });
+    }
+
+    const requestedSlug =
+      normalizeSlugInput(parsed.data.slug || "") ||
+      service.slug ||
+      suggestSlugFromName(parsed.data.name);
+    const slugError = slugValidationMessage(requestedSlug);
+    if (slugError) return res.status(400).json({ message: slugError });
+    const taken = getServiceIdBySlug.get(requestedSlug);
+    if (taken && taken.id !== service.id) {
+      return res.status(409).json({ message: "Esse link curto já está em uso. Escolha outro." });
     }
 
     if (parsed.data.whatsapp) {
@@ -416,6 +528,10 @@ export function servicesRoutes() {
       name: parsed.data.name,
       description: parsed.data.description || null,
       instagram: normalizeInstagram(parsed.data.instagram),
+      fulfillment_modes: serializeFulfillmentModes(
+        parsed.data.fulfillmentModes ?? parseFulfillmentModes(service.fulfillment_modes),
+      ),
+      slug: requestedSlug,
       updated_at: nowIso(),
     });
 
@@ -438,7 +554,7 @@ export function servicesRoutes() {
 
   router.delete("/mine", (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
+    if (!service) return res.status(404).json({ message: "Você não tem um negócio cadastrado." });
 
     if (service.image_path) deleteImageFile(service.image_path);
     for (const item of listItemsByService.all(service.id)) {
@@ -464,7 +580,7 @@ export function servicesRoutes() {
   // Foto do serviço (opcional, 1 só) — separada das fotos de item.
   router.post("/mine/photo", handlePhotoUpload, async (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Cadastre seu serviço primeiro." });
+    if (!service) return res.status(404).json({ message: "Cadastre seu negócio primeiro." });
     if (!req.file) return res.status(400).json({ message: "Envie uma foto." });
 
     const oldPath = service.image_path;
@@ -491,7 +607,7 @@ export function servicesRoutes() {
 
   router.delete("/mine/photo", (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
+    if (!service) return res.status(404).json({ message: "Você não tem um negócio cadastrado." });
 
     if (service.image_path) {
       deleteImageFile(service.image_path);
@@ -500,42 +616,63 @@ export function servicesRoutes() {
     res.status(204).end();
   });
 
-  // Admin-only: define o conjunto de tags de um serviço (substitui tudo). As tags em si são
-  // um vocabulário controlado pela administração (`/tags`) — quem anuncia o serviço não
-  // escolhe as próprias tags, pra manter a taxonomia consistente entre os moradores.
-  router.put("/:id/tags", requireAdmin, (req, res) => {
-    const service = getServiceById.get(req.params.id);
-    if (!service) return res.status(404).json({ message: "Serviço não encontrado." });
+  function applyServiceTags(service, tagIds, actor) {
+    for (const tagId of tagIds) {
+      if (!getTagById.get(tagId)) return { error: "Tag inexistente." };
+    }
+
+    const applyTags = sqlite.transaction((ids) => {
+      deleteServiceTags.run(service.id);
+      for (const tagId of ids) insertServiceTag.run(service.id, tagId);
+    });
+    applyTags(tagIds);
+
+    recordAudit({
+      actorUserId: actor.id,
+      actorName: actor.name,
+      action: "services.tags_set",
+      entityType: "service",
+      entityId: service.id,
+      details: { tagIds },
+    });
+
+    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
+    return { tags: listTagsByService.all(service.id) };
+  }
+
+  // Dono do negócio ou admin: atribui tags existentes (vocabulário continua só no admin).
+  router.put("/mine/tags", (req, res) => {
+    const service = getServiceByUser.get(req.user.id);
+    if (!service) return res.status(404).json({ message: "Cadastre seu negócio primeiro." });
 
     const parsed = tagsAssignSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Lista de tags inválida." });
 
-    for (const tagId of parsed.data.tagIds) {
-      if (!getTagById.get(tagId)) return res.status(400).json({ message: "Tag inexistente." });
+    const result = applyServiceTags(service, parsed.data.tagIds, req.user);
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json({ tags: result.tags });
+  });
+
+  router.put("/:id/tags", (req, res) => {
+    const service = getServiceById.get(req.params.id);
+    if (!service) return res.status(404).json({ message: "Negócio não encontrado." });
+
+    const isOwner = service.user_id === req.user.id;
+    if (!isOwner && !userIsAdmin(req.user)) {
+      return res.status(403).json({ message: "Só o dono ou o administrador pode alterar as tags." });
     }
 
-    const applyTags = sqlite.transaction((tagIds) => {
-      deleteServiceTags.run(service.id);
-      for (const tagId of tagIds) insertServiceTag.run(service.id, tagId);
-    });
-    applyTags(parsed.data.tagIds);
+    const parsed = tagsAssignSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Lista de tags inválida." });
 
-    recordAudit({
-      actorUserId: req.user.id,
-      actorName: req.user.name,
-      action: "services.tags_set",
-      entityType: "service",
-      entityId: service.id,
-      details: { tagIds: parsed.data.tagIds },
-    });
-
-    scheduleIngest(`service/${service.id}`, () => ingestService(service.id));
-    res.json({ tags: listTagsByService.all(service.id) });
+    const result = applyServiceTags(service, parsed.data.tagIds, req.user);
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json({ tags: result.tags });
   });
 
   router.post("/mine/items", handleImagesUpload, async (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Cadastre seu serviço antes de adicionar itens." });
+    if (!service) return res.status(404).json({ message: "Cadastre seu negócio antes de adicionar itens." });
 
     const parsed = itemSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -580,7 +717,7 @@ export function servicesRoutes() {
 
   router.patch("/mine/items/:itemId", handleImagesUpload, async (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
+    if (!service) return res.status(404).json({ message: "Você não tem um negócio cadastrado." });
 
     const item = getItemById.get(req.params.itemId);
     if (!item || item.service_id !== service.id) {
@@ -636,7 +773,7 @@ export function servicesRoutes() {
 
   router.delete("/mine/items/:itemId", (req, res) => {
     const service = getServiceByUser.get(req.user.id);
-    if (!service) return res.status(404).json({ message: "Você não tem um serviço cadastrado." });
+    if (!service) return res.status(404).json({ message: "Você não tem um negócio cadastrado." });
 
     const item = getItemById.get(req.params.itemId);
     if (!item || item.service_id !== service.id) {

@@ -12,7 +12,7 @@ import type { RagCitation } from "@/services/rag";
 const SOURCE_LABEL: Record<string, string> = {
   faq: "FAQ",
   welcome: "Boas-vindas",
-  service: "Serviço",
+  service: "Negócio",
   recommendation: "Recomendação",
   topic: "Pauta",
   external: "Embed",
