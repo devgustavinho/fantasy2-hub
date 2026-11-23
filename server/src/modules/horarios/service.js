@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { sqlite } from "../../db/client.js";
 import { ensureHolidaySeed } from "./holidays.js";
 import { addDays, fortalezaParts, inTimeRange, isHm } from "./time.js";
+import { buildWifiUri, normalizeWifiSecurity, WIFI_SECURITIES } from "./wifi.js";
 
 const listAreas = sqlite.prepare(`
   SELECT id, name, sort_order AS sortOrder, is_24h AS is24h,
          opens_at AS opensAt, closes_at AS closesAt,
          assembly_ref AS assemblyRef, notes,
+         wifi_ssid AS wifiSsid, wifi_password AS wifiPassword,
+         wifi_security AS wifiSecurity,
          updated_at AS updatedAt, updated_by AS updatedBy
   FROM common_areas
   ORDER BY sort_order ASC
@@ -18,6 +21,8 @@ const updateArea = sqlite.prepare(`
   UPDATE common_areas
   SET is_24h = @is_24h, opens_at = @opens_at, closes_at = @closes_at,
       assembly_ref = @assembly_ref, notes = @notes,
+      wifi_ssid = @wifi_ssid, wifi_password = @wifi_password,
+      wifi_security = @wifi_security,
       updated_at = @updated_at, updated_by = @updated_by
   WHERE id = @id
 `);
@@ -81,6 +86,9 @@ function parseWindows(json) {
 }
 
 function serializeArea(row) {
+  const wifiSsid = row.wifiSsid ?? row.wifi_ssid ?? null;
+  const wifiPassword = row.wifiPassword ?? row.wifi_password ?? null;
+  const wifiSecurity = row.wifiSecurity ?? row.wifi_security ?? "WPA";
   return {
     id: row.id,
     name: row.name,
@@ -90,6 +98,10 @@ function serializeArea(row) {
     closesAt: row.closesAt ?? row.closes_at ?? null,
     assemblyRef: row.assemblyRef ?? row.assembly_ref ?? null,
     notes: row.notes ?? null,
+    wifiSsid: wifiSsid || null,
+    wifiPassword: wifiSsid ? wifiPassword ?? "" : null,
+    wifiSecurity: wifiSsid ? wifiSecurity : null,
+    hasWifi: Boolean(wifiSsid),
     updatedAt: row.updatedAt ?? row.updated_at ?? null,
   };
 }
@@ -214,6 +226,43 @@ export function patchCommonArea(id, input, actorUserId) {
     }
   }
 
+  // Wi‑Fi: omitir no body = manter; string vazia no SSID = limpar; senha só muda se enviada.
+  let wifiSsid = row.wifi_ssid;
+  let wifiPassword = row.wifi_password;
+  let wifiSecurity = row.wifi_security || "WPA";
+  if ("wifiSsid" in input) {
+    const nextSsid = input.wifiSsid == null ? "" : String(input.wifiSsid).trim();
+    if (!nextSsid) {
+      wifiSsid = null;
+      wifiPassword = null;
+      wifiSecurity = "WPA";
+    } else {
+      wifiSsid = nextSsid.slice(0, 64);
+      if ("wifiPassword" in input) {
+        wifiPassword = input.wifiPassword == null ? "" : String(input.wifiPassword).slice(0, 128);
+      } else if (wifiPassword == null) {
+        wifiPassword = "";
+      }
+      if ("wifiSecurity" in input && WIFI_SECURITIES.has(input.wifiSecurity)) {
+        wifiSecurity = input.wifiSecurity;
+      }
+      if (wifiSecurity === "nopass") wifiPassword = "";
+    }
+  } else if ("wifiPassword" in input || "wifiSecurity" in input) {
+    if (!wifiSsid) {
+      const err = new Error("Cadastre o nome da rede (SSID) antes da senha.");
+      err.status = 400;
+      throw err;
+    }
+    if ("wifiPassword" in input) {
+      wifiPassword = input.wifiPassword == null ? "" : String(input.wifiPassword).slice(0, 128);
+    }
+    if ("wifiSecurity" in input && WIFI_SECURITIES.has(input.wifiSecurity)) {
+      wifiSecurity = input.wifiSecurity;
+    }
+    if (wifiSecurity === "nopass") wifiPassword = "";
+  }
+
   updateArea.run({
     id,
     is_24h: is24h ? 1 : 0,
@@ -221,11 +270,42 @@ export function patchCommonArea(id, input, actorUserId) {
     closes_at: closesAt,
     assembly_ref: input.assemblyRef?.trim() || null,
     notes: input.notes?.trim() || null,
+    wifi_ssid: wifiSsid,
+    wifi_password: wifiPassword,
+    wifi_security: wifiSecurity,
     updated_at: new Date().toISOString(),
     updated_by: actorUserId,
   });
 
   return serializeArea({ ...listAreas.all().find((a) => a.id === id) });
+}
+
+export function getAreaWifiPayload(id) {
+  const row = getArea.get(id);
+  if (!row) {
+    const err = new Error("Área não encontrada.");
+    err.status = 404;
+    throw err;
+  }
+  if (!row.wifi_ssid) {
+    const err = new Error("Esta área não tem Wi‑Fi cadastrado.");
+    err.status = 404;
+    throw err;
+  }
+  const security = normalizeWifiSecurity(row.wifi_security);
+  const wifiUri = buildWifiUri({
+    ssid: row.wifi_ssid,
+    password: row.wifi_password || "",
+    security,
+  });
+  return {
+    areaId: row.id,
+    areaName: row.name,
+    ssid: row.wifi_ssid,
+    password: security === "nopass" ? "" : row.wifi_password || "",
+    security,
+    wifiUri,
+  };
 }
 
 export function putMudancaSettings(input, actorUserId) {

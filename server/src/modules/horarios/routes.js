@@ -1,9 +1,11 @@
 import { Router } from "express";
+import QRCode from "qrcode";
 import { z } from "zod";
 import { requireAuth, requireApproved, requireStaff } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
 import {
   addBlockedDay,
+  getAreaWifiPayload,
   getHorariosBundle,
   getHorariosStatus,
   patchCommonArea,
@@ -20,6 +22,9 @@ const areaSchema = z.object({
   closesAt: z.string().nullable().optional(),
   assemblyRef: z.string().trim().max(200).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
+  wifiSsid: z.string().trim().max(64).nullable().optional(),
+  wifiPassword: z.string().max(128).nullable().optional(),
+  wifiSecurity: z.enum(["WPA", "WEP", "nopass"]).optional(),
 });
 
 const mudancaSchema = z.object({
@@ -58,6 +63,21 @@ export function horariosRoutes() {
     res.json(getHorariosStatus());
   });
 
+  // Credenciais + QR (data URL) pra conectar no Wi‑Fi da área.
+  router.get("/areas/:id/wifi", async (req, res) => {
+    try {
+      const wifi = getAreaWifiPayload(req.params.id);
+      const qrDataUrl = await QRCode.toDataURL(wifi.wifiUri, {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 280,
+      });
+      res.json({ ...wifi, qrDataUrl });
+    } catch (err) {
+      res.status(err.status || 500).json({ message: err.message || "Falha ao carregar Wi‑Fi." });
+    }
+  });
+
   router.patch("/areas/:id", requireStaff, (req, res) => {
     const parsed = areaSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -76,6 +96,10 @@ export function horariosRoutes() {
           opensAt: parsed.data.opensAt,
           closesAt: parsed.data.closesAt,
           assemblyRef: parsed.data.assemblyRef,
+          // Nunca gravar senha no audit — só se Wi‑Fi foi tocado / tem SSID.
+          wifiUpdated: "wifiSsid" in parsed.data || "wifiPassword" in parsed.data,
+          hasWifi: Boolean(area.hasWifi),
+          wifiSsid: area.wifiSsid,
         },
       });
       res.json({ area });

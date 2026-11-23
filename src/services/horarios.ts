@@ -1,5 +1,7 @@
 import { api } from "@/lib/api";
 
+export type WifiSecurity = "WPA" | "WEP" | "nopass";
+
 export type CommonArea = {
   id: string;
   name: string;
@@ -9,7 +11,21 @@ export type CommonArea = {
   closesAt: string | null;
   assemblyRef: string | null;
   notes: string | null;
+  wifiSsid: string | null;
+  wifiPassword: string | null;
+  wifiSecurity: WifiSecurity | null;
+  hasWifi: boolean;
   updatedAt: string | null;
+};
+
+export type AreaWifi = {
+  areaId: string;
+  areaName: string;
+  ssid: string;
+  password: string;
+  security: WifiSecurity;
+  wifiUri: string;
+  qrDataUrl: string;
 };
 
 export type MudancaWindow = {
@@ -69,6 +85,8 @@ export const getHorarios = () => api.get<HorariosBundle>("/horarios");
 
 export const getHorariosStatus = () => api.get<HorariosStatus>("/horarios/status");
 
+export const getAreaWifi = (id: string) => api.get<AreaWifi>(`/horarios/areas/${id}/wifi`);
+
 export const updateArea = (
   id: string,
   data: {
@@ -77,6 +95,9 @@ export const updateArea = (
     closesAt?: string | null;
     assemblyRef?: string | null;
     notes?: string | null;
+    wifiSsid?: string | null;
+    wifiPassword?: string | null;
+    wifiSecurity?: WifiSecurity;
   },
 ) => api.patch<{ area: CommonArea }>(`/horarios/areas/${id}`, data);
 
