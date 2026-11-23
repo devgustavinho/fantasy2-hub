@@ -66,20 +66,28 @@ export default function AdminPanel() {
           <CardHeader className="pb-2">
             <CardDescription>Acessos nas últimas 24 horas</CardDescription>
             <CardTitle className="text-4xl tabular-nums">
-              {loginLoading ? "…" : (loginStats?.loginsLast24h ?? "—")}
+              {loginLoading
+                ? "…"
+                : (loginStats?.visitsLast24h ?? loginStats?.loginsLast24h ?? "—")}
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Atualiza automaticamente a cada 30 minutos
+              Visitantes distintos (navegador), com ou sem login · atualiza a cada 30 minutos
               {dataUpdatedAt
-                ? ` · última atualização ${new Date(dataUpdatedAt).toLocaleTimeString("pt-BR")}`
+                ? ` · última atualização ${new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { timeZone: "America/Fortaleza" })}`
                 : ""}
               .
             </p>
           </CardHeader>
           <CardContent className="space-y-2">
             {loginError && <QueryError onRetry={() => refetchLogins()} />}
-            {loginStats && loginStats.users.length === 0 && (
-              <p className="text-sm text-muted-foreground">Ninguém entrou nas últimas 24 horas.</p>
+            {loginStats &&
+              (loginStats.visitsLast24h ?? loginStats.loginsLast24h) === 0 && (
+              <p className="text-sm text-muted-foreground">Ninguém abriu o hub nas últimas 24 horas.</p>
+            )}
+            {loginStats && (loginStats.anonymousVisitsLast24h ?? 0) > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {loginStats.anonymousVisitsLast24h} visita(s) sem conta ligada.
+              </p>
             )}
             {loginStats?.users.slice(0, 8).map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-2 text-sm">
@@ -91,13 +99,13 @@ export default function AdminPanel() {
                   </span>
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {new Date(u.lastLoginAt).toLocaleString("pt-BR")}
+                  {new Date(u.lastLoginAt).toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })}
                 </span>
               </div>
             ))}
             {loginStats && loginStats.users.length > 8 && (
               <p className="text-xs text-muted-foreground">
-                +{loginStats.users.length - 8} outros acessos no período.
+                +{loginStats.users.length - 8} outras contas no período.
               </p>
             )}
             <Button type="button" size="sm" variant="outline" onClick={() => refetchLogins()}>
