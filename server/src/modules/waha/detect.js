@@ -1,4 +1,5 @@
 import { env } from "../../env.js";
+import { dayKey } from "./chatStore.js";
 import { digitsOnly, phoneFromJid, phonesMatch } from "./phones.js";
 
 /**
@@ -119,9 +120,67 @@ export function stripBotAddressing(body, botPhone) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Interpreta o comando `resumo` (allowlist).
+ * - `resumo` → só msgs ainda não incluídas num resumo anterior
+ * - `resumo completo` / `de tudo` / `desde o início` / data explícita / `ontem`
+ *   → inclui também as já marcadas (histórico pedido de forma explícita)
+ *
+ * Não casa frases ambíguas tipo "resumo do regulamento" (cai no RAG).
+ *
+ * @returns {null | { includeSummarized: boolean, day?: string }}
+ */
+export function parseResumoCommand(body, botPhone) {
+  // stripBotAddressing pode deixar "@" solto quando casa só "bot" em "@bot".
+  const cleaned = stripBotAddressing(body, botPhone)
+    .toLowerCase()
+    .replace(/@+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned.startsWith("resumo")) return null;
+
+  const rest = cleaned.slice("resumo".length).trim();
+  if (!rest) {
+    return { includeSummarized: false };
+  }
+
+  // Data explícita YYYY-MM-DD → histórico pedido (inclui já marcadas daquele dia).
+  const iso = rest.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (iso) {
+    return { includeSummarized: true, day: iso[1] };
+  }
+
+  if (/(^|\s)ontem\b/.test(rest)) {
+    return { includeSummarized: true, day: offsetDayKey(-1) };
+  }
+
+  // Pedido explícito de histórico completo do dia atual.
+  if (
+    /^(de\s+)?tudo\b/.test(rest) ||
+    /^(de\s+)?todas\b/.test(rest) ||
+    /^completo\b/.test(rest) ||
+    /^completa\b/.test(rest) ||
+    /^integral\b/.test(rest) ||
+    /^desde\s+o\s+in[ií]cio\b/.test(rest) ||
+    /^do\s+dia\s*$/.test(rest)
+  ) {
+    return { includeSummarized: true };
+  }
+
+  return null;
+}
+
 export function isResumoCommand(body, botPhone) {
-  const cleaned = stripBotAddressing(body, botPhone).toLowerCase();
-  return cleaned === "resumo";
+  return parseResumoCommand(body, botPhone) != null;
+}
+
+/** Dia civil Fortaleza com offset em dias (0 = hoje). */
+function offsetDayKey(offsetDays) {
+  const today = dayKey();
+  const [y, m, d] = today.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + offsetDays);
+  return dt.toISOString().slice(0, 10);
 }
 
 /**

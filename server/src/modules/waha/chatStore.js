@@ -28,12 +28,7 @@ function dbPathForDay(day) {
   return join(dataDir(), `${day}.sqlite`);
 }
 
-function openDayDb(day) {
-  if (openDbs.has(day)) return openDbs.get(day);
-
-  const db = new Database(dbPathForDay(day));
-  db.pragma("journal_mode = WAL");
-  db.pragma("synchronous = NORMAL");
+function ensureMessagesSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
@@ -45,10 +40,28 @@ function openDayDb(day) {
       body TEXT,
       from_me INTEGER NOT NULL DEFAULT 0,
       has_media INTEGER NOT NULL DEFAULT 0,
-      raw_json TEXT
+      raw_json TEXT,
+      summarized_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(ts);
   `);
+  const cols = db.prepare(`PRAGMA table_info(messages)`).all();
+  if (!cols.some((c) => c.name === "summarized_at")) {
+    db.exec(`ALTER TABLE messages ADD COLUMN summarized_at INTEGER`);
+  }
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_messages_summarized
+     ON messages(summarized_at) WHERE summarized_at IS NULL`,
+  );
+}
+
+function openDayDb(day) {
+  if (openDbs.has(day)) return openDbs.get(day);
+
+  const db = new Database(dbPathForDay(day));
+  db.pragma("journal_mode = WAL");
+  db.pragma("synchronous = NORMAL");
+  ensureMessagesSchema(db);
   openDbs.set(day, db);
   return db;
 }
@@ -95,25 +108,91 @@ export function appendGroupMessage(msg) {
 
 /**
  * @param {string} [day] YYYY-MM-DD no fuso Fortaleza
- * @returns {{ ts: number, senderPhone: string | null, pushName: string | null, body: string | null, fromMe: boolean }[]}
+ * @param {{ includeSummarized?: boolean }} [opts]
+ *   Por padrão omite msgs já incluídas num resumo anterior (`summarized_at`).
+ * @returns {{
+ *   id: string,
+ *   ts: number,
+ *   senderPhone: string | null,
+ *   pushName: string | null,
+ *   body: string | null,
+ *   fromMe: boolean,
+ *   summarizedAt: number | null,
+ * }[]}
  */
-export function listDayMessages(day = dayKey()) {
+export function listDayMessages(day = dayKey(), opts = {}) {
+  const includeSummarized = Boolean(opts.includeSummarized);
   const path = dbPathForDay(day);
   if (!existsSync(path)) return [];
   const db = openDayDb(day);
+  const where = includeSummarized ? "" : "WHERE summarized_at IS NULL";
   return db
     .prepare(
-      `SELECT ts, sender_phone AS senderPhone, push_name AS pushName, body, from_me AS fromMe
-       FROM messages ORDER BY ts ASC, rowid ASC`,
+      `SELECT id, ts, sender_phone AS senderPhone, push_name AS pushName, body,
+              from_me AS fromMe, summarized_at AS summarizedAt
+       FROM messages ${where}
+       ORDER BY ts ASC, rowid ASC`,
     )
     .all()
     .map((r) => ({
+      id: String(r.id),
       ts: Number(r.ts),
       senderPhone: r.senderPhone,
       pushName: r.pushName,
       body: r.body,
       fromMe: Boolean(r.fromMe),
+      summarizedAt: r.summarizedAt == null ? null : Number(r.summarizedAt),
     }));
+}
+
+/**
+ * Marca mensagens como já incluídas num resumo (não reaparecem no próximo
+ * "resumo" padrão).
+ * @param {string[]} ids
+ * @param {string} [day]
+ * @returns {number} linhas atualizadas
+ */
+export function markMessagesSummarized(ids, day = dayKey()) {
+  const list = [...new Set((ids || []).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (list.length === 0) return 0;
+  const path = dbPathForDay(day);
+  if (!existsSync(path)) return 0;
+  const db = openDayDb(day);
+  const now = Math.floor(Date.now() / 1000);
+  const stmt = db.prepare(
+    `UPDATE messages SET summarized_at = ?
+     WHERE id = ? AND summarized_at IS NULL`,
+  );
+  const tx = db.transaction((rows) => {
+    let n = 0;
+    for (const id of rows) {
+      const info = stmt.run(now, id);
+      n += info.changes;
+    }
+    return n;
+  });
+  return tx(list);
+}
+
+/** Contagem de msgs com texto no dia (todas vs. ainda não resumidas). */
+export function countDayTextMessages(day = dayKey()) {
+  const path = dbPathForDay(day);
+  if (!existsSync(path)) return { total: 0, unread: 0 };
+  const db = openDayDb(day);
+  const total = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM messages
+       WHERE body IS NOT NULL AND TRIM(body) != ''`,
+    )
+    .get().n;
+  const unread = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM messages
+       WHERE summarized_at IS NULL
+         AND body IS NOT NULL AND TRIM(body) != ''`,
+    )
+    .get().n;
+  return { total: Number(total), unread: Number(unread) };
 }
 
 export function purgeOlderThan(days = RETENTION_DAYS) {

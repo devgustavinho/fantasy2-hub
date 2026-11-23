@@ -1,5 +1,11 @@
 import { chatCompletion, isOpenAiConfigured } from "../rag/openai.js";
-import { CHAT_TZ, dayKey, listDayMessages } from "./chatStore.js";
+import {
+  CHAT_TZ,
+  countDayTextMessages,
+  dayKey,
+  listDayMessages,
+  markMessagesSummarized,
+} from "./chatStore.js";
 import { env } from "../../env.js";
 
 function formatClock(tsSec) {
@@ -16,9 +22,17 @@ function formatClock(tsSec) {
 
 /**
  * Resume o chat do grupo Fantasy 2 no dia (fuso America/Fortaleza).
- * @param {string} [day]
+ *
+ * @param {{
+ *   day?: string,
+ *   includeSummarized?: boolean,
+ * }} [opts]
+ * @returns {Promise<{ text: string, marked: number, day: string, includeSummarized: boolean }>}
  */
-export async function summarizeFantasy2Day(day = dayKey()) {
+export async function summarizeFantasy2Day(opts = {}) {
+  const day = opts.day || dayKey();
+  const includeSummarized = Boolean(opts.includeSummarized);
+
   if (!isOpenAiConfigured()) {
     const err = new Error(
       "Provedor de IA não configurado. Cadastre a API key em Perguntar (ou OPENAI_API_KEY).",
@@ -27,9 +41,28 @@ export async function summarizeFantasy2Day(day = dayKey()) {
     throw err;
   }
 
-  const rows = listDayMessages(day).filter((r) => r.body && String(r.body).trim());
+  const counts = countDayTextMessages(day);
+  const rows = listDayMessages(day, { includeSummarized }).filter(
+    (r) => r.body && String(r.body).trim(),
+  );
+
   if (rows.length === 0) {
-    return `Não há mensagens de texto registradas do grupo ${env.WAHA_GROUP_NAME || "Fantasy 2"} em ${day}.`;
+    if (!includeSummarized && counts.total > 0) {
+      return {
+        text:
+          `Não há mensagens novas do grupo ${env.WAHA_GROUP_NAME || "Fantasy 2"} em ${day} ` +
+          `desde o último resumo. Diga "resumo completo" para incluir tudo do dia.`,
+        marked: 0,
+        day,
+        includeSummarized,
+      };
+    }
+    return {
+      text: `Não há mensagens de texto registradas do grupo ${env.WAHA_GROUP_NAME || "Fantasy 2"} em ${day}.`,
+      marked: 0,
+      day,
+      includeSummarized,
+    };
   }
 
   // Limita tamanho pra não estourar contexto — prioriza o fim do dia.
@@ -45,7 +78,7 @@ export async function summarizeFantasy2Day(day = dayKey()) {
     })
     .join("\n");
 
-  return chatCompletion({
+  const text = await chatCompletion({
     temperature: 0.3,
     max_tokens: 900,
     messages: [
@@ -63,4 +96,18 @@ export async function summarizeFantasy2Day(day = dayKey()) {
       },
     ],
   });
+
+  // Marca as msgs efetivamente usadas neste resumo (não reentram no próximo
+  // "resumo" padrão). Pedidos "completo"/data explícita também marcam.
+  const marked = markMessagesSummarized(
+    slice.map((r) => r.id),
+    day,
+  );
+
+  let out = text;
+  if (!includeSummarized && marked > 0) {
+    out += `\n\n_(${marked} mensagem${marked === 1 ? "" : "ens"} marcada${marked === 1 ? "" : "s"} como lida${marked === 1 ? "" : "s"}.)_`;
+  }
+
+  return { text: out, marked, day, includeSummarized };
 }
