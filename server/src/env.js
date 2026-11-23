@@ -25,6 +25,27 @@ const schema = z.object({
   // RAG (perguntas ao condomínio) — opcional: sem chave o servidor sobe, mas POST /rag/ask
   // e o reindex retornam 503 até configurar. Modelo de embedding: text-embedding-3-small.
   OPENAI_API_KEY: z.string().optional().default(""),
+
+  // WAHA (bot WhatsApp do grupo Fantasy 2) — opcional. Sem WAHA_ENABLED=true o webhook
+  // responde 503. Vars tipicamente espelham C:\Users\Gustavo\waha.env na VPS.
+  WAHA_ENABLED: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((v) => ["1", "true", "yes", "on"].includes(String(v).trim().toLowerCase())),
+  WAHA_URL: z.string().optional().default(""),
+  WAHA_API_KEY: z.string().optional().default(""),
+  WAHA_SESSION: z.string().optional().default("default"),
+  /** Número E.164 do bot, só dígitos (ex. 5585…). */
+  WAHA_BOT_PHONE: z.string().optional().default(""),
+  /** JID do grupo Fantasy 2 (`…@g.us`). */
+  WAHA_GROUP_ID: z.string().optional().default(""),
+  WAHA_GROUP_NAME: z.string().optional().default("Fantasy 2"),
+  /** CSV de números (só dígitos) autorizados a mandar "resumo". */
+  WAHA_SUMMARY_ALLOWLIST: z.string().optional().default(""),
+  /** Se setado, exige header X-Webhook-Secret no POST /waha/webhook. */
+  WAHA_WEBHOOK_SECRET: z.string().optional().default(""),
+  WAHA_CHAT_DATA_DIR: z.string().optional().default("./data/waha-chats"),
 });
 
 const parsed = schema.safeParse(process.env);

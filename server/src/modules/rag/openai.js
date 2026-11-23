@@ -12,7 +12,7 @@ export function embeddingDims() {
   return EMBEDDING_DIMS;
 }
 
-async function openaiJson(path, body) {
+export async function openaiJson(path, body) {
   const key = resolveApiKey();
   if (!key) {
     const err = new Error(
@@ -39,6 +39,27 @@ async function openaiJson(path, body) {
     throw err;
   }
   return data;
+}
+
+/**
+ * Chat completion genérico (mesma key do RAG).
+ * @param {{ messages: object[], temperature?: number, max_tokens?: number, model?: string }} args
+ */
+export async function chatCompletion({
+  messages,
+  temperature = 0.3,
+  max_tokens = 800,
+  model = CHAT_MODEL,
+}) {
+  const data = await openaiJson("/chat/completions", {
+    model,
+    temperature,
+    max_tokens,
+    messages,
+  });
+  const content = data.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error("Resposta vazia do modelo.");
+  return content;
 }
 
 /** @param {string | string[]} input */
