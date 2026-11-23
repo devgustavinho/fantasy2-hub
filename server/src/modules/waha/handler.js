@@ -1,5 +1,6 @@
 import { env } from "../../env.js";
 import { askCondo } from "../rag/ask.js";
+import { claimInboundMessage } from "./claim.js";
 import { sendText, isWahaConfigured } from "./client.js";
 import { appendGroupMessage } from "./chatStore.js";
 import {
@@ -15,6 +16,12 @@ import { summarizeFantasy2Day } from "./summary.js";
 
 /**
  * Processa um evento WAHA (message / message.any).
+ *
+ * Persistência do grupo: ambos os eventos (`message.any` inclui fromMe).
+ * Respostas (RAG / resumo): claim atômico por message id + cota UNIQUE(message_id).
+ * O WAHA com `message`+`message.any` entrega o mesmo inbound 2×; sem dedupe
+ * o bot respondia duas vezes e cobrava 2 cotas ("Restam 3" depois "Restam 4").
+ *
  * @param {object} event
  */
 export async function handleWahaEvent(event) {
@@ -33,8 +40,10 @@ export async function handleWahaEvent(event) {
   const msg = normalizeEvent(event);
   if (!msg.id || !msg.chatId) return { skipped: "empty" };
 
-  // Persistência: só o grupo Fantasy 2 (todas as msgs, incl. fromMe).
-  if (isFantasy2Group(msg.chatId)) {
+  const storedGroup = isFantasy2Group(msg.chatId);
+
+  // Persistência: só o grupo Fantasy 2 (todas as msgs, incl. fromMe) — ambos os eventos.
+  if (storedGroup) {
     appendGroupMessage({
       id: msg.id,
       timestamp: msg.timestamp,
@@ -50,13 +59,23 @@ export async function handleWahaEvent(event) {
   }
 
   // Não responde às próprias mensagens.
-  if (msg.fromMe) return { skipped: "fromMe", stored: isFantasy2Group(msg.chatId) };
+  if (msg.fromMe) return { skipped: "fromMe", stored: storedGroup };
+
+  // Replies (RAG/resumo) só no evento `message`.
+  // `message.any` duplica todo inbound e continua necessário pra persistir fromMe;
+  // claim por id abaixo ainda cobre retry do próprio `message`.
+  if (name === "message.any") {
+    return { skipped: "message.any_no_reply", stored: storedGroup };
+  }
 
   // Comando resumo — Gustavo (allowlist), em qualquer chat.
   if (isResumoCommand(msg.body, msg.botPhone)) {
     if (!isAllowlisted(msg.senderPhone, env.WAHA_SUMMARY_ALLOWLIST)) {
       // Silêncio pra não vazar o comando a quem não pode usar.
       return { skipped: "resumo_denied" };
+    }
+    if (!claimInboundMessage(msg.id, "resumo")) {
+      return { skipped: "duplicate" };
     }
     try {
       const summary = await summarizeFantasy2Day();
@@ -77,7 +96,7 @@ export async function handleWahaEvent(event) {
   }
 
   // Perguntas RAG: no grupo Fantasy 2 (com menção/reply) ou DM ao bot.
-  const inFantasyGroup = isFantasy2Group(msg.chatId);
+  const inFantasyGroup = storedGroup;
   const isDm = !msg.isGroup;
   if (!inFantasyGroup && !isDm) {
     return { skipped: "other_chat" };
@@ -89,6 +108,9 @@ export async function handleWahaEvent(event) {
   const question = stripBotAddressing(msg.body, msg.botPhone);
   if (!question || question.length < 3) {
     if (isDm || isAddressedToBot(msg)) {
+      if (!claimInboundMessage(msg.id, "short")) {
+        return { skipped: "duplicate" };
+      }
       await sendText({
         chatId: msg.chatId,
         text: "Me chama com uma pergunta (ex.: @bot qual o horário da academia?).",
@@ -98,10 +120,18 @@ export async function handleWahaEvent(event) {
     return { skipped: "short" };
   }
 
+  // Claim antes da cota/ask — message e message.any competem; só o 1º segue.
+  if (!claimInboundMessage(msg.id, "ask")) {
+    return { skipped: "duplicate" };
+  }
+
   const phone = msg.senderPhone || "unknown";
   let reservedId = null;
   try {
-    const reserved = reserveWahaAskSlot(phone);
+    const reserved = reserveWahaAskSlot(phone, msg.id);
+    if (reserved.duplicate) {
+      return { skipped: "duplicate_quota" };
+    }
     reservedId = reserved.id;
 
     const result = await askCondo(question);

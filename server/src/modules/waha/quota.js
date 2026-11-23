@@ -15,7 +15,11 @@ const listInWindow = sqlite.prepare(`
 `);
 
 const insertAsk = sqlite.prepare(`
-  INSERT INTO waha_ask_log (id, phone, asked_at) VALUES (?, ?, ?)
+  INSERT INTO waha_ask_log (id, phone, asked_at, message_id) VALUES (?, ?, ?, ?)
+`);
+
+const findByMessageId = sqlite.prepare(`
+  SELECT id FROM waha_ask_log WHERE message_id = ?
 `);
 
 const deleteAsk = sqlite.prepare(`DELETE FROM waha_ask_log WHERE id = ?`);
@@ -51,15 +55,29 @@ export function getWahaAskQuota(phone) {
   };
 }
 
-export function reserveWahaAskSlot(phone) {
+/**
+ * Reserva 1 slot de cota. Se `messageId` já foi cobrado, devolve o slot existente
+ * sem incrementar de novo (idempotente sob webhook duplicado).
+ * @param {string} phone
+ * @param {string} [messageId]
+ */
+export function reserveWahaAskSlot(phone, messageId) {
+  const mid = messageId ? String(messageId).trim() : "";
   return sqlite.transaction(() => {
+    if (mid) {
+      const existing = findByMessageId.get(mid);
+      if (existing) {
+        return { id: existing.id, quota: getWahaAskQuota(phone), duplicate: true };
+      }
+    }
+
     const quota = getWahaAskQuota(phone);
     if (quota.remaining <= 0) throw quotaExceededError(quota);
 
     const id = randomUUID();
     const askedAt = new Date().toISOString();
-    insertAsk.run(id, phone, askedAt);
-    return { id, quota: getWahaAskQuota(phone) };
+    insertAsk.run(id, phone, askedAt, mid || null);
+    return { id, quota: getWahaAskQuota(phone), duplicate: false };
   })();
 }
 

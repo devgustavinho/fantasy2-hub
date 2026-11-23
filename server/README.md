@@ -214,7 +214,7 @@ UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds
 
 ## WAHA (bot WhatsApp — grupo Fantasy 2)
 
-`src/modules/waha/` — webhook `POST /waha/webhook` (events `message` + `message.any`). Migration `0039_waha_ask_quota.sql`. Doc de setup: store do projeto `docs/waha-fantasy2-bot.md`.
+`src/modules/waha/` — webhook `POST /waha/webhook` (events `message` + `message.any`). Persistência usa ambos; replies RAG/resumo só em `message` com claim por message id (`0040_waha_inbound_dedupe.sql`). Cota: `0039_waha_ask_quota.sql`. Doc: store `docs/waha-fantasy2-bot.md`.
 
 | Peça | Detalhe |
 |---|---|
