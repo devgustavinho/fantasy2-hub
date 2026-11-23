@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Pencil, Plus, Trash2, Volume2, Truck } from "lucide-react";
+import { Check, Clock, Copy, Pencil, Plus, Trash2, Volume2, Truck, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import * as horariosService from "@/services/horarios";
-import type { CommonArea, MudancaWindow } from "@/services/horarios";
+import type { CommonArea, MudancaWindow, WifiSecurity } from "@/services/horarios";
 import { formatDateOnly } from "@/lib/utils";
 
 const DAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -49,6 +50,9 @@ function AreaEditForm({
     closesAt: string | null;
     assemblyRef: string | null;
     notes: string | null;
+    wifiSsid: string | null;
+    wifiPassword: string | null;
+    wifiSecurity: WifiSecurity;
   }) => void;
   onCancel: () => void;
 }) {
@@ -57,6 +61,9 @@ function AreaEditForm({
   const [closesAt, setClosesAt] = useState(area.closesAt ?? "22:00");
   const [assemblyRef, setAssemblyRef] = useState(area.assemblyRef ?? "");
   const [notes, setNotes] = useState(area.notes ?? "");
+  const [wifiSsid, setWifiSsid] = useState(area.wifiSsid ?? "");
+  const [wifiPassword, setWifiPassword] = useState(area.wifiPassword ?? "");
+  const [wifiSecurity, setWifiSecurity] = useState<WifiSecurity>(area.wifiSecurity ?? "WPA");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,6 +73,9 @@ function AreaEditForm({
       closesAt: is24h ? null : closesAt,
       assemblyRef: assemblyRef.trim() || null,
       notes: notes.trim() || null,
+      wifiSsid: wifiSsid.trim() || null,
+      wifiPassword: wifiSecurity === "nopass" ? "" : wifiPassword,
+      wifiSecurity,
     });
   }
 
@@ -99,6 +109,51 @@ function AreaEditForm({
         <Label>Observações</Label>
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </div>
+      <fieldset className="space-y-2 rounded-md border border-dashed p-3">
+        <legend className="flex items-center gap-1.5 px-1 text-sm font-medium">
+          <Wifi className="h-3.5 w-3.5" />
+          Wi‑Fi da área
+        </legend>
+        <p className="text-xs text-muted-foreground">
+          Deixe o nome da rede em branco para remover. Moradores veem um botão para conectar.
+        </p>
+        <div className="space-y-1">
+          <Label htmlFor={`wifi-ssid-${area.id}`}>Nome da rede (SSID)</Label>
+          <Input
+            id={`wifi-ssid-${area.id}`}
+            value={wifiSsid}
+            onChange={(e) => setWifiSsid(e.target.value)}
+            placeholder="Ex.: Fantasy2-Academia"
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`wifi-sec-${area.id}`}>Segurança</Label>
+          <select
+            id={`wifi-sec-${area.id}`}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            value={wifiSecurity}
+            onChange={(e) => setWifiSecurity(e.target.value as WifiSecurity)}
+          >
+            <option value="WPA">WPA / WPA2 / WPA3</option>
+            <option value="WEP">WEP</option>
+            <option value="nopass">Aberta (sem senha)</option>
+          </select>
+        </div>
+        {wifiSecurity !== "nopass" && (
+          <div className="space-y-1">
+            <Label htmlFor={`wifi-pass-${area.id}`}>Senha</Label>
+            <Input
+              id={`wifi-pass-${area.id}`}
+              type="text"
+              value={wifiPassword}
+              onChange={(e) => setWifiPassword(e.target.value)}
+              placeholder="Senha da rede"
+              autoComplete="off"
+            />
+          </div>
+        )}
+      </fieldset>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending}>
@@ -109,6 +164,31 @@ function AreaEditForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // clipboard bloqueado — ignora
+    }
+  }
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <div className="flex gap-2">
+        <Input readOnly value={value} className="font-mono text-sm" />
+        <Button type="button" variant="outline" size="sm" className="shrink-0 px-3" onClick={() => void copy()}>
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          <span className="sr-only">Copiar {label}</span>
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -227,6 +307,7 @@ export default function Horarios() {
 
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
   const [areaError, setAreaError] = useState<string | null>(null);
+  const [wifiAreaId, setWifiAreaId] = useState<string | null>(null);
   const [mudancaMsg, setMudancaMsg] = useState<string | null>(null);
   const [noiseUntil, setNoiseUntil] = useState("");
   const [noiseAssembly, setNoiseAssembly] = useState("");
@@ -242,6 +323,12 @@ export default function Horarios() {
     queryKey: ["horarios-status"],
     queryFn: horariosService.getHorariosStatus,
     refetchInterval: 60_000,
+  });
+
+  const wifiQuery = useQuery({
+    queryKey: ["horarios-wifi", wifiAreaId],
+    queryFn: () => horariosService.getAreaWifi(wifiAreaId!),
+    enabled: Boolean(wifiAreaId),
   });
 
   const areaMutation = useMutation({
@@ -375,29 +462,49 @@ export default function Horarios() {
               {bundleQuery.data.areas.map((area) => (
                 <li key={area.id} className="rounded-lg border px-4 py-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-medium">{area.name}</p>
                       <p className="text-sm text-muted-foreground">{formatAreaHours(area)}</p>
                       {area.assemblyRef && (
                         <p className="text-xs text-muted-foreground">Assembleia: {area.assemblyRef}</p>
                       )}
                       {area.notes && <p className="mt-1 text-xs text-muted-foreground">{area.notes}</p>}
+                      {area.hasWifi && (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Wifi className="h-3 w-3" />
+                          Wi‑Fi: {area.wifiSsid}
+                        </p>
+                      )}
                     </div>
-                    {isStaff && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="px-2"
-                        onClick={() => {
-                          setEditingAreaId(editingAreaId === area.id ? null : area.id);
-                          setAreaError(null);
-                        }}
-                        aria-label={`Editar ${area.name}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {area.hasWifi && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => setWifiAreaId(area.id)}
+                        >
+                          <Wifi className="h-3.5 w-3.5" />
+                          Conectar
+                        </Button>
+                      )}
+                      {isStaff && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="px-2"
+                          onClick={() => {
+                            setEditingAreaId(editingAreaId === area.id ? null : area.id);
+                            setAreaError(null);
+                          }}
+                          aria-label={`Editar ${area.name}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {isStaff && editingAreaId === area.id && (
                     <div className="mt-3">
@@ -582,6 +689,43 @@ export default function Horarios() {
           </section>
         </>
       )}
+
+      <BottomSheet
+        open={Boolean(wifiAreaId)}
+        onClose={() => setWifiAreaId(null)}
+        title="Conectar ao Wi‑Fi"
+        description={
+          wifiQuery.data
+            ? wifiQuery.data.areaName
+            : "Rede da área comum"
+        }
+      >
+        {wifiQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+        {wifiQuery.isError && (
+          <QueryError onRetry={() => wifiQuery.refetch()} />
+        )}
+        {wifiQuery.data && (
+          <div className="space-y-4">
+            <div className="flex flex-col items-center gap-2">
+              <img
+                src={wifiQuery.data.qrDataUrl}
+                alt={`QR Code Wi‑Fi ${wifiQuery.data.ssid}`}
+                className="h-52 w-52 rounded-lg border bg-white p-2"
+              />
+              <p className="text-center text-xs text-muted-foreground">
+                iPhone: abra a Câmera e aponte para o QR. Android: Configurações → Wi‑Fi → ícone de QR.
+              </p>
+            </div>
+            <CopyField label="Rede (SSID)" value={wifiQuery.data.ssid} />
+            {wifiQuery.data.security !== "nopass" && (
+              <CopyField label="Senha" value={wifiQuery.data.password} />
+            )}
+            {wifiQuery.data.security === "nopass" && (
+              <p className="text-sm text-muted-foreground">Rede aberta — sem senha.</p>
+            )}
+          </div>
+        )}
+      </BottomSheet>
     </div>
   );
 }
