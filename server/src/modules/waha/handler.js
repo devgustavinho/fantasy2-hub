@@ -6,8 +6,8 @@ import { appendGroupMessage } from "./chatStore.js";
 import {
   isAddressedToBot,
   isFantasy2Group,
-  isResumoCommand,
   normalizeEvent,
+  parseResumoCommand,
   stripBotAddressing,
 } from "./detect.js";
 import { isAllowlisted } from "./phones.js";
@@ -69,7 +69,8 @@ export async function handleWahaEvent(event) {
   }
 
   // Comando resumo — Gustavo (allowlist), em qualquer chat.
-  if (isResumoCommand(msg.body, msg.botPhone)) {
+  const resumoCmd = parseResumoCommand(msg.body, msg.botPhone);
+  if (resumoCmd) {
     if (!isAllowlisted(msg.senderPhone, env.WAHA_SUMMARY_ALLOWLIST)) {
       // Silêncio pra não vazar o comando a quem não pode usar.
       return { skipped: "resumo_denied" };
@@ -78,13 +79,21 @@ export async function handleWahaEvent(event) {
       return { skipped: "duplicate" };
     }
     try {
-      const summary = await summarizeFantasy2Day();
+      const summary = await summarizeFantasy2Day({
+        day: resumoCmd.day,
+        includeSummarized: resumoCmd.includeSummarized,
+      });
       await sendText({
         chatId: msg.chatId,
-        text: summary,
+        text: summary.text,
         replyTo: msg.id,
       });
-      return { ok: true, action: "resumo" };
+      return {
+        ok: true,
+        action: "resumo",
+        marked: summary.marked,
+        includeSummarized: summary.includeSummarized,
+      };
     } catch (err) {
       await sendText({
         chatId: msg.chatId,
