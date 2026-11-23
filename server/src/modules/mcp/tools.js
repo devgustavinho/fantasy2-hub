@@ -56,7 +56,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "get_home_stats",
-    "Estatísticas da home (pautas ativas e logins 24h).",
+    "Estatísticas da home (pautas ativas e visitas distintas ao hub nas últimas 24h).",
     {},
     async () => api.get("/stats/home"),
   );
@@ -401,7 +401,7 @@ export function registerToolsForUser(server, api, user) {
     tool(
       server,
       "get_admin_login_stats",
-      "Contador e lista de logins nas últimas 24h (visão admin).",
+      "Contador de visitas distintas ao hub nas últimas 24h (inclui anônimos) + lista de contas ligadas (visão admin).",
       {},
       async () => api.get("/stats/admin/logins"),
     );

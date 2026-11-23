@@ -56,11 +56,13 @@ export default function Home() {
                 <Users className="h-4 w-4" />
                 Acessos nas últimas 24h
               </CardDescription>
-              <CardTitle className="text-4xl tabular-nums">{data.loginsLast24h}</CardTitle>
+              <CardTitle className="text-4xl tabular-nums">
+                {data.visitsLast24h ?? data.loginsLast24h}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Pessoas distintas que entraram no hub no último dia.
+                Visitantes distintos que abriram o hub nas últimas 24h (com ou sem login).
               </p>
             </CardContent>
           </Card>

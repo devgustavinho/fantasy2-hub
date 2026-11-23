@@ -4,6 +4,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
 import { TopBar, BottomDock } from "@/components/Navbar";
 import { OnboardingBanner } from "@/components/OnboardingBanner";
+import { VisitBeacon } from "@/components/VisitBeacon";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
@@ -62,6 +63,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <VisitBeacon />
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
