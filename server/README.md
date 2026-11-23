@@ -212,6 +212,18 @@ pautas (sem comentários/PII de clima).
 
 UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
 
+## WAHA (bot WhatsApp — grupo Fantasy 2)
+
+`src/modules/waha/` — webhook `POST /waha/webhook` (events `message` + `message.any`). Migration `0039_waha_ask_quota.sql`. Doc de setup: store do projeto `docs/waha-fantasy2-bot.md`.
+
+| Peça | Detalhe |
+|---|---|
+| Env | `WAHA_ENABLED`, `WAHA_URL`, `WAHA_API_KEY`, `WAHA_SESSION`, `WAHA_BOT_PHONE`, `WAHA_GROUP_ID`, `WAHA_SUMMARY_ALLOWLIST`, … (ver `.env.example`) |
+| Ask | Menção/reply/@bot no grupo ou DM → `askCondo` + cota 5/24h por número (`waha_ask_log`) |
+| Resumo | Mensagem `resumo` só de números na allowlist → resume o chat do dia do Fantasy 2 |
+| Store | SQLite por dia em `WAHA_CHAT_DATA_DIR`, retenção 7 dias |
+| Health | `GET /waha/health` |
+
 ## Horários (áreas, mudanças, convivência)
 
 `src/modules/horarios/` — fuso `America/Fortaleza`. Migration `0035_horarios.sql`.

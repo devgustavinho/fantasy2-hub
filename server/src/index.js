@@ -25,6 +25,7 @@ import { ragRoutes } from "./modules/rag/routes.js";
 import { horariosRoutes } from "./modules/horarios/routes.js";
 import { contabilRoutes } from "./modules/contabil/routes.js";
 import { mcpRoutes } from "./modules/mcp/routes.js";
+import { wahaRoutes } from "./modules/waha/routes.js";
 
 const app = express();
 
@@ -74,6 +75,8 @@ app.use("/horarios", horariosRoutes());
 app.use("/contabil", contabilRoutes());
 // MCP remoto (Streamable HTTP) — clientes como Cursor usam URL + Bearer JWT da sessão.
 app.use("/mcp", mcpRoutes());
+// Bot WhatsApp (WAHA) — webhook público; autenticação via X-Webhook-Secret opcional.
+app.use("/waha", wahaRoutes());
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Não encontrado." });
