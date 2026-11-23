@@ -19,7 +19,8 @@ export function wahaRoutes() {
 
   /**
    * Webhook WAHA — aponte events `message` e `message.any` para esta URL.
-   * Sempre responde 200 rápido; processamento é assíncrono (evita retry storm).
+   * Persistência do grupo: ambos. Replies RAG/resumo: só `message` + claim por
+   * message id (evita cota/resposta duplicada). Sempre 200; processamento async.
    */
   router.post("/webhook", (req, res) => {
     if (!env.WAHA_ENABLED) {
