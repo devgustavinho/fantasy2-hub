@@ -6,14 +6,10 @@ import {
   embedTexts,
   isOpenAiConfigured,
 } from "./openai.js";
+import { combinedScore, selectHits } from "./score.js";
 
-/** Poucos trechos, só os bem parecidos — evita “Leonh Flash / Ideal Vidros” num FAQ de carro. */
-const TOP_K = 3;
-const MIN_SCORE = 0.42;
-/** Descarta hits muito abaixo do melhor (mesmo acima do mínimo absoluto). */
-const RELATIVE_GAP = 0.06;
-/** Acima disso, restringe ao mesmo source_type do melhor hit (ex.: só FAQ). */
-const STRONG_SCORE = 0.52;
+export { selectHits, combinedScore, lexicalAdjust, queryTokens } from "./score.js";
+
 const MAX_CITATIONS = 2;
 
 const listChunks = sqlite.prepare(`
@@ -44,26 +40,6 @@ export function getIndexStatus() {
       documents: Number(r.documents),
     })),
   };
-}
-
-/**
- * Escolhe poucos chunks fortes; se o melhor for bem claro, não mistura tipos fracos.
- * @param {Array<{ score: number, sourceType: string, sourceId: string }>} scoredSorted
- */
-export function selectHits(scoredSorted) {
-  const aboveMin = scoredSorted.filter((s) => s.score >= MIN_SCORE);
-  if (aboveMin.length === 0) return [];
-
-  const best = aboveMin[0];
-  let pool = aboveMin.filter((s) => s.score >= best.score - RELATIVE_GAP);
-
-  if (best.score >= STRONG_SCORE) {
-    const sameType = pool.filter((s) => s.sourceType === best.sourceType);
-    // Se o melhor FAQ (etc.) é forte, não espalha pra serviço/pauta fracos.
-    if (sameType.length > 0) pool = sameType;
-  }
-
-  return pool.slice(0, TOP_K);
 }
 
 function citationFromHit(hit) {
@@ -115,7 +91,8 @@ export async function askCondo(question) {
 
   for (const row of listChunks.all()) {
     const vec = blobToEmbedding(row.embedding);
-    const score = cosineSimilarity(queryVec, vec);
+    const cosine = cosineSimilarity(queryVec, vec);
+    const score = combinedScore(q, row.content, cosine);
     scored.push({
       id: row.id,
       content: row.content,
@@ -124,6 +101,7 @@ export async function askCondo(question) {
       title: row.title,
       chunkIndex: row.chunkIndex,
       score,
+      cosine,
     });
   }
 
@@ -133,7 +111,7 @@ export async function askCondo(question) {
   if (top.length === 0) {
     return {
       answer:
-        "Não encontrei essa informação no material indexado do condomínio (FAQ, boas-vindas, serviços, recomendações e pautas oficiais).",
+        "Não encontrei essa informação no material indexado do condomínio (FAQ, boas-vindas, serviços, recomendações, pautas oficiais e Manual do Proprietário).",
       citations: [],
       scores: scored.slice(0, 3).map((s) => ({
         title: s.title,

@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 const TARGET_CHARS = 1200;
 const OVERLAP_CHARS = 150;
 
+/** Títulos de seção do Manual (ALL CAPS) que devem virar fronteira de chunk. */
+const MANUAL_SECTION_HEADERS =
+  /^(PERDA D[AE] GARANTIA(?: LEGAL)?|SITUA[CÇ][OÕ]ES N[AÃ]O COBERTAS PELA GARANTIA|GARANTIA LEGAL|PRAZOS DE GARANTIAS|TABELA DE GARANTIAS|ASSIST[EÊ]NCIA T[EÉ]CNICA|SITUA[CÇ][OÕ]ES ESPECIAIS)\s*$/gim;
+
 export function contentHash(text) {
   return createHash("sha256").update(text).digest("hex");
 }
@@ -15,6 +19,30 @@ export function normalizeForIndex(text) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * Prepara o Manual do Proprietário para índice:
+ * remove o índice (só títulos → falso positivo semântico) e promove seções-chave a `##`.
+ */
+export function prepareManualForIndex(raw) {
+  let text = normalizeForIndex(raw);
+  if (!text) return "";
+
+  // Índice geral (Página 3): lista de títulos sem conteúdo — atrapalha retrieval de "perda de garantia".
+  text = text.replace(
+    /## Página 3\s*\n+ÍNDICE GERAL[\s\S]*?(?=## Página 4\b)/i,
+    "",
+  );
+
+  // Mini-sumário em "Como utilizar o manual" (só nomes de capítulos).
+  text = text.replace(
+    /Para cada um dos capítulos temos os seguintes conteúdos:[\s\S]*?(?=## Página 8\b|SITUAÇÕES ESPECIAIS)/i,
+    "",
+  );
+
+  text = text.replace(MANUAL_SECTION_HEADERS, (m) => `## ${m.trim()}`);
+  return normalizeForIndex(text);
 }
 
 /**
