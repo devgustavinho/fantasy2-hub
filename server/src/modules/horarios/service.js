@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sqlite } from "../../db/client.js";
 import { ensureHolidaySeed } from "./holidays.js";
-import { addDays, fortalezaParts, inTimeRange, isHm } from "./time.js";
+import { evaluateMudancaWindows } from "./mudancaWindows.js";
+import { addDays, fortalezaParts, isHm } from "./time.js";
 import { buildWifiUri, normalizeWifiSecurity, WIFI_SECURITIES } from "./wifi.js";
 
 const listAreas = sqlite.prepare(`
@@ -138,26 +139,8 @@ function mudancaAllowedOn(dateIso, dayOfWeek, timeHm, windows) {
       window: null,
     };
   }
-  const window = windows.find((w) => w.days.includes(dayOfWeek));
-  if (!window) {
-    return { allowed: false, reason: "Sem janela de mudança neste dia da semana.", blocked: null, window: null };
-  }
-  if (timeHm != null && !inTimeRange(timeHm, window.opensAt, window.closesAt)) {
-    return {
-      allowed: false,
-      reason: `Fora da janela (${window.opensAt}–${window.closesAt}).`,
-      blocked: null,
-      window,
-    };
-  }
-  return {
-    allowed: true,
-    reason: timeHm == null
-      ? `Permitido (${window.opensAt}–${window.closesAt}).`
-      : `Dentro da janela (${window.opensAt}–${window.closesAt}).`,
-    blocked: null,
-    window,
-  };
+  const result = evaluateMudancaWindows(dayOfWeek, timeHm, windows);
+  return { ...result, blocked: null };
 }
 
 export function getHorariosStatus(now = new Date()) {
