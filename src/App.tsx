@@ -34,6 +34,7 @@ import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
 import AskCondo from "@/pages/AskCondo";
 import Horarios from "@/pages/Horarios";
+import Documentos from "@/pages/Documentos";
 import ContabilList from "@/pages/ContabilList";
 import ContabilDetail from "@/pages/ContabilDetail";
 import NotFound from "@/pages/NotFound";
@@ -185,6 +186,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <Horarios />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/documentos"
+                element={
+                  <AppLayout>
+                    <Documentos />
                   </AppLayout>
                 }
               />

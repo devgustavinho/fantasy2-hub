@@ -213,7 +213,7 @@ pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietá
 | Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
 
 UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
-PDF do manual: `/horarios` → Documentos (API `GET /docs/manual-do-proprietario`, morador aprovado).
+PDF do manual: `/documentos` (API `GET /docs/manual-do-proprietario`, morador aprovado).
 
 ## WAHA (bot WhatsApp — grupo Fantasy 2)
 
@@ -236,7 +236,7 @@ PDF do manual: `/horarios` → Documentos (API `GET /docs/manual-do-proprietario
 | `GET /docs` | Lista metadados |
 | `GET /docs/manual-do-proprietario` | PDF inline; `?download=1` → attachment |
 
-UI: `/horarios` → seção **Documentos**.
+UI: `/documentos` (Mais → Documentos). Lista via `GET /docs`; pronta para novos itens no catálogo.
 
 ## Horários (áreas, mudanças, convivência)
 
