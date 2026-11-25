@@ -196,8 +196,9 @@ Auditado: `tags.create`, `tags.delete`.
 ## RAG (perguntas ao condomínio)
 
 `src/modules/rag/` — índice semântico no SQLite (`rag_documents` + `rag_chunks` com embeddings
-`text-embedding-3-small`). Fontes: FAQ, boas-vindas, serviços, recomendações e campos oficiais de
-pautas (sem comentários/PII de clima).
+`text-embedding-3-small`). Fontes: FAQ, boas-vindas, serviços, recomendações, campos oficiais de
+pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietário**
+(`source_type=manual`, texto em `assets/docs/manual-do-proprietario.txt`).
 
 | Peça | Detalhe |
 |---|---|
@@ -206,11 +207,13 @@ pautas (sem comentários/PII de clima).
 | Status | `GET /rag/status` — staff vê contagens; morador só `available` |
 | Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key |
 | Embeds | `GET/POST/DELETE /rag/embeds` (admin) — texto (.txt/.md/…); upload → chunk+embed; listagem sem o corpo |
+| Manual | PDF + texto em `assets/docs/`; migration `0043_rag_manual.sql`; entra no `rag:reindex` |
 | Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force` |
 | MCP | tool `ask_condo` (resident+) → mesmo `/rag/ask` |
 | Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
 
 UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
+PDF do manual: `/horarios` → Documentos (API `GET /docs/manual-do-proprietario`, morador aprovado).
 
 ## WAHA (bot WhatsApp — grupo Fantasy 2)
 
@@ -223,6 +226,17 @@ UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds
 | Resumo | Mensagem `resumo` só de números na allowlist → resume o chat do dia do Fantasy 2 |
 | Store | SQLite por dia em `WAHA_CHAT_DATA_DIR`, retenção 7 dias |
 | Health | `GET /waha/health` |
+
+## Documentos do condomínio
+
+`src/modules/docs/` — PDFs no disco (`server/assets/docs/`). Morador aprovado.
+
+| Rota | Detalhe |
+|---|---|
+| `GET /docs` | Lista metadados |
+| `GET /docs/manual-do-proprietario` | PDF inline; `?download=1` → attachment |
+
+UI: `/horarios` → seção **Documentos**.
 
 ## Horários (áreas, mudanças, convivência)
 

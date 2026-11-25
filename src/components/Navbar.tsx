@@ -122,7 +122,7 @@ export function BottomDock() {
       title: "Horários",
       href: "/horarios",
       icon: <Clock className="h-5 w-5" />,
-      description: "Áreas comuns, mudanças e convivência",
+      description: "Áreas comuns, mudanças, convivência e documentos",
     },
     {
       title: "Clima",
