@@ -208,7 +208,7 @@ pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietá
 | Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key |
 | Embeds | `GET/POST/DELETE /rag/embeds` (admin) — texto (.txt/.md/…); upload → chunk+embed; listagem sem o corpo |
 | Manual | PDF + texto em `assets/docs/`; migration `0043_rag_manual.sql`; prep remove índice/TOC e promove seções; entra no `rag:reindex` (embeddings em lotes de 64) |
-| Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force` |
+| Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force`; no deploy da API o Actions roda reindex best-effort após o healthcheck (ver `docs/RUNBOOK-DEPLOY.md`) |
 | Selftest | `node src/modules/rag/perda-garantia.selftest.js` — chunking + ranking da pergunta de perda de garantia |
 | MCP | tool `ask_condo` (resident+) → mesmo `/rag/ask` |
 | Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
