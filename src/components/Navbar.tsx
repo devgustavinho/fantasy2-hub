@@ -7,6 +7,7 @@ import {
   Columns3,
   Ellipsis,
   FileSpreadsheet,
+  FileText,
   Gauge,
   HelpCircle,
   Home,
@@ -122,7 +123,13 @@ export function BottomDock() {
       title: "Horários",
       href: "/horarios",
       icon: <Clock className="h-5 w-5" />,
-      description: "Áreas comuns, mudanças, convivência e documentos",
+      description: "Áreas comuns, mudanças e convivência",
+    },
+    {
+      title: "Documentos",
+      href: "/documentos",
+      icon: <FileText className="h-5 w-5" />,
+      description: "Manuais e documentos do condomínio",
     },
     {
       title: "Clima",

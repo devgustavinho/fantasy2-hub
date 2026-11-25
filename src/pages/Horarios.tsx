@@ -4,8 +4,6 @@ import {
   Check,
   Clock,
   Copy,
-  Download,
-  FileText,
   Pencil,
   Plus,
   Trash2,
@@ -21,7 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
-import * as docsService from "@/services/docs";
 import * as horariosService from "@/services/horarios";
 import type { CommonArea, MudancaWindow, WifiSecurity } from "@/services/horarios";
 import { formatDateOnly } from "@/lib/utils";
@@ -326,8 +323,6 @@ export default function Horarios() {
   const [noiseAssembly, setNoiseAssembly] = useState("");
   const [blockDate, setBlockDate] = useState("");
   const [blockReason, setBlockReason] = useState("");
-  const [manualBusy, setManualBusy] = useState<"view" | "download" | null>(null);
-  const [manualError, setManualError] = useState<string | null>(null);
 
   const bundleQuery = useQuery({
     queryKey: ["horarios"],
@@ -414,70 +409,9 @@ export default function Horarios() {
           Horários
         </h1>
         <p className="text-sm text-muted-foreground">
-          Áreas comuns, mudanças, convivência e documentos — fuso America/Fortaleza.
+          Áreas comuns, mudanças e convivência — fuso America/Fortaleza.
         </p>
       </div>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Documentos</h2>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-4 w-4" />
-              Manual do Proprietário
-            </CardTitle>
-            <CardDescription>
-              Guia de uso e conservação do imóvel Fantasy 2. Também indexado em Perguntar /
-              WhatsApp.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className="gap-1.5"
-              disabled={manualBusy !== null}
-              onClick={async () => {
-                setManualError(null);
-                setManualBusy("view");
-                try {
-                  await docsService.openManualPdf();
-                } catch (err) {
-                  setManualError(err instanceof Error ? err.message : "Falha ao abrir o PDF.");
-                } finally {
-                  setManualBusy(null);
-                }
-              }}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              {manualBusy === "view" ? "Abrindo…" : "Abrir PDF"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              disabled={manualBusy !== null}
-              onClick={async () => {
-                setManualError(null);
-                setManualBusy("download");
-                try {
-                  await docsService.openManualPdf({ download: true });
-                } catch (err) {
-                  setManualError(err instanceof Error ? err.message : "Falha ao baixar o PDF.");
-                } finally {
-                  setManualBusy(null);
-                }
-              }}
-            >
-              <Download className="h-3.5 w-3.5" />
-              {manualBusy === "download" ? "Baixando…" : "Baixar"}
-            </Button>
-            {manualError && <p className="w-full text-sm text-destructive">{manualError}</p>}
-          </CardContent>
-        </Card>
-      </section>
 
       {statusQuery.data && (
         <div className="grid gap-3 sm:grid-cols-3">
