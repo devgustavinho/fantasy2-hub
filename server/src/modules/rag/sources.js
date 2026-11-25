@@ -1,5 +1,19 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { sqlite } from "../../db/client.js";
 import { normalizeForIndex } from "./chunk.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MANUAL_TXT = join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "assets",
+  "docs",
+  "manual-do-proprietario.txt",
+);
 
 const getFaq = sqlite.prepare("SELECT id, question, body FROM faq_entries WHERE id = ?");
 const listFaq = sqlite.prepare("SELECT id, question, body FROM faq_entries");
@@ -199,6 +213,20 @@ export function buildExternalDocumentFromRow(row) {
   return { sourceType: "external", sourceId: row.id, title: row.title, body };
 }
 
+/** Manual do Proprietário — texto pré-extraído do PDF em assets/docs. */
+export function buildManualDocument() {
+  if (!existsSync(MANUAL_TXT)) return null;
+  const raw = readFileSync(MANUAL_TXT, "utf8");
+  const body = normalizeForIndex(raw);
+  if (!body) return null;
+  return {
+    sourceType: "manual",
+    sourceId: "proprietario",
+    title: "Manual do Proprietário — Fantasy 2",
+    body,
+  };
+}
+
 export function listAllSourceDocuments() {
   const docs = [];
   for (const row of listFaq.all()) {
@@ -223,5 +251,7 @@ export function listAllSourceDocuments() {
     const d = buildExternalDocumentFromRow(row);
     if (d) docs.push(d);
   }
+  const manual = buildManualDocument();
+  if (manual) docs.push(manual);
   return docs;
 }

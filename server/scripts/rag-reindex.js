@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Backfill / reindex do corpus RAG (FAQ, boas-vindas, serviços, recomendações, pautas).
+ * Backfill / reindex do corpus RAG (FAQ, boas-vindas, serviços, recomendações, pautas,
+ * embeds externos, Manual do Proprietário).
  *
  * Uso (na pasta server/):
  *   npm run rag:reindex

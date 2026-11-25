@@ -159,7 +159,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "ask_condo",
-    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, serviços, recomendações, pautas e embeds). Responde só com base no índice RAG; inclui citações. Limite: 5 perguntas por usuário a cada 24 horas.",
+    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, serviços, recomendações, pautas, embeds e Manual do Proprietário). Responde só com base no índice RAG; inclui citações. Limite: 5 perguntas por usuário a cada 24 horas.",
     {
       question: z.string().min(3).max(500).describe("Pergunta em português"),
     },

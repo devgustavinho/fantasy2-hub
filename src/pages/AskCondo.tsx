@@ -16,6 +16,7 @@ const SOURCE_LABEL: Record<string, string> = {
   recommendation: "Recomendação",
   topic: "Pauta",
   external: "Embed",
+  manual: "Manual",
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
