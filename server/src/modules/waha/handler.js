@@ -122,7 +122,7 @@ export async function handleWahaEvent(event) {
       }
       await sendText({
         chatId: msg.chatId,
-        text: "Me chama com uma pergunta (ex.: @bot qual o horário da academia?).",
+        text: "Me chama com uma pergunta (menciona o bot no grupo, ex.: horário da academia?).",
         replyTo: msg.id,
       }).catch(() => {});
     }

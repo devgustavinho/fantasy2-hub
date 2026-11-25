@@ -79,22 +79,33 @@ function extractReplyTo(payload) {
   };
 }
 
-function extractMentionIds(payload) {
+/**
+ * Coleta JIDs mencionados no payload WAHA (mentionedIds / mentions / @lid / contextInfo).
+ * Não usa o texto da mensagem — só campos estruturados do envelope.
+ */
+export function extractMentionIds(payload) {
   const out = new Set();
   const lists = [
     payload.mentionIds,
     payload.mentionedIds,
     payload.mentionedJids,
+    payload.mentions,
     payload._data?.mentionedJidList,
     payload._data?.mentionedJid,
+    payload._data?.mentions,
     payload._data?.ContextInfo?.mentionedJid,
+    payload._data?.contextInfo?.mentionedJid,
     payload._data?.message?.extendedTextMessage?.contextInfo?.mentionedJid,
+    payload._data?.message?.extendedTextMessage?.contextInfo?.mentionedJidList,
   ];
   for (const list of lists) {
     if (!list) continue;
     const arr = Array.isArray(list) ? list : [list];
     for (const item of arr) {
-      const jid = typeof item === "string" ? item : item?.id || item?._serialized;
+      const jid =
+        typeof item === "string"
+          ? item
+          : item?.id || item?._serialized || item?.jid || item?.user;
       if (jid) out.add(String(jid));
     }
   }
@@ -102,7 +113,33 @@ function extractMentionIds(payload) {
 }
 
 /**
- * Remove menções / @bot do texto pra obter a pergunta.
+ * True se o JID mencionado (telefone @c.us / @lid / etc.) é a identidade do bot.
+ */
+export function mentionMatchesBot(mentionJid, botPhone, meId) {
+  if (!mentionJid) return false;
+  const mid = String(mentionJid);
+  const midBase = mid.split("@")[0]?.split(":")[0] || "";
+
+  if (meId) {
+    const me = String(meId);
+    if (mid === me) return true;
+    const meBase = me.split("@")[0]?.split(":")[0] || "";
+    if (midBase && meBase && midBase === meBase) return true;
+    if (phonesMatch(mid, me) || phoneFromJid(mid) === phoneFromJid(me)) return true;
+  }
+
+  if (botPhone) {
+    if (phonesMatch(mid, botPhone) || phoneFromJid(mid) === digitsOnly(botPhone)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Remove prefixos de menção do texto pra obter a pergunta (após já ter
+ * confirmado endereço via payload). Limpa @telefone e vestígios de @bot no body.
  */
 export function stripBotAddressing(body, botPhone) {
   let text = String(body || "");
@@ -184,7 +221,9 @@ function offsetDayKey(offsetDays) {
 }
 
 /**
- * No grupo: só responde se mencionar o bot, responder a ele, ou @bot no texto.
+ * No grupo: só responde se houver menção explícita no payload WAHA
+ * (mentionedIds / mentions / @lid) ou reply a uma mensagem do bot.
+ * NÃO dispara por substring "bot" / "@bot" no texto.
  * Em DM: qualquer mensagem (não fromMe) conta.
  */
 export function isAddressedToBot(msg) {
@@ -192,22 +231,14 @@ export function isAddressedToBot(msg) {
   if (!msg.isGroup) return true;
 
   const bot = msg.botPhone;
-  if (bot) {
-    for (const mid of msg.mentionIds) {
-      if (phonesMatch(mid, bot) || phoneFromJid(mid) === bot) return true;
-    }
-    if (msg.meId && msg.mentionIds.some((m) => phonesMatch(m, msg.meId))) return true;
+  for (const mid of msg.mentionIds || []) {
+    if (mentionMatchesBot(mid, bot, msg.meId)) return true;
   }
 
   if (msg.replyTo?.fromMe) return true;
-  if (msg.replyTo?.participant && bot && phonesMatch(msg.replyTo.participant, bot)) {
+  if (msg.replyTo?.participant && mentionMatchesBot(msg.replyTo.participant, bot, msg.meId)) {
     return true;
   }
-
-  const lower = String(msg.body || "").toLowerCase();
-  if (/\b@?bot\b/i.test(lower)) return true;
-  if (bot && lower.includes(`@${bot}`)) return true;
-  if (bot && bot.length >= 8 && lower.includes(`@${bot.slice(-8)}`)) return true;
 
   return false;
 }
