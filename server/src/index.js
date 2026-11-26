@@ -6,6 +6,7 @@ import {
   loadSession,
   rejectApiTokenOutsideMcp,
   rejectFailedApiToken,
+  rejectInternalJwtOutsideLoopback,
 } from "./auth/guards.js";
 import { apiTokensRoutes } from "./modules/apiTokens/routes.js";
 import { authRoutes } from "./modules/auth/routes.js";
@@ -42,6 +43,8 @@ app.use(express.json({ limit: "4mb" }));
 app.use(loadSession);
 // f2h_ expirado/revogado/inválido → 401 explícito (não cair no "Faça login").
 app.use(rejectFailedApiToken);
+// JWT interno (troca do /mcp) só em loopback — não serve na REST pública.
+app.use(rejectInternalJwtOutsideLoopback);
 // API token (f2h_) só no MCP — demais rotas exigem JWT de sessão.
 app.use(rejectApiTokenOutsideMcp);
 

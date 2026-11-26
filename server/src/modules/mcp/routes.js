@@ -7,14 +7,17 @@
  *
  * Segurança: se o Bearer for API token, trocamos por um JWT interno de curta
  * duração antes do loopback REST — o token f2h_ nunca é repassado às rotas da API.
+ * O JWT interno (kind: "internal") só é aceito em conexão loopback (127.0.0.1);
+ * fora disso → 401. Assim um f2h_ vazado não amplia acesso à REST pública via troca.
  * Um guard global (rejectApiTokenOutsideMcp) bloqueia f2h_ fora de `/mcp`.
- * Uso do /mcp com f2h_ NÃO exige 2FA (2FA só na criação do token no Hub).
+ * Uso do /mcp com f2h_ NÃO exige 2FA (2FA na criação/rotação do token no Hub).
  * Tools continuam filtradas por cargo (registerToolsForUser / permissionTier).
  *
  * URL: POST https://api-fantasy2.gcsolutions-devs.com.br/mcp
  * Header: Authorization: Bearer <f2h_… | jwt-depreciado>
  *
- * POST /mcp/session — troca f2h_ por JWT interno (usado pelo pacote stdio).
+ * POST /mcp/session — troca f2h_ por JWT interno (só útil em loopback; o pacote
+ * stdio com f2h_ prefere proxy HTTP → /mcp e não depende desta rota).
  */
 
 import { Router } from "express";

@@ -14,6 +14,7 @@ import {
   parseTokenScopes,
   touchApiTokenLastUsed,
 } from "../modules/apiTokens/service.js";
+import { resolveInternalJwtAccess } from "./loopback.js";
 
 const getUserById = sqlite.prepare(
   `SELECT u.id, u.apartment_id, u.name, u.email, u.role, u.approval_status, u.whatsapp, u.whatsapp_visible,
@@ -38,7 +39,8 @@ const API_TOKEN_AUTH_ERRORS = {
 //
 // Aceita JWT de sessão (login) ou API token `f2h_…` (MCP). API tokens só podem chamar `/mcp`
 // (ver rejectApiTokenOutsideMcp); o handler do MCP troca f2h_ por JWT interno curto no loopback.
-// JWT de sessão no /mcp ainda funciona, com aviso de depreciação.
+// JWT interno (kind: "internal") só vale em conexão loopback — não amplia f2h_ para a REST
+// pública. JWT de sessão no /mcp ainda funciona, com aviso de depreciação.
 export function loadSession(req, _res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
@@ -62,10 +64,23 @@ export function loadSession(req, _res, next) {
     } else {
       const payload = verifySession(token);
       if (payload) {
-        const user = getUserById.get(payload.sub);
-        if (user) {
-          req.user = attachRoles(user);
-          req.authKind = payload.kind === "internal" ? "internal" : "session";
+        if (payload.kind === "internal") {
+          const access = resolveInternalJwtAccess(req.socket?.remoteAddress);
+          if (!access.ok) {
+            req.internalJwtRejected = access;
+          } else {
+            const user = getUserById.get(payload.sub);
+            if (user) {
+              req.user = attachRoles(user);
+              req.authKind = "internal";
+            }
+          }
+        } else {
+          const user = getUserById.get(payload.sub);
+          if (user) {
+            req.user = attachRoles(user);
+            req.authKind = "session";
+          }
         }
       }
     }
@@ -78,6 +93,15 @@ export function rejectFailedApiToken(req, res, next) {
   if (!req.apiTokenAuthError) return next();
   const body = API_TOKEN_AUTH_ERRORS[req.apiTokenAuthError] || API_TOKEN_AUTH_ERRORS.invalid;
   return res.status(401).json(body);
+}
+
+/** JWT interno fora de loopback → 401 (não autentica como sessão). */
+export function rejectInternalJwtOutsideLoopback(req, res, next) {
+  if (!req.internalJwtRejected) return next();
+  return res.status(401).json({
+    code: req.internalJwtRejected.code,
+    message: req.internalJwtRejected.message,
+  });
 }
 
 /** Bloqueia API token fora de `/mcp` — REST e gestão de tokens usam só JWT. */

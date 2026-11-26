@@ -4,18 +4,18 @@
  *
  * Env:
  *   FANTASY2_API_URL  — base URL da API (default http://127.0.0.1:3100)
- *   FANTASY2_TOKEN    — API token `f2h_…` (Perfil → Avançado) ou JWT de sessão
+ *   FANTASY2_TOKEN    — API token `f2h_…` (recomendado) ou JWT de sessão (legado)
  *
- * Com f2h_, o cliente troca por JWT interno curto via POST /mcp/session antes das
- * chamadas REST (API tokens não são aceitos fora de /mcp).
+ * Com f2h_: proxy stdio → POST /mcp (Streamable HTTP). O token nunca vira JWT REST
+ * neste processo — a API só emite JWT interno no loopback das tools.
  *
- * Tools são registradas conforme o cargo do usuário em GET /auth/me.
- * Morador/conselheiro → tools de residente; síndico → +staff; admin → +admin.
+ * Com JWT de sessão: tools locais chamam a REST diretamente (modo legado).
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createApiClient, resolveApiBearer } from "./client.js";
+import { createApiClient } from "./client.js";
+import { runStdioProxyToRemoteMcp } from "./proxyRemote.js";
 import { permissionTier } from "./roles.js";
 import { registerToolsForUser } from "./tools.js";
 
@@ -28,27 +28,8 @@ function requireEnv(name) {
   return value;
 }
 
-async function main() {
-  const baseUrl = (process.env.FANTASY2_API_URL || "http://127.0.0.1:3100").trim();
-  const rawToken = requireEnv("FANTASY2_TOKEN");
-
-  // Cache do JWT interno; renova perto do vencimento (TTL ~5 min no servidor).
-  let cached = { token: null, expiresAt: 0 };
-  async function getToken() {
-    if (rawToken.startsWith("f2h_")) {
-      const now = Date.now();
-      if (!cached.token || now > cached.expiresAt - 30_000) {
-        cached.token = await resolveApiBearer(baseUrl, rawToken);
-        cached.expiresAt = now + 4 * 60 * 1000;
-      }
-      return cached.token;
-    }
-    return rawToken;
-  }
-
-  // Resolve uma vez no boot pra falhar cedo se o token for inválido.
-  await getToken();
-  const api = createApiClient({ baseUrl, getToken });
+async function runLocalToolsWithSessionJwt(baseUrl, token) {
+  const api = createApiClient({ baseUrl, token });
 
   let me;
   try {
@@ -80,6 +61,18 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+async function main() {
+  const baseUrl = (process.env.FANTASY2_API_URL || "http://127.0.0.1:3100").trim();
+  const rawToken = requireEnv("FANTASY2_TOKEN");
+
+  if (rawToken.startsWith("f2h_")) {
+    await runStdioProxyToRemoteMcp(baseUrl, rawToken);
+    return;
+  }
+
+  await runLocalToolsWithSessionJwt(baseUrl, rawToken);
 }
 
 main().catch((err) => {

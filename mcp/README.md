@@ -54,7 +54,8 @@ Exemplo `~/.cursor/mcp.json` (recomendado com variável de ambiente):
 JWT de sessão no `/mcp` ainda funciona **temporariamente**, com aviso de depreciação — migre para `f2h_`.
 
 **Segurança:** o Bearer `f2h_` só é aceito em `/mcp`. Antes do loopback REST, o servidor troca o
-API token por um JWT interno de poucos minutos. Gestão dos tokens (`/api-tokens`) exige sessão JWT.
+API token por um JWT interno de poucos minutos — e esse JWT **só vale em conexão loopback**
+(127.0.0.1); fora disso → 401. Gestão dos tokens (`/api-tokens`) exige sessão JWT.
 
 **Gate de permissão:** só conta **aprovada**; tools de staff/admin **não são registradas** para
 morador; a API ainda aplica 403.
@@ -72,12 +73,13 @@ morador; a API ainda aplica 403.
 ```bash
 cd mcp && npm install
 export FANTASY2_API_URL=https://api-fantasy2.gcsolutions-devs.com.br
-export FANTASY2_TOKEN='f2h_…'   # preferível; JWT de sessão ainda funciona
+export FANTASY2_TOKEN='f2h_…'   # preferível; JWT de sessão ainda funciona (legado)
 npm start
 ```
 
-Com `f2h_`, o pacote chama `POST /mcp/session` para obter um JWT interno curto antes das tools
-REST. Moradores **não** precisam deste fluxo.
+Com `f2h_`, o pacote faz **proxy stdio → HTTP** para `POST /mcp` (não troca por JWT REST).
+Com JWT de sessão, registra tools locais que chamam a API REST. Moradores **não** precisam
+deste fluxo.
 
 ## Tools por nível
 
