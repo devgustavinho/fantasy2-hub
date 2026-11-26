@@ -42,9 +42,16 @@ Exemplo `~/.cursor/mcp.json` (recomendado com variável de ambiente):
 }
 ```
 
-O token de API (`f2h_…`) **não** é o JWT da sessão do Hub. Só o hash SHA-256 fica no banco; o valor
-em claro aparece uma vez na criação/rotação. Não compartilhe nem committe. Síndico/admin: validade
-obrigatória de 90 dias e 2FA na criação. Limite: 5 tokens ativos por usuário.
+### Tokens de API (`f2h_`)
+
+- Formato: `f2h_` + 32 bytes aleatórios (base64url). Só o **SHA-256** e um prefixo curto ficam no SQLite.
+- O valor completo aparece **uma vez** na criação/rotação.
+- **Síndico/admin:** validade **obrigatória**, máximo **90 dias**; 2FA exigido **só na criação** (uso no `/mcp` sem 2FA).
+- **Morador/conselheiro:** expiração **opcional**; se informada, teto de **365 dias**.
+- Limite: 5 tokens ativos por usuário. Listar não devolve o valor; dá para rotacionar e revogar.
+- Token expirado ou revogado → **401** claro (`api_token_expired` / `api_token_revoked`).
+
+JWT de sessão no `/mcp` ainda funciona **temporariamente**, com aviso de depreciação — migre para `f2h_`.
 
 **Segurança:** o Bearer `f2h_` só é aceito em `/mcp`. Antes do loopback REST, o servidor troca o
 API token por um JWT interno de poucos minutos. Gestão dos tokens (`/api-tokens`) exige sessão JWT.
@@ -65,7 +72,7 @@ morador; a API ainda aplica 403.
 ```bash
 cd mcp && npm install
 export FANTASY2_API_URL=https://api-fantasy2.gcsolutions-devs.com.br
-export FANTASY2_TOKEN='f2h_…'   # ou JWT de sessão
+export FANTASY2_TOKEN='f2h_…'   # preferível; JWT de sessão ainda funciona
 npm start
 ```
 

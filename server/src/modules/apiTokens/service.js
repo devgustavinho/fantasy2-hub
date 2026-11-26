@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import { sqlite } from "../../db/client.js";
 import { userIsStaff } from "../../auth/roles.js";
 import {
+  defaultStaffExpiryIso,
   generateApiToken,
   hashApiToken,
   isApiTokenFormat,
   MAX_ACTIVE_TOKENS,
+  resolveExpiresAtPolicy,
   STAFF_TOKEN_TTL_DAYS,
 } from "./crypto.js";
 
@@ -42,12 +44,10 @@ const revokeStmt = sqlite.prepare(`
   WHERE id = ? AND user_id = ? AND revoked_at IS NULL
 `);
 
-const findValidByHash = sqlite.prepare(`
+const findByHash = sqlite.prepare(`
   SELECT id, user_id, scopes, last_used_at, expires_at, revoked_at
   FROM api_tokens
   WHERE token_hash = ?
-    AND revoked_at IS NULL
-    AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 `);
 
 const touchLastUsed = sqlite.prepare(`
@@ -82,20 +82,8 @@ function toPublicToken(row) {
   };
 }
 
-function resolveExpiresAt(user, requestedExpiresAt) {
-  if (userIsStaff(user)) {
-    const forced = new Date(Date.now() + STAFF_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    return forced;
-  }
-  if (!requestedExpiresAt) return null;
-  const ms = Date.parse(requestedExpiresAt);
-  if (Number.isNaN(ms) || ms <= Date.now()) {
-    return { error: "Data de expiração inválida." };
-  }
-  return new Date(ms).toISOString();
-}
-
 function assertCanCreate(user) {
+  // 2FA só na criação (e rotação) para síndico/admin — uso no /mcp não exige 2FA.
   if (userIsStaff(user) && !user.totp_enabled) {
     return {
       error: {
@@ -124,9 +112,12 @@ export function createApiToken({ user, name, expiresAt: requestedExpiresAt }) {
   const gate = assertCanCreate(user);
   if (gate.error) return gate;
 
-  const expiresAt = resolveExpiresAt(user, requestedExpiresAt);
-  if (expiresAt && typeof expiresAt === "object" && expiresAt.error) {
-    return { error: { status: 400, message: expiresAt.error } };
+  const resolved = resolveExpiresAtPolicy({
+    staff: userIsStaff(user),
+    requestedExpiresAt: requestedExpiresAt || null,
+  });
+  if (resolved.error) {
+    return { error: { status: 400, message: resolved.error } };
   }
 
   const { token, prefix, tokenHash } = generateApiToken();
@@ -138,7 +129,7 @@ export function createApiToken({ user, name, expiresAt: requestedExpiresAt }) {
     prefix,
     token_hash: tokenHash,
     scopes: JSON.stringify(DEFAULT_SCOPES),
-    expires_at: expiresAt,
+    expires_at: resolved.expiresAt,
   });
 
   const row = getOwned.get(id, user.id);
@@ -159,15 +150,15 @@ export function revokeApiToken({ userId, tokenId }) {
 
 /**
  * Revoga o token atual e cria um novo atomicamente (mesmo nome / política de expiração).
+ * `expiresAt` opcional: staff sem data → agora+90d; residente → herda a anterior.
  */
-export function rotateApiToken({ user, tokenId }) {
+export function rotateApiToken({ user, tokenId, expiresAt: requestedExpiresAt }) {
   const existing = getOwned.get(tokenId, user.id);
   if (!existing) return { error: { status: 404, message: "Token não encontrado." } };
   if (existing.revoked_at) {
     return { error: { status: 400, message: "Não é possível rotacionar um token já revogado." } };
   }
 
-  // 2FA na criação/rotação para síndico/admin; o limite de 5 é tratado na TX (revoga + cria).
   if (userIsStaff(user) && !user.totp_enabled) {
     return {
       error: {
@@ -178,11 +169,21 @@ export function rotateApiToken({ user, tokenId }) {
     };
   }
 
-  const expiresAt = resolveExpiresAt(user, null);
-  // Staff sempre 90 dias a partir de agora; morador: herda a data absoluta restante se houver.
-  let nextExpires = expiresAt && typeof expiresAt === "string" ? expiresAt : null;
-  if (!userIsStaff(user) && existing.expires_at) {
-    nextExpires = existing.expires_at;
+  const staff = userIsStaff(user);
+  let nextExpires;
+  if (staff) {
+    const resolved = resolveExpiresAtPolicy({
+      staff: true,
+      requestedExpiresAt: requestedExpiresAt || defaultStaffExpiryIso(),
+    });
+    if (resolved.error) return { error: { status: 400, message: resolved.error } };
+    nextExpires = resolved.expiresAt;
+  } else if (requestedExpiresAt) {
+    const resolved = resolveExpiresAtPolicy({ staff: false, requestedExpiresAt });
+    if (resolved.error) return { error: { status: 400, message: resolved.error } };
+    nextExpires = resolved.expiresAt;
+  } else {
+    nextExpires = existing.expires_at ?? null;
   }
 
   const tx = sqlite.transaction(() => {
@@ -221,19 +222,30 @@ export function rotateApiToken({ user, tokenId }) {
   }
 }
 
-/** Resolve Bearer f2h_ → registro válido (não revogado / não vencido). */
-export function lookupValidApiToken(rawToken) {
-  if (!isApiTokenFormat(rawToken)) return null;
-  return findValidByHash.get(hashApiToken(rawToken)) ?? null;
+/**
+ * Resolve Bearer f2h_ com motivo explícito (expired / revoked / invalid).
+ * @returns {{ ok: true, row } | { ok: false, reason: 'expired'|'revoked'|'invalid' }}
+ */
+export function authenticateApiToken(rawToken) {
+  if (!isApiTokenFormat(rawToken)) return { ok: false, reason: "invalid" };
+  const row = findByHash.get(hashApiToken(rawToken));
+  if (!row) return { ok: false, reason: "invalid" };
+  if (row.revoked_at) return { ok: false, reason: "revoked" };
+  if (row.expires_at && Date.parse(row.expires_at) <= Date.now()) {
+    return { ok: false, reason: "expired" };
+  }
+  return { ok: true, row };
 }
 
-/** Atualiza last_used_at no máximo 1× por minuto. */
+/** @deprecated use authenticateApiToken */
+export function lookupValidApiToken(rawToken) {
+  const result = authenticateApiToken(rawToken);
+  return result.ok ? result.row : null;
+}
+
+/** Atualiza last_used_at a cada uso autenticado. */
 export function touchApiTokenLastUsed(row) {
   if (!row?.id) return;
-  if (row.last_used_at) {
-    const last = Date.parse(row.last_used_at);
-    if (!Number.isNaN(last) && Date.now() - last < 60_000) return;
-  }
   touchLastUsed.run(row.id);
 }
 
@@ -241,12 +253,11 @@ export function parseTokenScopes(row) {
   return parseScopes(row?.scopes);
 }
 
-// Exportado para selftests / inspeção.
 export const _internals = {
   hashApiToken,
   countActive,
-  findValidByHash,
-  resolveExpiresAt,
+  findByHash,
+  resolveExpiresAtPolicy,
   STAFF_TOKEN_TTL_DAYS,
   MAX_ACTIVE_TOKENS,
 };

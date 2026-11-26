@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { hasRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import {
   createApiToken,
@@ -14,6 +16,20 @@ import {
   rotateApiToken,
   type ApiToken,
 } from "@/services/apiTokens";
+
+function daysFromNowIso(days: number) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/** Valor para `<input type="date">` (yyyy-mm-dd) a partir de ISO. */
+function isoToDateInput(iso: string) {
+  return iso.slice(0, 10);
+}
+
+function dateInputToIsoEndOfDay(dateStr: string) {
+  // Fim do dia UTC aproximado — o backend valida teto em dias.
+  return `${dateStr}T23:59:59.000Z`;
+}
 
 const PROD_API_URL = "https://api-fantasy2.gcsolutions-devs.com.br";
 const PROD_APP_URL = "https://fantasy2-hub.pages.dev";
@@ -173,10 +189,15 @@ type AdvancedSettingsCardProps = {
 };
 
 export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isStaffUser = hasRole(user, "admin") || hasRole(user, "sindico");
   const [open, setOpen] = useState(false);
   const [client, setClient] = useState<ClientId>("cursor");
   const [tokenName, setTokenName] = useState("MCP");
+  const [expiresDate, setExpiresDate] = useState(() =>
+    isStaffUser ? isoToDateInput(daysFromNowIso(90)) : "",
+  );
   const [revealedValue, setRevealedValue] = useState<string | null>(null);
   const [showValue, setShowValue] = useState(false);
   const [copied, setCopied] = useState<CopyKind | null>(null);
@@ -189,7 +210,15 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => createApiToken({ name: tokenName.trim() || "MCP" }),
+    mutationFn: () => {
+      if (isStaffUser && !expiresDate) {
+        throw new ApiError("Síndico/admin precisam informar a validade (máx. 90 dias).", 400);
+      }
+      return createApiToken({
+        name: tokenName.trim() || "MCP",
+        expiresAt: expiresDate ? dateInputToIsoEndOfDay(expiresDate) : null,
+      });
+    },
     onSuccess: (data) => {
       setRevealedValue(data.value);
       setShowValue(true);
@@ -397,8 +426,9 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
                 Tokens de API
               </p>
               <p className="text-xs text-muted-foreground">
-                Até 5 tokens ativos. Síndico/admin: validade de 90 dias e 2FA na criação. O valor
-                completo aparece só uma vez.
+                Até 5 tokens ativos. Síndico/admin: validade obrigatória (máx. 90 dias) e 2FA na
+                criação. Morador/conselheiro: expiração opcional (teto 365 dias). O valor completo
+                aparece só uma vez. JWT de sessão no MCP está depreciado.
               </p>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -412,9 +442,27 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
                     maxLength={80}
                   />
                 </div>
+                <div className="space-y-2 sm:w-44">
+                  <Label htmlFor="apiTokenExpires">
+                    Expira em{isStaffUser ? " (obrigatório)" : " (opcional)"}
+                  </Label>
+                  <Input
+                    id="apiTokenExpires"
+                    type="date"
+                    value={expiresDate}
+                    min={isoToDateInput(daysFromNowIso(1))}
+                    max={isoToDateInput(daysFromNowIso(isStaffUser ? 90 : 365))}
+                    onChange={(e) => setExpiresDate(e.target.value)}
+                    required={isStaffUser}
+                  />
+                </div>
                 <Button
                   type="button"
-                  disabled={createMutation.isPending || !tokenName.trim()}
+                  disabled={
+                    createMutation.isPending ||
+                    !tokenName.trim() ||
+                    (isStaffUser && !expiresDate)
+                  }
                   onClick={() => createMutation.mutate()}
                 >
                   {createMutation.isPending ? "Gerando..." : "Gerar token de API"}

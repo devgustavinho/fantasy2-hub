@@ -83,7 +83,15 @@ export function apiTokensRoutes() {
   });
 
   router.post("/:id/rotate", (req, res) => {
-    const result = rotateApiToken({ user: req.user, tokenId: req.params.id });
+    const expiresAt =
+      typeof req.body?.expiresAt === "string" && req.body.expiresAt.trim()
+        ? req.body.expiresAt.trim()
+        : null;
+    const result = rotateApiToken({
+      user: req.user,
+      tokenId: req.params.id,
+      expiresAt,
+    });
     if (result.error) return sendServiceError(res, result.error);
 
     recordAudit({

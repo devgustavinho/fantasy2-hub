@@ -10,7 +10,7 @@ import {
 } from "./roles.js";
 import { isApiTokenFormat } from "../modules/apiTokens/crypto.js";
 import {
-  lookupValidApiToken,
+  authenticateApiToken,
   parseTokenScopes,
   touchApiTokenLastUsed,
 } from "../modules/apiTokens/service.js";
@@ -24,6 +24,12 @@ const getUserById = sqlite.prepare(
    WHERE u.id = ?`,
 );
 
+const API_TOKEN_AUTH_ERRORS = {
+  expired: { code: "api_token_expired", message: "API token expirado." },
+  revoked: { code: "api_token_revoked", message: "API token revogado." },
+  invalid: { code: "api_token_invalid", message: "API token inválido." },
+};
+
 // Token via header (não mais cookie) — cookie cross-site (front no Cloudflare Pages, API na
 // VPS, domínios diferentes) esbarra no bloqueio de cookie de terceiro do Safari por padrão,
 // mesmo com SameSite=None; Secure configurado certo. `Authorization: Bearer` não é cookie,
@@ -32,21 +38,26 @@ const getUserById = sqlite.prepare(
 //
 // Aceita JWT de sessão (login) ou API token `f2h_…` (MCP). API tokens só podem chamar `/mcp`
 // (ver rejectApiTokenOutsideMcp); o handler do MCP troca f2h_ por JWT interno curto no loopback.
+// JWT de sessão no /mcp ainda funciona, com aviso de depreciação.
 export function loadSession(req, _res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
   if (token) {
     if (isApiTokenFormat(token)) {
-      const row = lookupValidApiToken(token);
-      if (row) {
-        const user = getUserById.get(row.user_id);
+      const auth = authenticateApiToken(token);
+      if (auth.ok) {
+        const user = getUserById.get(auth.row.user_id);
         if (user) {
           req.user = attachRoles(user);
           req.authKind = "api_token";
-          req.apiTokenId = row.id;
-          req.apiTokenScopes = parseTokenScopes(row);
-          touchApiTokenLastUsed(row);
+          req.apiTokenId = auth.row.id;
+          req.apiTokenScopes = parseTokenScopes(auth.row);
+          touchApiTokenLastUsed(auth.row);
+        } else {
+          req.apiTokenAuthError = "invalid";
         }
+      } else {
+        req.apiTokenAuthError = auth.reason;
       }
     } else {
       const payload = verifySession(token);
@@ -60,6 +71,13 @@ export function loadSession(req, _res, next) {
     }
   }
   next();
+}
+
+/** Bearer f2h_ expirado/revogado/inválido → 401 com mensagem clara (antes do requireAuth genérico). */
+export function rejectFailedApiToken(req, res, next) {
+  if (!req.apiTokenAuthError) return next();
+  const body = API_TOKEN_AUTH_ERRORS[req.apiTokenAuthError] || API_TOKEN_AUTH_ERRORS.invalid;
+  return res.status(401).json(body);
 }
 
 /** Bloqueia API token fora de `/mcp` — REST e gestão de tokens usam só JWT. */

@@ -2,7 +2,11 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { env } from "./env.js";
-import { loadSession, rejectApiTokenOutsideMcp } from "./auth/guards.js";
+import {
+  loadSession,
+  rejectApiTokenOutsideMcp,
+  rejectFailedApiToken,
+} from "./auth/guards.js";
 import { apiTokensRoutes } from "./modules/apiTokens/routes.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { apartmentsRoutes } from "./modules/apartments/routes.js";
@@ -36,6 +40,8 @@ const app = express();
 app.use(cors({ origin: env.CORS_ORIGIN }));
 app.use(express.json({ limit: "4mb" }));
 app.use(loadSession);
+// f2h_ expirado/revogado/inválido → 401 explícito (não cair no "Faça login").
+app.use(rejectFailedApiToken);
 // API token (f2h_) só no MCP — demais rotas exigem JWT de sessão.
 app.use(rejectApiTokenOutsideMcp);
 

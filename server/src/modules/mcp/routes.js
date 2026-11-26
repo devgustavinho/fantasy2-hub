@@ -2,13 +2,17 @@
  * Remote MCP (Streamable HTTP) — end users connect Cursor/agents to production
  * without cloning the monorepo.
  *
- * Auth: API token rotativo `f2h_…` (recomendado) ou JWT de sessão.
+ * Auth: API token rotativo `f2h_…` (recomendado). JWT de sessão ainda é aceito
+ * temporariamente no /mcp, com header/aviso de depreciação — migre para f2h_.
+ *
  * Segurança: se o Bearer for API token, trocamos por um JWT interno de curta
  * duração antes do loopback REST — o token f2h_ nunca é repassado às rotas da API.
  * Um guard global (rejectApiTokenOutsideMcp) bloqueia f2h_ fora de `/mcp`.
+ * Uso do /mcp com f2h_ NÃO exige 2FA (2FA só na criação do token no Hub).
+ * Tools continuam filtradas por cargo (registerToolsForUser / permissionTier).
  *
  * URL: POST https://api-fantasy2.gcsolutions-devs.com.br/mcp
- * Header: Authorization: Bearer <f2h_… | jwt>
+ * Header: Authorization: Bearer <f2h_… | jwt-depreciado>
  *
  * POST /mcp/session — troca f2h_ por JWT interno (usado pelo pacote stdio).
  */
@@ -55,7 +59,21 @@ function loopbackBearer(req) {
   return { token };
 }
 
+function warnSessionJwtDeprecated(req, res) {
+  if (req.authKind !== "session") return;
+  res.setHeader("Deprecation", "true");
+  res.setHeader(
+    "Warning",
+    '299 - "JWT de sessão no /mcp está depreciado; use um API token f2h_ (Perfil → Avançado)."',
+  );
+  console.warn(
+    "mcp: Authorization com JWT de sessão está depreciado — migre para API token f2h_.",
+  );
+}
+
 async function handleMcpPost(req, res) {
+  warnSessionJwtDeprecated(req, res);
+
   const swapped = loopbackBearer(req);
   if (swapped.error) {
     return res.status(401).json({
