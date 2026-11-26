@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sqlite } from "../../db/client.js";
-import { normalizeForIndex } from "./chunk.js";
+import { normalizeForIndex, prepareManualForIndex } from "./chunk.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MANUAL_TXT = join(
@@ -217,7 +217,7 @@ export function buildExternalDocumentFromRow(row) {
 export function buildManualDocument() {
   if (!existsSync(MANUAL_TXT)) return null;
   const raw = readFileSync(MANUAL_TXT, "utf8");
-  const body = normalizeForIndex(raw);
+  const body = prepareManualForIndex(raw);
   if (!body) return null;
   return {
     sourceType: "manual",

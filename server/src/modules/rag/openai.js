@@ -62,24 +62,31 @@ export async function chatCompletion({
   return content;
 }
 
+/** Lote pequeno: manual ~238 chunks; um POST único estoura limite de tokens da API. */
+const EMBED_BATCH_SIZE = 64;
+
 /** @param {string | string[]} input */
 export async function embedTexts(input) {
   const texts = Array.isArray(input) ? input : [input];
   if (texts.length === 0) return [];
 
-  const data = await openaiJson("/embeddings", {
-    model: EMBEDDING_MODEL,
-    input: texts,
-  });
-
-  const byIndex = new Map(data.data.map((row) => [row.index, row.embedding]));
-  return texts.map((_, i) => {
-    const vec = byIndex.get(i);
-    if (!vec || vec.length !== EMBEDDING_DIMS) {
-      throw new Error("Resposta de embedding inválida da OpenAI.");
+  const out = new Array(texts.length);
+  for (let start = 0; start < texts.length; start += EMBED_BATCH_SIZE) {
+    const batch = texts.slice(start, start + EMBED_BATCH_SIZE);
+    const data = await openaiJson("/embeddings", {
+      model: EMBEDDING_MODEL,
+      input: batch,
+    });
+    const byIndex = new Map(data.data.map((row) => [row.index, row.embedding]));
+    for (let i = 0; i < batch.length; i += 1) {
+      const vec = byIndex.get(i);
+      if (!vec || vec.length !== EMBEDDING_DIMS) {
+        throw new Error("Resposta de embedding inválida da OpenAI.");
+      }
+      out[start + i] = Float32Array.from(vec);
     }
-    return Float32Array.from(vec);
-  });
+  }
+  return out;
 }
 
 /**
@@ -104,7 +111,8 @@ export async function answerFromContext({ question, contextBlocks }) {
         role: "system",
         content:
           "Você é o assistente do condomínio Fantasy 2. Responda em português do Brasil, de forma curta e clara. " +
-          "Use APENAS o contexto fornecido. Se o contexto não tiver a resposta, diga que não encontrou essa informação no material do condomínio. " +
+          "Use APENAS o contexto fornecido (FAQ, Manual do Proprietário e demais fontes indexadas). " +
+          "Se o contexto não tiver a resposta, diga que não encontrou essa informação no material do condomínio. " +
           "Não invente regras, horários ou contatos. Ignore blocos que não ajudam a responder. " +
           "Quando citar, mencione o título da fonte entre aspas. " +
           "Na ÚLTIMA linha da resposta, escreva exatamente: FONTES: n,m (números [#n] que você usou de verdade; se nenhum, FONTES: nenhum).",
@@ -119,7 +127,8 @@ export async function answerFromContext({ question, contextBlocks }) {
   const raw = data.choices?.[0]?.message?.content?.trim();
   if (!raw) throw new Error("Resposta vazia do modelo.");
 
-  const fontesMatch = raw.match(/\nFONTES:\s*(.+)\s*$/i);
+  // Aceita "FONTES:" na última linha (com ou sem quebra antes — WAHA às vezes recebe na mesma linha).
+  const fontesMatch = raw.match(/(?:\n|^)\s*FONTES:\s*(.+)\s*$/i);
   let usedIndices = [];
   let answer = raw;
   if (fontesMatch) {

@@ -203,12 +203,13 @@ pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietá
 | Peça | Detalhe |
 |---|---|
 | Env | `OPENAI_API_KEY` (opcional, fallback). Preferência: admin salva provedor+key em `rag_settings` |
-| Ask | `POST /rag/ask` — morador aprovado; **5 perguntas / usuário / 24h** (+ burst 10/min); 429 com `remaining`/`resetAt`; top-k apertado + cita só blocos usados |
+| Ask | `POST /rag/ask` — morador aprovado; **5 perguntas / usuário / 24h** (+ burst 10/min); 429 com `remaining`/`resetAt`; ranking híbrido (cosine + lexical) + top-k apertado; cita só blocos usados |
 | Status | `GET /rag/status` — staff vê contagens; morador só `available` |
 | Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key |
 | Embeds | `GET/POST/DELETE /rag/embeds` (admin) — texto (.txt/.md/…); upload → chunk+embed; listagem sem o corpo |
-| Manual | PDF + texto em `assets/docs/`; migration `0043_rag_manual.sql`; entra no `rag:reindex` |
+| Manual | PDF + texto em `assets/docs/`; migration `0043_rag_manual.sql`; prep remove índice/TOC e promove seções; entra no `rag:reindex` (embeddings em lotes de 64) |
 | Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force` |
+| Selftest | `node src/modules/rag/perda-garantia.selftest.js` — chunking + ranking da pergunta de perda de garantia |
 | MCP | tool `ask_condo` (resident+) → mesmo `/rag/ask` |
 | Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
 
