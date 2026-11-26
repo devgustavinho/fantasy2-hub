@@ -25,7 +25,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
-import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
+import { TabBar, type TabBarItem } from "@/components/ui/tab-bar";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { activeIsAdmin, activeIsStaff, homePathForRole, userRoles } from "@/lib/roles";
 
@@ -80,12 +80,8 @@ type SheetLink = {
   description: string;
 };
 
-// `sticky` (não `fixed`) de propósito: em vários navegadores mobile (barra de endereço que
-// aparece/some), um elemento `position: fixed` no rodapé fica ancorado no "layout viewport"
-// (que inclui a área atrás da barra do navegador) em vez do viewport visível — o dock parece
-// "flutuar" acima do rodapé de verdade, com um vão embaixo. `sticky` dentro de um container
-// flex de altura mínima 100dvh não sofre desse problema: ele é sempre o último item da coluna,
-// empurrado pro fim do conteúdo (ou colado no fim da tela visível, o que for maior).
+// Tab bar no fluxo flex (`sticky bottom-0`, não `fixed`): evita vão sob a barra do browser
+// e a cápsula flutuante do FloatingDock antigo. Ícone + rótulo — Opção A do plano de nav.
 export function BottomDock() {
   const { user } = useAuth();
   const location = useLocation();
@@ -98,6 +94,7 @@ export function BottomDock() {
   const staffMode = activeIsStaff(user.role);
   const isAdmin = activeIsAdmin(user.role);
   const onAdminRoute = location.pathname.startsWith("/admin");
+  const path = location.pathname;
 
   const moreLinks: SheetLink[] = [
     {
@@ -146,51 +143,79 @@ export function BottomDock() {
 
   const moreHrefs = moreLinks.map((l) => l.href);
   const onMoreRoute = moreHrefs.some(
-    (href) => location.pathname === href || location.pathname.startsWith(`${href}/`),
+    (href) => path === href || path.startsWith(`${href}/`),
   );
 
-  // Dois modos exclusivos: morador/conselheiro OU admin/síndico — nunca misturados.
-  const residentItems: FloatingDockItem[] = [
-    { title: "Início", icon: <Home className="h-full w-full" />, href: "/" },
-    { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/pautas" },
-    { title: "Negócios", icon: <ShoppingBag className="h-full w-full" />, href: "/negocios" },
-    { title: "Perguntar", icon: <MessageCircleQuestion className="h-full w-full" />, href: "/perguntar" },
+  const iconCls = "h-5 w-5";
+
+  // Dois modos exclusivos (#56): morador/conselheiro OU admin/síndico — nunca misturados.
+  const residentItems: TabBarItem[] = [
+    {
+      title: "Início",
+      icon: <Home className={iconCls} />,
+      href: "/",
+      active: path === "/",
+    },
+    {
+      title: "Pautas",
+      icon: <ClipboardList className={iconCls} />,
+      href: "/pautas",
+      active: path === "/pautas" || path.startsWith("/pautas/"),
+    },
+    {
+      title: "Negócios",
+      shortTitle: "Negóc.",
+      icon: <ShoppingBag className={iconCls} />,
+      href: "/negocios",
+      active:
+        path === "/negocios" ||
+        path.startsWith("/negocios/") ||
+        path === "/servicos" ||
+        path.startsWith("/servicos/"),
+    },
+    {
+      title: "Perguntar",
+      shortTitle: "Perg.",
+      icon: <MessageCircleQuestion className={iconCls} />,
+      href: "/perguntar",
+      active: path === "/perguntar" || path.startsWith("/perguntar/"),
+    },
     {
       title: "Mais",
-      icon: <Ellipsis className="h-full w-full" />,
+      icon: <Ellipsis className={iconCls} />,
       onClick: () => setMoreOpen(true),
       active: onMoreRoute || moreOpen,
     },
   ];
 
-  const onUsuarios = location.pathname.startsWith("/admin/usuarios");
-  const onMelhorias =
-    location.pathname === "/melhorias" || location.pathname.startsWith("/melhorias/");
-  const staffItems: FloatingDockItem[] = [
+  const onUsuarios = path.startsWith("/admin/usuarios");
+  const onMelhorias = path === "/melhorias" || path.startsWith("/melhorias/");
+  const staffItems: TabBarItem[] = [
     {
       title: "Painel",
-      icon: <LayoutDashboard className="h-full w-full" />,
+      icon: <LayoutDashboard className={iconCls} />,
       href: "/admin",
-      active: location.pathname === "/admin",
+      active: path === "/admin",
     },
     {
       title: "Usuários",
-      icon: <Users className="h-full w-full" />,
+      shortTitle: "Usuár.",
+      icon: <Users className={iconCls} />,
       href: "/admin/usuarios",
       active: onUsuarios,
     },
     {
       title: "Melhorias",
-      icon: <Columns3 className="h-full w-full" />,
+      shortTitle: "Melhor.",
+      icon: <Columns3 className={iconCls} />,
       href: "/melhorias",
       active: onMelhorias,
     },
     {
       title: "Admin",
-      icon: <Shield className="h-full w-full" />,
+      icon: <Shield className={iconCls} />,
       onClick: () => setAdminOpen(true),
-      active:
-        adminOpen || (onAdminRoute && location.pathname !== "/admin" && !onUsuarios),
+      active: adminOpen || (onAdminRoute && path !== "/admin" && !onUsuarios),
     },
   ];
 
@@ -262,9 +287,7 @@ export function BottomDock() {
 
   return (
     <>
-      <div className="sticky bottom-4 z-30 mt-6 flex w-full max-w-full justify-center px-3 [padding-bottom:env(safe-area-inset-bottom)] sm:px-4">
-        <FloatingDock items={items} className="max-w-full" />
-      </div>
+      <TabBar items={items} />
 
       {!staffMode && (
         <BottomSheet
