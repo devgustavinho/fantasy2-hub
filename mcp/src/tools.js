@@ -626,6 +626,15 @@ export function registerToolsForUser(server, api, user) {
   );
   add("get_welcome");
 
+  tool(
+    server,
+    "get_group_links",
+    "Links de convite WhatsApp: grupo geral + grupo da torre do morador.",
+    {},
+    async () => api.get("/group-links"),
+  );
+  add("get_group_links");
+
   tool(server, "list_balancetes", "Lista balancetes contábeis.", {}, async () => api.get("/contabil"));
   add("list_balancetes");
 
@@ -1082,6 +1091,31 @@ export function registerToolsForUser(server, api, user) {
       async (payload) => api.put("/welcome", payload),
     );
     add("update_welcome");
+
+    tool(
+      server,
+      "get_group_links_all",
+      "Todos os links de convite WhatsApp (geral + torres 1–5).",
+      {},
+      async () => api.get("/group-links/all"),
+    );
+    add("get_group_links_all");
+
+    tool(
+      server,
+      "update_group_links",
+      "Atualiza links de convite WhatsApp (geral e/ou torres). URL https ou vazio para limpar.",
+      {
+        generalUrl: z.string().nullable().optional(),
+        tower1Url: z.string().nullable().optional(),
+        tower2Url: z.string().nullable().optional(),
+        tower3Url: z.string().nullable().optional(),
+        tower4Url: z.string().nullable().optional(),
+        tower5Url: z.string().nullable().optional(),
+      },
+      async (payload) => api.put("/group-links", payload),
+    );
+    add("update_group_links");
 
     tool(
       server,

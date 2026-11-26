@@ -3,13 +3,14 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ImagePlus, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/QueryError";
 import { Markdown } from "@/components/Markdown";
 import * as welcomeService from "@/services/welcome";
+import * as groupLinksService from "@/services/groupLinks";
 
 function downloadDataUrl(dataUrl: string, filename: string) {
   const link = document.createElement("a");
@@ -101,6 +102,109 @@ function QrCard({
         </div>
       </div>
     </div>
+  );
+}
+
+function GroupLinksAdminCard() {
+  const queryClient = useQueryClient();
+  const [generalUrl, setGeneralUrl] = useState("");
+  const [towerUrls, setTowerUrls] = useState(["", "", "", "", ""]);
+  const [hydrated, setHydrated] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const linksQuery = useQuery({
+    queryKey: ["group-links-all"],
+    queryFn: groupLinksService.getGroupLinksAll,
+  });
+
+  useEffect(() => {
+    if (!linksQuery.data || hydrated) return;
+    setGeneralUrl(linksQuery.data.generalUrl ?? "");
+    setTowerUrls([
+      linksQuery.data.towers[1] ?? "",
+      linksQuery.data.towers[2] ?? "",
+      linksQuery.data.towers[3] ?? "",
+      linksQuery.data.towers[4] ?? "",
+      linksQuery.data.towers[5] ?? "",
+    ]);
+    setHydrated(true);
+  }, [linksQuery.data, hydrated]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      groupLinksService.updateGroupLinks({
+        generalUrl: generalUrl.trim() || null,
+        tower1Url: towerUrls[0].trim() || null,
+        tower2Url: towerUrls[1].trim() || null,
+        tower3Url: towerUrls[2].trim() || null,
+        tower4Url: towerUrls[3].trim() || null,
+        tower5Url: towerUrls[4].trim() || null,
+      }),
+    onSuccess: (data) => {
+      setSaveError(null);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+      queryClient.setQueryData(["group-links-all"], data);
+      queryClient.invalidateQueries({ queryKey: ["group-links"] });
+    },
+    onError: (err) => setSaveError(err instanceof Error ? err.message : "Erro ao salvar."),
+  });
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    saveMutation.mutate();
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Links dos grupos WhatsApp</CardTitle>
+        <CardDescription>
+          Convites que o morador vê no FAQ (primeiros passos). Use links https de convite do
+          WhatsApp.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {linksQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando...</p>}
+        {linksQuery.isError && <QueryError onRetry={() => linksQuery.refetch()} />}
+        {linksQuery.data && (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="group-general">Grupo geral Fantasy 2</Label>
+              <Input
+                id="group-general"
+                type="url"
+                placeholder="https://chat.whatsapp.com/..."
+                value={generalUrl}
+                onChange={(e) => setGeneralUrl(e.target.value)}
+              />
+            </div>
+            {[1, 2, 3, 4, 5].map((tower) => (
+              <div key={tower} className="space-y-2">
+                <Label htmlFor={`group-tower-${tower}`}>Torre {tower}</Label>
+                <Input
+                  id={`group-tower-${tower}`}
+                  type="url"
+                  placeholder="https://chat.whatsapp.com/..."
+                  value={towerUrls[tower - 1]}
+                  onChange={(e) => {
+                    const next = [...towerUrls];
+                    next[tower - 1] = e.target.value;
+                    setTowerUrls(next);
+                  }}
+                />
+              </div>
+            ))}
+            {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+            {saved && <p className="text-sm text-muted-foreground">Links salvos.</p>}
+            <Button type="submit" disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Salvando..." : "Salvar links"}
+            </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -249,6 +353,8 @@ export default function WelcomeAdmin() {
           </CardContent>
         </Card>
       )}
+
+      <GroupLinksAdminCard />
 
       <Card>
         <CardHeader>
