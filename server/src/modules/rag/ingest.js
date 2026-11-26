@@ -3,6 +3,7 @@ import { sqlite } from "../../db/client.js";
 import { chunkText, contentHash } from "./chunk.js";
 import {
   buildFaqDocument,
+  buildHorariosDocuments,
   buildRecommendationDocument,
   buildServiceDocument,
   buildTopicDocument,
@@ -153,6 +154,20 @@ export async function ingestTopic(id) {
   return upsertDocument(doc);
 }
 
+/** Reindexa convivência, áreas e janelas de mudança (sem senhas de Wi‑Fi). */
+export async function ingestHorarios() {
+  const docs = buildHorariosDocuments();
+  const live = new Set(docs.map((d) => d.sourceId));
+  for (const id of ["convivencia", "areas", "mudanca"]) {
+    if (!live.has(id)) removeDocument("horarios", id);
+  }
+  const results = [];
+  for (const doc of docs) {
+    results.push(await upsertDocument(doc));
+  }
+  return results;
+}
+
 /** Agenda ingest assíncrono sem derrubar a rota CRUD. */
 export function scheduleIngest(label, fn) {
   Promise.resolve()
@@ -163,7 +178,7 @@ export function scheduleIngest(label, fn) {
 }
 
 /**
- * Reindexa todo o corpus (FAQ, welcome, serviços, recomendações, pautas, embeds, manual).
+ * Reindexa todo o corpus (FAQ, welcome, horários, serviços, recomendações, pautas, embeds, manual).
  * @param {{ force?: boolean, onProgress?: (info: object) => void }} [opts]
  */
 export async function reindexAll(opts = {}) {

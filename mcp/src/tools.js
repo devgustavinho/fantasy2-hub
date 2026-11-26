@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isAdmin, isStaff, permissionTier } from "./roles.js";
+import { isAdmin, isConselheiro, isStaff, permissionTier } from "./roles.js";
 import { errorResult, textResult } from "./client.js";
 
 function tool(server, name, description, schema, handler) {
@@ -25,6 +25,22 @@ function qs(params) {
   const s = search.toString();
   return s ? `?${s}` : "";
 }
+
+/** Remove senha de Wi‑Fi do bundle de horários (use get_area_wifi). */
+function stripWifiPasswords(bundle) {
+  if (!bundle || typeof bundle !== "object") return bundle;
+  const areas = Array.isArray(bundle.areas)
+    ? bundle.areas.map((a) => {
+        if (!a || typeof a !== "object") return a;
+        const { wifiPassword, ...rest } = a;
+        return rest;
+      })
+    : bundle.areas;
+  return { ...bundle, areas };
+}
+
+const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const fulfillmentMode = z.enum(["door", "pickup", "lobby", "online"]);
 
 /**
  * Registers MCP tools based on the authenticated user's role.
@@ -91,6 +107,15 @@ export function registerToolsForUser(server, api, user) {
 
   tool(
     server,
+    "get_topic_by_code",
+    "Busca pauta pelo código curto de compartilhamento.",
+    { code: z.string().min(1) },
+    async ({ code }) => api.get(`/topics/by-code/${encodeURIComponent(code)}`),
+  );
+  add("get_topic_by_code");
+
+  tool(
+    server,
     "create_topic",
     "Cria uma nova pauta em aberto.",
     {
@@ -100,6 +125,34 @@ export function registerToolsForUser(server, api, user) {
     async (body) => api.post("/topics", body),
   );
   add("create_topic");
+
+  tool(
+    server,
+    "update_topic_content",
+    "Edita título/descrição da pauta (autor ou staff).",
+    {
+      id: z.string().min(1),
+      title: z.string().min(4).max(160),
+      description: z.string().min(4).max(4000),
+    },
+    async ({ id, title, description }) => api.patch(`/topics/${id}/content`, { title, description }),
+  );
+  add("update_topic_content");
+
+  tool(
+    server,
+    "delete_topic",
+    "Exclui pauta (autor; admin precisa de reason ≥ 10 caracteres).",
+    {
+      id: z.string().min(1),
+      reason: z.string().min(10).optional().describe("Obrigatório se admin excluir pauta de outro"),
+    },
+    async ({ id, reason }) => {
+      await api.delete(`/topics/${id}`, reason ? { reason } : undefined);
+      return { ok: true };
+    },
+  );
+  add("delete_topic");
 
   tool(
     server,
@@ -125,6 +178,19 @@ export function registerToolsForUser(server, api, user) {
   );
   add("comment_topic");
 
+  tool(
+    server,
+    "edit_topic_comment",
+    "Edita um comentário próprio numa pauta.",
+    {
+      id: z.string().min(1),
+      commentId: z.string().min(1),
+      body: z.string().min(1).max(2000),
+    },
+    async ({ id, commentId, body }) => api.patch(`/topics/${id}/comments/${commentId}`, { body }),
+  );
+  add("edit_topic_comment");
+
   tool(server, "list_services", "Lista serviços anunciados no condomínio.", {}, async () =>
     api.get("/services"),
   );
@@ -138,6 +204,141 @@ export function registerToolsForUser(server, api, user) {
     async ({ id }) => api.get(`/services/${id}`),
   );
   add("get_service");
+
+  tool(
+    server,
+    "get_service_by_slug",
+    "Resolve o ID de um negócio pelo link curto (slug).",
+    { slug: z.string().min(1) },
+    async ({ slug }) => api.get(`/services/by-slug/${encodeURIComponent(slug)}`),
+  );
+  add("get_service_by_slug");
+
+  tool(server, "get_my_service", "Retorna o negócio do usuário autenticado (ou null).", {}, async () =>
+    api.get("/services/mine"),
+  );
+  add("get_my_service");
+
+  tool(
+    server,
+    "create_service",
+    "Cadastra o negócio do morador (JSON; foto só pelo Hub).",
+    {
+      name: z.string().min(2).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      whatsapp: z.string().max(30).nullable().optional(),
+      instagram: z.string().max(60).nullable().optional(),
+      fulfillmentModes: z.array(fulfillmentMode).optional(),
+      slug: z.string().max(80).optional(),
+      userId: z.string().optional().describe("Só admin: cadastrar em nome de outro morador"),
+    },
+    async (body) => api.post("/services", body),
+  );
+  add("create_service");
+
+  tool(
+    server,
+    "update_my_service",
+    "Atualiza o próprio negócio.",
+    {
+      name: z.string().min(2).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      whatsapp: z.string().max(30).nullable().optional(),
+      instagram: z.string().max(60).nullable().optional(),
+      fulfillmentModes: z.array(fulfillmentMode).optional(),
+      slug: z.string().max(80).optional(),
+    },
+    async (body) => api.patch("/services/mine", body),
+  );
+  add("update_my_service");
+
+  tool(server, "delete_my_service", "Remove o próprio negócio.", {}, async () => {
+    await api.delete("/services/mine");
+    return { ok: true };
+  });
+  add("delete_my_service");
+
+  tool(
+    server,
+    "set_my_service_tags",
+    "Define as tags do próprio negócio (IDs do vocabulário curado).",
+    { tagIds: z.array(z.string()).max(20) },
+    async (body) => api.put("/services/mine/tags", body),
+  );
+  add("set_my_service_tags");
+
+  tool(
+    server,
+    "add_my_service_item",
+    "Adiciona item ao próprio negócio (sem fotos — use o Hub para imagens).",
+    {
+      name: z.string().min(1).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      price: z.number().min(0).max(1_000_000).optional(),
+      isNegotiable: z.boolean().optional(),
+      maxQuantity: z.number().int().min(1).max(99).nullable().optional(),
+    },
+    async (body) => api.post("/services/mine/items", body),
+  );
+  add("add_my_service_item");
+
+  tool(
+    server,
+    "update_my_service_item",
+    "Atualiza item do próprio negócio.",
+    {
+      itemId: z.string().min(1),
+      name: z.string().min(1).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      price: z.number().min(0).max(1_000_000).optional(),
+      isNegotiable: z.boolean().optional(),
+      maxQuantity: z.number().int().min(1).max(99).nullable().optional(),
+      removeImageIds: z.array(z.string()).optional(),
+    },
+    async ({ itemId, ...body }) => api.patch(`/services/mine/items/${itemId}`, body),
+  );
+  add("update_my_service_item");
+
+  tool(
+    server,
+    "delete_my_service_item",
+    "Remove item do próprio negócio.",
+    { itemId: z.string().min(1) },
+    async ({ itemId }) => {
+      await api.delete(`/services/mine/items/${itemId}`);
+      return { ok: true };
+    },
+  );
+  add("delete_my_service_item");
+
+  tool(
+    server,
+    "set_my_service_item_option_groups",
+    "Substitui os grupos de opção de um item do próprio negócio.",
+    {
+      itemId: z.string().min(1),
+      groups: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(80),
+            selectionType: z.enum(["single", "multi"]),
+            maxSelections: z.number().int().min(1).max(20).nullable().optional(),
+            required: z.boolean().optional(),
+            options: z
+              .array(
+                z.object({
+                  name: z.string().min(1).max(80),
+                  priceDeltaCents: z.number().int().optional(),
+                }),
+              )
+              .optional(),
+          }),
+        )
+        .max(20),
+    },
+    async ({ itemId, groups }) => api.put(`/services/mine/items/${itemId}/option-groups`, { groups }),
+  );
+  add("set_my_service_item_option_groups");
 
   tool(server, "list_recommendations", "Lista recomendações de moradores.", {}, async () =>
     api.get("/recommendations"),
@@ -153,19 +354,106 @@ export function registerToolsForUser(server, api, user) {
   );
   add("get_recommendation");
 
+  tool(
+    server,
+    "create_recommendation",
+    "Cadastra uma recomendação (WhatsApp ou Instagram obrigatório).",
+    {
+      name: z.string().min(2).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      whatsapp: z.string().max(30).nullable().optional(),
+      instagram: z.string().max(60).nullable().optional(),
+      tagIds: z.array(z.string()).max(20).optional(),
+    },
+    async (body) => api.post("/recommendations", body),
+  );
+  add("create_recommendation");
+
+  tool(
+    server,
+    "update_recommendation",
+    "Edita recomendação própria.",
+    {
+      id: z.string().min(1),
+      name: z.string().min(2).max(120),
+      description: z.string().max(1000).nullable().optional(),
+      whatsapp: z.string().max(30).nullable().optional(),
+      instagram: z.string().max(60).nullable().optional(),
+      tagIds: z.array(z.string()).max(20).optional(),
+    },
+    async ({ id, ...body }) => api.patch(`/recommendations/${id}`, body),
+  );
+  add("update_recommendation");
+
+  tool(
+    server,
+    "delete_recommendation",
+    "Exclui recomendação (autor ou staff).",
+    { id: z.string().min(1) },
+    async ({ id }) => {
+      await api.delete(`/recommendations/${id}`);
+      return { ok: true };
+    },
+  );
+  add("delete_recommendation");
+
+  tool(
+    server,
+    "rate_recommendation",
+    "Avalia uma recomendação (1 a 5 estrelas).",
+    {
+      id: z.string().min(1),
+      stars: z.number().int().min(1).max(5),
+    },
+    async ({ id, stars }) => api.put(`/recommendations/${id}/rating`, { stars }),
+  );
+  add("rate_recommendation");
+
+  tool(
+    server,
+    "comment_recommendation",
+    "Comenta numa recomendação (texto; mídia só pelo Hub).",
+    {
+      id: z.string().min(1),
+      body: z.string().min(1).max(2000),
+    },
+    async ({ id, body }) => api.post(`/recommendations/${id}/comments`, { body }),
+  );
+  add("comment_recommendation");
+
+  tool(
+    server,
+    "delete_recommendation_comment",
+    "Exclui comentário de recomendação (autor ou staff).",
+    {
+      id: z.string().min(1),
+      commentId: z.string().min(1),
+    },
+    async ({ id, commentId }) => {
+      await api.delete(`/recommendations/${id}/comments/${commentId}`);
+      return { ok: true };
+    },
+  );
+  add("delete_recommendation_comment");
+
   tool(server, "list_faq", "Lista entradas do FAQ.", {}, async () => api.get("/faq"));
   add("list_faq");
 
   tool(
     server,
     "ask_condo",
-    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, serviços, recomendações, pautas, embeds e Manual do Proprietário). Responde só com base no índice RAG; inclui citações. Limite: 5 perguntas por usuário a cada 24 horas.",
+    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, horários/convivência/áreas/mudança, serviços, recomendações, pautas, embeds e Manual do Proprietário). Sem senhas de Wi‑Fi no índice. Limite: 5 perguntas / usuário / 24h.",
     {
       question: z.string().min(3).max(500).describe("Pergunta em português"),
     },
     async ({ question }) => api.post("/rag/ask", { question }),
   );
   add("ask_condo");
+
+  tool(server, "get_rag_status", "Status do índice RAG (morador: available; staff: contagens).", {}, async () =>
+    api.get("/rag/status"),
+  );
+  add("get_rag_status");
 
   tool(server, "list_tags", "Lista tags curadas (serviços/recomendações).", {}, async () =>
     api.get("/tags"),
@@ -224,6 +512,18 @@ export function registerToolsForUser(server, api, user) {
   );
   add("create_improvement");
 
+  tool(
+    server,
+    "delete_improvement",
+    "Exclui melhoria (autor só se status=new; staff qualquer).",
+    { id: z.string().min(1) },
+    async ({ id }) => {
+      await api.delete(`/improvements/${id}`);
+      return { ok: true };
+    },
+  );
+  add("delete_improvement");
+
   tool(server, "list_notifications", "Lista notificações do usuário.", {}, async () =>
     api.get("/notifications"),
   );
@@ -236,6 +536,18 @@ export function registerToolsForUser(server, api, user) {
 
   tool(
     server,
+    "mark_notification_read",
+    "Marca uma notificação como lida.",
+    { id: z.string().min(1) },
+    async ({ id }) => {
+      await api.post(`/notifications/${id}/read`);
+      return { ok: true };
+    },
+  );
+  add("mark_notification_read");
+
+  tool(
+    server,
     "update_my_profile",
     "Atualiza WhatsApp / visibilidade do perfil.",
     {
@@ -245,6 +557,116 @@ export function registerToolsForUser(server, api, user) {
     async (body) => api.patch("/auth/me", body),
   );
   add("update_my_profile");
+
+  tool(server, "get_family_member", "Retorna o familiar do apartamento (titular) ou null.", {}, async () =>
+    api.get("/auth/family-member"),
+  );
+  add("get_family_member");
+
+  tool(
+    server,
+    "invite_family_member",
+    "Convida o familiar do apartamento (só titular; 1 por apto).",
+    {
+      name: z.string().min(2).max(120),
+      email: z.string().email(),
+      password: z.string().min(8).max(200),
+    },
+    async (body) => api.post("/auth/family-member", body),
+  );
+  add("invite_family_member");
+
+  tool(
+    server,
+    "set_active_role",
+    "Troca o cargo/visão ativa entre os cargos que o usuário já possui.",
+    {
+      role: z.enum(["admin", "sindico", "conselheiro", "morador"]),
+    },
+    async (body) => api.post("/auth/active-role", body),
+  );
+  add("set_active_role");
+
+  // —— Horários (resident+) ————————————————
+  tool(
+    server,
+    "get_horarios",
+    "Horários de áreas comuns, janelas de mudança e convivência/silêncio. Senhas de Wi‑Fi omitidas — use get_area_wifi.",
+    {},
+    async () => stripWifiPasswords(await api.get("/horarios")),
+  );
+  add("get_horarios");
+
+  tool(
+    server,
+    "get_horarios_status",
+    "Status agora: mudança permitida?, silêncio?, amanhã.",
+    {},
+    async () => api.get("/horarios/status"),
+  );
+  add("get_horarios_status");
+
+  tool(
+    server,
+    "get_area_wifi",
+    "Credenciais + QR do Wi‑Fi de uma área comum (só se a API permitir e a área tiver Wi‑Fi).",
+    { id: z.string().min(1).describe("ID da área comum") },
+    async ({ id }) => api.get(`/horarios/areas/${id}/wifi`),
+  );
+  add("get_area_wifi");
+
+  // —— Docs / welcome / contabil (leitura) ————————————————
+  tool(server, "list_docs", "Lista documentos do condomínio (ex.: Manual do Proprietário).", {}, async () =>
+    api.get("/docs"),
+  );
+  add("list_docs");
+
+  tool(server, "get_welcome", "Página de boas-vindas (texto do elevador).", {}, async () =>
+    api.get("/welcome"),
+  );
+  add("get_welcome");
+
+  tool(server, "list_balancetes", "Lista balancetes contábeis.", {}, async () => api.get("/contabil"));
+  add("list_balancetes");
+
+  tool(
+    server,
+    "get_balancete",
+    "Detalhe de um balancete (pareceres conforme permissão).",
+    { id: z.string().min(1) },
+    async ({ id }) => api.get(`/contabil/${id}`),
+  );
+  add("get_balancete");
+
+  // —— Conselheiro ————————————————
+  if (isConselheiro(user)) {
+    tool(
+      server,
+      "put_contabil_parecer",
+      "Salva/finaliza parecer do conselheiro num balancete.",
+      {
+        id: z.string().min(1),
+        decision: z.enum(["aprovado", "aprovado_ressalvas", "reprovado"]),
+        observacoes: z
+          .array(
+            z.object({
+              tipo: z.enum(["ressalva", "conferido", "pendencia"]),
+              body: z.string().min(1).max(2000),
+            }),
+          )
+          .max(20)
+          .optional(),
+        finalize: z.boolean().optional(),
+      },
+      async ({ id, decision, observacoes, finalize }) =>
+        api.put(`/contabil/${id}/parecer`, {
+          decision,
+          observacoes: observacoes ?? [],
+          finalize: Boolean(finalize),
+        }),
+    );
+    add("put_contabil_parecer");
+  }
 
   // —— Staff (admin + síndico) ————————————————
   if (isStaff(user)) {
@@ -314,6 +736,15 @@ export function registerToolsForUser(server, api, user) {
 
     tool(
       server,
+      "get_user",
+      "Detalhe de um usuário (staff).",
+      { id: z.string().min(1) },
+      async ({ id }) => api.get(`/users/${id}`),
+    );
+    add("get_user");
+
+    tool(
+      server,
       "reset_user_password",
       "Envia e-mail de redefinição de senha (síndico só para morador/conselheiro).",
       { id: z.string().min(1) },
@@ -323,6 +754,103 @@ export function registerToolsForUser(server, api, user) {
       },
     );
     add("reset_user_password");
+
+    tool(
+      server,
+      "update_common_area",
+      "Atualiza horários/notas/Wi‑Fi de uma área comum.",
+      {
+        id: z.string().min(1),
+        is24h: z.boolean(),
+        opensAt: z.string().nullable().optional(),
+        closesAt: z.string().nullable().optional(),
+        assemblyRef: z.string().max(200).nullable().optional(),
+        notes: z.string().max(2000).nullable().optional(),
+        wifiSsid: z.string().max(64).nullable().optional(),
+        wifiPassword: z.string().max(128).nullable().optional(),
+        wifiSecurity: z.enum(["WPA", "WEP", "nopass"]).optional(),
+      },
+      async ({ id, ...body }) => api.patch(`/horarios/areas/${id}`, body),
+    );
+    add("update_common_area");
+
+    tool(
+      server,
+      "update_mudanca_windows",
+      "Define janelas de mudança (dias 0=dom … 6=sáb + HH:MM).",
+      {
+        windows: z
+          .array(
+            z.object({
+              days: z.array(z.number().int().min(0).max(6)).min(1),
+              opensAt: hm,
+              closesAt: hm,
+            }),
+          )
+          .min(1),
+        assemblyRef: z.string().max(200).nullable().optional(),
+      },
+      async (body) => api.put("/horarios/mudanca", body),
+    );
+    add("update_mudanca_windows");
+
+    tool(
+      server,
+      "add_mudanca_blocked_day",
+      "Bloqueia um dia para mudança (YYYY-MM-DD + motivo).",
+      {
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        reason: z.string().min(2).max(200),
+        source: z.enum(["national", "fortaleza", "custom"]).optional(),
+      },
+      async (body) => api.post("/horarios/mudanca/blocked", body),
+    );
+    add("add_mudanca_blocked_day");
+
+    tool(
+      server,
+      "remove_mudanca_blocked_day",
+      "Remove bloqueio de mudança.",
+      { id: z.string().min(1) },
+      async ({ id }) => {
+        await api.delete(`/horarios/mudanca/blocked/${id}`);
+        return { ok: true };
+      },
+    );
+    add("remove_mudanca_blocked_day");
+
+    tool(
+      server,
+      "update_convivencia",
+      "Define horário de silêncio (noiseUntil HH:MM — barulho permitido até esse horário).",
+      {
+        noiseUntil: hm,
+        assemblyRef: z.string().max(200).nullable().optional(),
+      },
+      async (body) => api.put("/horarios/convivencia", body),
+    );
+    add("update_convivencia");
+
+    tool(
+      server,
+      "delete_balancete",
+      "Remove um balancete (staff).",
+      { id: z.string().min(1) },
+      async ({ id }) => {
+        await api.delete(`/contabil/${id}`);
+        return { ok: true };
+      },
+    );
+    add("delete_balancete");
+
+    tool(
+      server,
+      "reindex_rag",
+      "Reindexa o corpus RAG (staff). force=true ignora hash.",
+      { force: z.boolean().optional() },
+      async ({ force }) => api.post("/rag/reindex", { force: Boolean(force) }),
+    );
+    add("reindex_rag");
   }
 
   // —— Admin only ————————————————
@@ -393,10 +921,16 @@ export function registerToolsForUser(server, api, user) {
       {
         page: z.number().int().positive().optional(),
         pageSize: z.number().int().positive().max(100).optional(),
+        actorUserId: z.string().optional(),
       },
       async (params) => api.get(`/audit${qs(params)}`),
     );
     add("list_audit_log");
+
+    tool(server, "list_audit_actors", "Lista atores distintos do log de auditoria.", {}, async () =>
+      api.get("/audit/actors"),
+    );
+    add("list_audit_actors");
 
     tool(
       server,
@@ -430,6 +964,31 @@ export function registerToolsForUser(server, api, user) {
 
     tool(
       server,
+      "update_faq",
+      "Edita entrada do FAQ.",
+      {
+        id: z.string().min(1),
+        question: z.string().min(2).max(200),
+        body: z.string().min(1).max(20000),
+      },
+      async ({ id, question, body }) => api.patch(`/faq/${id}`, { question, body }),
+    );
+    add("update_faq");
+
+    tool(
+      server,
+      "delete_faq",
+      "Remove entrada do FAQ.",
+      { id: z.string().min(1) },
+      async ({ id }) => {
+        await api.delete(`/faq/${id}`);
+        return { ok: true };
+      },
+    );
+    add("delete_faq");
+
+    tool(
+      server,
       "create_climate_survey",
       "Cria pesquisa de clima organizacional.",
       {
@@ -452,6 +1011,30 @@ export function registerToolsForUser(server, api, user) {
 
     tool(
       server,
+      "update_climate_survey",
+      "Abre ou encerra pesquisa de clima (status open|closed).",
+      {
+        id: z.string().min(1),
+        status: z.enum(["open", "closed"]),
+      },
+      async ({ id, status }) => api.patch(`/climate/${id}`, { status }),
+    );
+    add("update_climate_survey");
+
+    tool(
+      server,
+      "delete_climate_survey",
+      "Remove pesquisa de clima.",
+      { id: z.string().min(1) },
+      async ({ id }) => {
+        await api.delete(`/climate/${id}`);
+        return { ok: true };
+      },
+    );
+    add("delete_climate_survey");
+
+    tool(
+      server,
       "create_tag",
       "Cria tag curada (serviços/recomendações).",
       { name: z.string().min(2).max(40) },
@@ -470,11 +1053,74 @@ export function registerToolsForUser(server, api, user) {
       },
     );
     add("delete_tag");
-  }
 
-  // Fix list_my_capabilities to include tools registered after it was defined
-  // Re-register is hard; instead update via closure — registered array grows, so
-  // list_my_capabilities already closes over `registered` and reads it at call time. OK.
+    tool(
+      server,
+      "set_service_tags",
+      "Define tags de um negócio (admin ou dono).",
+      {
+        id: z.string().min(1),
+        tagIds: z.array(z.string()).max(20),
+      },
+      async ({ id, tagIds }) => api.put(`/services/${id}/tags`, { tagIds }),
+    );
+    add("set_service_tags");
+
+    tool(server, "get_welcome_qr", "QR Code da página pública de boas-vindas (admin).", {}, async () =>
+      api.get("/welcome/qr"),
+    );
+    add("get_welcome_qr");
+
+    tool(
+      server,
+      "update_welcome",
+      "Atualiza título/corpo da página de boas-vindas.",
+      {
+        title: z.string().min(2).max(120),
+        body: z.string().min(1).max(50000),
+      },
+      async (payload) => api.put("/welcome", payload),
+    );
+    add("update_welcome");
+
+    tool(
+      server,
+      "get_rag_settings",
+      "Metadados do provedor RAG (nunca devolve a API key).",
+      {},
+      async () => api.get("/rag/settings"),
+    );
+    add("get_rag_settings");
+
+    tool(server, "list_rag_embeds", "Lista embeds externos do RAG (sem corpo).", {}, async () =>
+      api.get("/rag/embeds"),
+    );
+    add("list_rag_embeds");
+
+    tool(
+      server,
+      "create_rag_embed",
+      "Cria embed externo de texto no RAG (title + body).",
+      {
+        title: z.string().min(1).max(200),
+        body: z.string().min(1).max(500_000),
+      },
+      async (payload) => api.post("/rag/embeds", payload),
+    );
+    add("create_rag_embed");
+
+    tool(
+      server,
+      "delete_rag_embed",
+      "Remove embed externo do RAG.",
+      { id: z.string().min(1) },
+      async ({ id }) => {
+        await api.delete(`/rag/embeds/${id}`);
+        return { ok: true };
+      },
+    );
+    add("delete_rag_embed");
+  }
 
   return registered;
 }

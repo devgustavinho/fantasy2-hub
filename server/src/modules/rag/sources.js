@@ -2,7 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sqlite } from "../../db/client.js";
+import { getHorariosBundle } from "../horarios/service.js";
 import { normalizeForIndex, prepareManualForIndex } from "./chunk.js";
+
+const DAY_NAMES = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MANUAL_TXT = join(
@@ -227,6 +230,93 @@ export function buildManualDocument() {
   };
 }
 
+function formatDays(days) {
+  return (days || [])
+    .map((d) => DAY_NAMES[Number(d)] || String(d))
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * Horários do condomínio para o RAG — convivência/silêncio, áreas e mudança.
+ * Nunca inclui senha de Wi‑Fi (nem SSID sensível demais; só marca se tem Wi‑Fi).
+ */
+export function buildHorariosDocuments() {
+  let bundle;
+  try {
+    bundle = getHorariosBundle();
+  } catch {
+    return [];
+  }
+  if (!bundle) return [];
+
+  const docs = [];
+  const noiseUntil = bundle.convivencia?.noiseUntil;
+  if (noiseUntil) {
+    const ref = bundle.convivencia.assemblyRef
+      ? `\nReferência de assembleia: ${bundle.convivencia.assemblyRef}`
+      : "";
+    docs.push({
+      sourceType: "horarios",
+      sourceId: "convivencia",
+      title: "Horário de silêncio / convivência",
+      body: normalizeForIndex(
+        `Convivência e silêncio no Fantasy 2 (fuso America/Fortaleza).\n` +
+          `Barulho permitido até ${noiseUntil}. A partir de ${noiseUntil} vale o horário de silêncio.` +
+          ref,
+      ),
+    });
+  }
+
+  const areaLines = ["Áreas comuns — horários de funcionamento:"];
+  for (const area of bundle.areas || []) {
+    const hours = area.is24h
+      ? "aberta 24 horas"
+      : area.opensAt && area.closesAt
+        ? `${area.opensAt} às ${area.closesAt}`
+        : "horário não informado";
+    const bits = [`- ${area.name}: ${hours}`];
+    if (area.notes) bits.push(`Notas: ${area.notes}`);
+    if (area.assemblyRef) bits.push(`Assembleia: ${area.assemblyRef}`);
+    if (area.hasWifi) bits.push("Possui Wi‑Fi (credenciais no Hub / tool get_area_wifi).");
+    areaLines.push(bits.join(". "));
+  }
+  if ((bundle.areas || []).length) {
+    docs.push({
+      sourceType: "horarios",
+      sourceId: "areas",
+      title: "Horários das áreas comuns",
+      body: normalizeForIndex(areaLines.join("\n")),
+    });
+  }
+
+  const mudanca = bundle.mudanca;
+  if (mudanca) {
+    const lines = [
+      "Janelas de mudança (entrada/saída de móveis) — Fantasy 2, fuso America/Fortaleza:",
+    ];
+    for (const w of mudanca.windows || []) {
+      lines.push(`- ${formatDays(w.days)}: ${w.opensAt} às ${w.closesAt}`);
+    }
+    if (mudanca.assemblyRef) lines.push(`Referência de assembleia: ${mudanca.assemblyRef}`);
+    const blocked = mudanca.blockedDays || [];
+    if (blocked.length) {
+      lines.push("", "Dias bloqueados para mudança (próximos):");
+      for (const d of blocked.slice(0, 40)) {
+        lines.push(`- ${d.date}: ${d.reason}${d.source ? ` (${d.source})` : ""}`);
+      }
+    }
+    docs.push({
+      sourceType: "horarios",
+      sourceId: "mudanca",
+      title: "Janelas de mudança",
+      body: normalizeForIndex(lines.join("\n")),
+    });
+  }
+
+  return docs.filter((d) => d.body);
+}
+
 export function listAllSourceDocuments() {
   const docs = [];
   for (const row of listFaq.all()) {
@@ -253,5 +343,6 @@ export function listAllSourceDocuments() {
   }
   const manual = buildManualDocument();
   if (manual) docs.push(manual);
+  for (const d of buildHorariosDocuments()) docs.push(d);
   return docs;
 }

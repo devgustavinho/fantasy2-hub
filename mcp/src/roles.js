@@ -17,6 +17,10 @@ export function isAdmin(userOrRole) {
   return rolesOf(userOrRole).includes("admin");
 }
 
+export function isConselheiro(userOrRole) {
+  return rolesOf(userOrRole).includes("conselheiro");
+}
+
 /** Highest permission tier across all assigned roles. */
 export function permissionTier(userOrRole) {
   const roles = rolesOf(userOrRole);

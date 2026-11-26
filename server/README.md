@@ -28,7 +28,7 @@ npm run dev
 - 2FA obrigatório pra admin (`src/auth/twoFactor.js`, TOTP via `otplib`, compatível com Google Authenticator): todo login de uma conta `admin` passa por `establishSession`, que só libera o token de sessão depois do código de 6 dígitos — na primeira vez, força o cadastro do 2FA (mostra QR code) antes de liberar. Vale tanto pra login por senha quanto por passkey.
 - Um apartamento tem no máximo 2 usuários vinculados: 1 titular (`household_role = 'owner'`, o que se cadastrou pelo `/register`) e 1 familiar convidado por ele (`household_role = 'family'`) — garantido por índice único composto (`idx_users_apartment_household` em `(apartment_id, household_role)`, `WHERE apartment_id IS NOT NULL`). Ver seção "Família" abaixo.
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
-- MCP remoto: `POST /mcp` (Streamable HTTP, `src/modules/mcp/`) — clientes usam `Authorization: Bearer` com **API token** `f2h_…` (Perfil → Avançado → Gerar token de API). JWT de sessão ainda é aceito **temporariamente** no `/mcp` (header `Deprecation` + `Warning`). Tokens em `api_tokens` (migração `0045`, módulo `src/modules/apiTokens/`): só SHA-256 + prefixo curto no SQLite; valor completo só uma vez na criação/rotação. Gestão em `/api-tokens` exige sessão JWT. Uso do `f2h_` só em `/mcp` (guard global); o handler troca `f2h_` por JWT interno curto (~5 min) **apenas no loopback** — `kind: "internal"` é rejeitado fora de 127.0.0.1 (`rejectInternalJwtOutsideLoopback`). Stdio com `f2h_` faz proxy HTTP → `/mcp` (não usa JWT REST). **Síndico/admin:** `expiresAt` obrigatório, teto fim do dia UTC de hoje+90 (aceita o default da UI), 2FA na criação **e** na rotação (uso no MCP sem 2FA). **Morador/conselheiro:** expiração opcional com teto fim do dia UTC de hoje+365. Expirado/revogado → 401 (`api_token_expired` / `api_token_revoked`). Limite: 5 ativos. Tools filtradas por cargo. Moradores não precisam do pacote stdio em `/mcp` do monorepo.
+- MCP remoto: `POST /mcp` (Streamable HTTP, `src/modules/mcp/`) — clientes usam `Authorization: Bearer` com **API token** `f2h_…` (Perfil → Avançado → Gerar token de API). JWT de sessão ainda é aceito **temporariamente** no `/mcp` (header `Deprecation` + `Warning`). Tokens em `api_tokens` (migração `0045`, módulo `src/modules/apiTokens/`): só SHA-256 + prefixo curto no SQLite; valor completo só uma vez na criação/rotação. Gestão em `/api-tokens` exige sessão JWT (**sem** tools MCP para tokens). Uso do `f2h_` só em `/mcp` (guard global); o handler troca `f2h_` por JWT interno curto (~5 min) **apenas no loopback** — `kind: "internal"` é rejeitado fora de 127.0.0.1 (`rejectInternalJwtOutsideLoopback`). Stdio com `f2h_` faz proxy HTTP → `/mcp` (não usa JWT REST). **Síndico/admin:** `expiresAt` obrigatório, teto fim do dia UTC de hoje+90 (aceita o default da UI), 2FA na criação **e** na rotação (uso no MCP sem 2FA). **Morador/conselheiro:** expiração opcional com teto fim do dia UTC de hoje+365. Expirado/revogado → 401 (`api_token_expired` / `api_token_revoked`). Limite: 5 ativos. Tools filtradas por cargo (paridade com a API em `parity.js` + selftest no CI). Tabela completa por nível: `mcp/README.md`. Moradores não precisam do pacote stdio em `/mcp` do monorepo.
 - **Deploy:** após merge, rodar `npm run db:migrate` no server (aplica `0045_api_tokens.sql`) antes de subir o processo novo.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
 
@@ -198,7 +198,8 @@ Auditado: `tags.create`, `tags.delete`.
 ## RAG (perguntas ao condomínio)
 
 `src/modules/rag/` — índice semântico no SQLite (`rag_documents` + `rag_chunks` com embeddings
-`text-embedding-3-small`). Fontes: FAQ, boas-vindas, serviços, recomendações, campos oficiais de
+`text-embedding-3-small`). Fontes: FAQ, boas-vindas, **horários** (convivência/silêncio, áreas comuns,
+janelas de mudança — **sem** senhas de Wi‑Fi), serviços, recomendações, campos oficiais de
 pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietário**
 (`source_type=manual`, texto em `assets/docs/manual-do-proprietario.txt`).
 
@@ -207,13 +208,14 @@ pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietá
 | Env | `OPENAI_API_KEY` (opcional, fallback). Preferência: admin salva provedor+key em `rag_settings` |
 | Ask | `POST /rag/ask` — morador aprovado; **5 perguntas / usuário / 24h** (+ burst 10/min); 429 com `remaining`/`resetAt`; ranking híbrido (cosine + lexical) + top-k apertado; cita só blocos usados |
 | Status | `GET /rag/status` — staff vê contagens; morador só `available` |
-| Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key |
-| Embeds | `GET/POST/DELETE /rag/embeds` (admin) — texto (.txt/.md/…); upload → chunk+embed; listagem sem o corpo |
+| Settings | `GET/PUT/DELETE /rag/settings` (admin) — chave cifrada; respostas **nunca** incluem a key; MCP só expõe `GET` (`get_rag_settings`) |
+| Embeds | `GET/POST/DELETE /rag/embeds` (admin) — texto (.txt/.md/…); upload → chunk+embed; listagem sem o corpo; tools MCP admin |
 | Manual | PDF + texto em `assets/docs/`; migration `0043_rag_manual.sql`; prep remove índice/TOC e promove seções; entra no `rag:reindex` (embeddings em lotes de 64) |
+| Horários | `source_type=horarios` (`convivencia` / `areas` / `mudanca`); `ingestHorarios` no CRUD de `/horarios` |
 | Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force`; no deploy da API o Actions roda reindex best-effort após o healthcheck (ver `docs/RUNBOOK-DEPLOY.md`) |
 | Selftest | `node src/modules/rag/perda-garantia.selftest.js` — chunking + ranking da pergunta de perda de garantia |
-| MCP | tool `ask_condo` (resident+) → mesmo `/rag/ask` |
-| Hooks | CRUD de FAQ/welcome/serviços/recomendações/pautas agenda reindex do documento |
+| MCP | `ask_condo` + admin/staff tools de status/reindex/embeds; paridade em `mcp/parity.selftest.js` |
+| Hooks | CRUD de FAQ/welcome/horários/serviços/recomendações/pautas agenda reindex do documento |
 
 UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
 PDF do manual: `/documentos` (API `GET /docs/manual-do-proprietario`, morador aprovado).
@@ -247,13 +249,15 @@ UI: `/documentos` (Mais → Documentos). Lista via `GET /docs`; pronta para novo
 
 | Peça | Detalhe |
 |---|---|
-| Áreas | Ilha 1–3, Deck, Salão, Sala de Jogos, Academia (24h), Coworking, Pet Place |
+| Áreas | Ilha 1–3, Deck, Salão, Sala de Jogos, Academia (24h), Coworking, Pet Place, Piscina… |
 | Mudança | Janelas por dia da semana + dias bloqueados (feriados BR + Fortaleza, 5 anos) |
 | Convivência | `noiseUntil` — barulho permitido até esse horário |
 | Status | `GET /horarios/status` — mudança agora/amanhã + barulho agora |
+| Wi‑Fi | `GET /horarios/areas/:id/wifi` — SSID/senha/QR; MCP `get_area_wifi`; `get_horarios` omite senhas |
 | Staff | `PATCH /horarios/areas/:id`, `PUT /horarios/mudanca`, blocked days, `PUT /horarios/convivencia` |
+| RAG | indexa convivência + áreas + mudança (sem senha Wi‑Fi); hooks no CRUD |
 
-UI: dock **Horários** (`/horarios`); cards de status também no Início.
+UI: dock **Horários** (`/horarios`); cards de status também no Início. MCP: tools resident + staff (ver `mcp/README.md`).
 
 ## Adicionando uma nova migration
 
