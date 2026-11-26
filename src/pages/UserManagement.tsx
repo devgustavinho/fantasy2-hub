@@ -16,6 +16,12 @@ import * as usersService from "@/services/users";
 import * as servicesApi from "@/services/services";
 import { listApartmentsByTower } from "@/services/apartments";
 import type { Apartment, ManagedUser, Role } from "@/lib/types";
+import {
+  ALL_ROLES,
+  canRemoveMorador,
+  normalizeRoleMembership,
+  rolesRequireMorador,
+} from "@/lib/roles";
 
 const PAGE_SIZE = 20;
 const TOWERS = [1, 2, 3, 4, 5];
@@ -26,8 +32,6 @@ const ROLE_LABEL: Record<Role, string> = {
   conselheiro: "conselheiro",
   morador: "morador",
 };
-
-const ALL_ROLES: Role[] = ["admin", "sindico", "conselheiro", "morador"];
 
 function CreateServiceForUserForm({ user, onDone }: { user: ManagedUser; onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -343,7 +347,11 @@ export default function UserManagement() {
 
   function openRolesEditor(user: ManagedUser) {
     setActionsUser(null);
-    setRolesEditor({ id: user.id, name: user.name, roles: [...rolesOf(user)] });
+    setRolesEditor({
+      id: user.id,
+      name: user.name,
+      roles: normalizeRoleMembership([...rolesOf(user)]),
+    });
   }
 
   function toggleEditorRole(role: Role) {
@@ -352,10 +360,17 @@ export default function UserManagement() {
       const has = prev.roles.includes(role);
       if (has) {
         if (prev.roles.length <= 1) return prev;
-        return { ...prev, roles: prev.roles.filter((r) => r !== role) };
+        if (role === "morador" && !canRemoveMorador(prev.roles)) return prev;
+        const next = prev.roles.filter((r) => r !== role);
+        return { ...prev, roles: normalizeRoleMembership(next) };
       }
-      return { ...prev, roles: [...prev.roles, role] };
+      return { ...prev, roles: normalizeRoleMembership([...prev.roles, role]) };
     });
+  }
+
+  function moradorCheckboxDisabled(roles: Role[]) {
+    if (roles.length <= 1 && roles.includes("morador")) return true;
+    return roles.includes("morador") && !canRemoveMorador(roles);
   }
 
   function openEmailEdit(user: ManagedUser) {
@@ -669,7 +684,7 @@ export default function UserManagement() {
               checked={linkApartment}
               onChange={(e) => setLinkApartment(e.target.checked)}
             />
-            Este síndico também mora no condomínio (vincular a um apartamento)
+            Síndico morador (vincular apartamento). Sem vínculo = síndico profissional.
           </label>
 
           {linkApartment && (
@@ -813,12 +828,17 @@ export default function UserManagement() {
         {rolesEditor && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Uma pessoa pode ter vários cargos ao mesmo tempo (ex.: morador + conselheiro +
-              administrador). Conselheiro, síndico e administrador exigem 2FA.
+              Administrador e conselheiro são sempre também morador. Síndico pode ser profissional
+              (sem morador) ou síndico-morador — só um administrador pode tirar o morador do
+              síndico. Conselheiro, síndico e administrador exigem 2FA.
             </p>
             <div className="space-y-1">
               {ALL_ROLES.map((role) => {
                 const checked = rolesEditor.roles.includes(role);
+                const disabled =
+                  role === "morador"
+                    ? moradorCheckboxDisabled(rolesEditor.roles)
+                    : checked && rolesEditor.roles.length <= 1;
                 return (
                   <label
                     key={role}
@@ -828,7 +848,7 @@ export default function UserManagement() {
                       type="checkbox"
                       className="h-4 w-4 accent-brand-navy"
                       checked={checked}
-                      disabled={checked && rolesEditor.roles.length <= 1}
+                      disabled={disabled}
                       onChange={() => toggleEditorRole(role)}
                     />
                     <span className="text-sm font-medium capitalize">{ROLE_LABEL[role]}</span>
@@ -836,12 +856,28 @@ export default function UserManagement() {
                 );
               })}
             </div>
+            {rolesRequireMorador(rolesEditor.roles) && (
+              <p className="text-xs text-muted-foreground">
+                Morador fica marcado e bloqueado enquanto houver administrador ou conselheiro.
+              </p>
+            )}
+            {rolesEditor.roles.includes("sindico") &&
+              !rolesRequireMorador(rolesEditor.roles) && (
+                <p className="text-xs text-muted-foreground">
+                  {rolesEditor.roles.includes("morador")
+                    ? "Síndico morador: desmarque morador para tornar síndico profissional."
+                    : "Síndico profissional (sem cargo de morador)."}
+                </p>
+              )}
             <div className="flex gap-2">
               <Button
                 className="flex-1"
                 disabled={roleMutation.isPending || rolesEditor.roles.length < 1}
                 onClick={() =>
-                  roleMutation.mutate({ id: rolesEditor.id, roles: rolesEditor.roles })
+                  roleMutation.mutate({
+                    id: rolesEditor.id,
+                    roles: normalizeRoleMembership(rolesEditor.roles),
+                  })
                 }
               >
                 {roleMutation.isPending ? "Salvando..." : "Salvar cargos"}

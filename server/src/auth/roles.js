@@ -1,6 +1,20 @@
 import { sqlite } from "../db/client.js";
+import {
+  ALL_ROLES,
+  canRemoveMorador,
+  normalizeRoleMembership,
+  rolesRequireMorador,
+  ROLES_REQUIRING_MORADOR,
+} from "./roleMembership.js";
 
-export const ALL_ROLES = ["admin", "sindico", "conselheiro", "morador"];
+export {
+  ALL_ROLES,
+  canRemoveMorador,
+  normalizeRoleMembership,
+  rolesRequireMorador,
+  ROLES_REQUIRING_MORADOR,
+};
+
 export const PRIVILEGED_ROLES = ["admin", "sindico", "conselheiro"];
 
 const ROLE_RANK = { admin: 4, sindico: 3, conselheiro: 2, morador: 1 };
@@ -75,7 +89,7 @@ export function ensureUserRole(userId, role) {
 }
 
 export function setUserRoles(userId, roles, { activeRole } = {}) {
-  const unique = [...new Set(roles)].filter((r) => ALL_ROLES.includes(r));
+  const unique = normalizeRoleMembership(roles);
   if (!unique.length) {
     throw new Error("É necessário pelo menos um cargo.");
   }

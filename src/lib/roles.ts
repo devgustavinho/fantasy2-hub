@@ -4,6 +4,28 @@ export const ALL_ROLES: Role[] = ["admin", "sindico", "conselheiro", "morador"];
 
 export const PRIVILEGED_ROLES: Role[] = ["admin", "sindico", "conselheiro"];
 
+/** Cargos que sempre implicam `morador`. Síndico pode ser profissional (sem morador). */
+export const ROLES_REQUIRING_MORADOR: Role[] = ["admin", "conselheiro"];
+
+export function rolesRequireMorador(roles: Role[]) {
+  return roles.some((r) => ROLES_REQUIRING_MORADOR.includes(r));
+}
+
+/** Admin/conselheiro sem morador → inclui morador. Ordem estável de ALL_ROLES. */
+export function normalizeRoleMembership(roles: Role[]): Role[] {
+  const unique = [...new Set(roles)].filter((r) => ALL_ROLES.includes(r));
+  if (!unique.length) return unique;
+  if (rolesRequireMorador(unique) && !unique.includes("morador")) {
+    unique.push("morador");
+  }
+  return ALL_ROLES.filter((r) => unique.includes(r));
+}
+
+/** Remover `morador` só é permitido se não restar admin/conselheiro. */
+export function canRemoveMorador(roles: Role[]) {
+  return !rolesRequireMorador(roles);
+}
+
 export function roleLabel(role: Role) {
   if (role === "admin") return "Administrador";
   if (role === "sindico") return "Síndico";

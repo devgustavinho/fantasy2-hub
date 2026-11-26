@@ -867,7 +867,7 @@ export function registerToolsForUser(server, api, user) {
     tool(
       server,
       "change_user_role",
-      "Altera os cargos de um usuário (um ou mais: admin, sindico, conselheiro, morador).",
+      "Altera os cargos de um usuário (um ou mais: admin, sindico, conselheiro, morador). Admin e conselheiro implicam morador. Síndico pode ficar sem morador (profissional); só admin remove morador do síndico.",
       {
         id: z.string().min(1),
         roles: z.array(z.enum(["admin", "sindico", "conselheiro", "morador"])).min(1),
