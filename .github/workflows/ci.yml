@@ -37,6 +37,7 @@ jobs:
       - name: Backend smoke selftests
         working-directory: server
         run: |
+          node src/auth/roles.selftest.js
           node src/modules/horarios/wifi.selftest.js
           node src/modules/horarios/mudancaWindows.selftest.js
           node src/modules/rag/perda-garantia.selftest.js

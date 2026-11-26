@@ -8,6 +8,7 @@ import { requireAdmin, requireStaff } from "../../auth/guards.js";
 import {
   countAdminsExcluding,
   listUserRoles,
+  normalizeRoleMembership,
   setUserRoles,
 } from "../../auth/roles.js";
 import { createPasswordResetToken } from "../auth/passwordReset.js";
@@ -264,9 +265,11 @@ export function usersRoutes() {
     }
 
     const fromRoles = listUserRoles(target.id);
-    const nextRoles = parsed.data.roles?.length
-      ? [...new Set(parsed.data.roles)]
-      : [parsed.data.role];
+    // Só administrador chega aqui (requireAdmin): inclui tornar síndico profissional
+    // (remover morador). Admin/conselheiro sem morador → implica morador.
+    const nextRoles = normalizeRoleMembership(
+      parsed.data.roles?.length ? parsed.data.roles : [parsed.data.role],
+    );
 
     const losingAdmin = fromRoles.includes("admin") && !nextRoles.includes("admin");
     if (losingAdmin && countAdminsExcluding(target.id) < 1) {

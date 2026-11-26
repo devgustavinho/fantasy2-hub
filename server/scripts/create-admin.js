@@ -30,7 +30,8 @@ if (existing) {
   sqlite
     .prepare("UPDATE users SET role = 'admin', password_hash = ? WHERE id = ?")
     .run(passwordHash, existing.id);
-  setUserRoles(existing.id, ["admin"], { activeRole: "admin" });
+  // Admin sempre é também morador (normalizeRoleMembership em setUserRoles).
+  setUserRoles(existing.id, ["admin", "morador"], { activeRole: "admin" });
   console.log(`Usuário existente promovido a admin: ${normalizedEmail}`);
 } else {
   const id = randomUUID();
@@ -39,6 +40,6 @@ if (existing) {
       "INSERT INTO users (id, apartment_id, name, email, password_hash, role) VALUES (?, NULL, ?, ?, ?, 'admin')",
     )
     .run(id, name || "Administração", normalizedEmail, passwordHash);
-  setUserRoles(id, ["admin"], { activeRole: "admin" });
+  setUserRoles(id, ["admin", "morador"], { activeRole: "admin" });
   console.log(`Admin criado: ${normalizedEmail}`);
 }
