@@ -1,16 +1,27 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Copy, Eye, EyeOff, Fingerprint, Plug } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronDown, Copy, Eye, EyeOff, Fingerprint, KeyRound, Plug, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getToken } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  createApiToken,
+  listApiTokens,
+  revokeApiToken,
+  rotateApiToken,
+  type ApiToken,
+} from "@/services/apiTokens";
 
 const PROD_API_URL = "https://api-fantasy2.gcsolutions-devs.com.br";
 const PROD_APP_URL = "https://fantasy2-hub.pages.dev";
 const MCP_URL = `${PROD_API_URL}/mcp`;
+const ENV_TOKEN_PLACEHOLDER = "${env:FANTASY2_TOKEN}";
 
 type ClientId = "cursor" | "claude" | "antigravity";
-type CopyKind = "token" | "url" | "config";
+type CopyKind = "token" | "url" | "config" | "env";
 
 async function copyText(text: string) {
   await navigator.clipboard.writeText(text);
@@ -73,16 +84,19 @@ const CLIENTS: {
           Abra Settings → MCP, ou edite{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">~/.cursor/mcp.json</code>.
         </li>
-        <li>Cole o JSON abaixo (URL remota + JWT).</li>
+        <li>
+          Cole o JSON abaixo (URL remota + token). Prefira{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">{ENV_TOKEN_PLACEHOLDER}</code>.
+        </li>
         <li>Salve e reinicie o MCP / o Cursor.</li>
       </ol>
     ),
     configLabel: "Snippet Cursor (~/.cursor/mcp.json)",
     tip: (
       <>
-        Alternativa:{" "}
-        <code className="rounded bg-muted px-1">{"Bearer ${env:FANTASY2_TOKEN}"}</code> e exporte o
-        token no ambiente do Cursor.
+        Recomendado:{" "}
+        <code className="rounded bg-muted px-1">{`Bearer ${ENV_TOKEN_PLACEHOLDER}`}</code> e a
+        variável <code className="rounded bg-muted px-1">FANTASY2_TOKEN</code> no ambiente do Cursor.
       </>
     ),
     build: buildCursorConfig,
@@ -96,9 +110,9 @@ const CLIENTS: {
           <strong className="font-medium text-foreground">Claude Desktop / claude.ai:</strong>{" "}
           Customize → Connectors → Add custom connector. Nome:{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">fantasy2-hub</code>. URL: a MCP
-          abaixo. Em Request headers (se disponível),{" "}
+          abaixo. Em Request headers,{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">Authorization</code> ={" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">Bearer &lt;JWT&gt;</code>.
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">Bearer &lt;f2h_…&gt;</code>.
         </li>
         <li>
           <strong className="font-medium text-foreground">Claude Code:</strong> cole o JSON em{" "}
@@ -106,7 +120,7 @@ const CLIENTS: {
           <code className="rounded bg-muted px-1 py-0.5 text-xs">claude mcp add --transport http</code>
           ).
         </li>
-        <li>Confirme o JWT da sessão e reinicie / reconecte o connector.</li>
+        <li>Confirme o token de API e reinicie / reconecte o connector.</li>
       </ol>
     ),
     configLabel: "Snippet Claude Code (.mcp.json)",
@@ -132,7 +146,7 @@ const CLIENTS: {
         </li>
         <li>
           Cole o JSON (usa <code className="rounded bg-muted px-1 py-0.5 text-xs">serverUrl</code> +
-          header Bearer).
+          header Bearer com o token <code className="rounded bg-muted px-1">f2h_</code>).
         </li>
         <li>Salve e atualize a lista de MCP instalados no Antigravity.</li>
       </ol>
@@ -148,31 +162,86 @@ const CLIENTS: {
   },
 ];
 
+function formatDt(value: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR");
+}
+
 type AdvancedSettingsCardProps = {
   /** Bloco de dispositivos / biometria (passkeys), renderizado dentro de Avançado. */
   devices: ReactNode;
 };
 
 export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
-  const token = getToken() ?? "";
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [client, setClient] = useState<ClientId>("cursor");
-  const [revealed, setRevealed] = useState(false);
+  const [tokenName, setTokenName] = useState("MCP");
+  const [revealedValue, setRevealedValue] = useState<string | null>(null);
+  const [showValue, setShowValue] = useState(false);
   const [copied, setCopied] = useState<CopyKind | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const tokensQuery = useQuery({
+    queryKey: ["api-tokens"],
+    queryFn: listApiTokens,
+    enabled: open,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => createApiToken({ name: tokenName.trim() || "MCP" }),
+    onSuccess: (data) => {
+      setRevealedValue(data.value);
+      setShowValue(true);
+      setActionError(null);
+      void queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : "Não foi possível gerar o token.");
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: string) => revokeApiToken(id),
+    onSuccess: () => {
+      setActionError(null);
+      void queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : "Não foi possível revogar.");
+    },
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: (id: string) => rotateApiToken(id),
+    onSuccess: (data) => {
+      setRevealedValue(data.value);
+      setShowValue(true);
+      setActionError(null);
+      void queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
+    },
+    onError: (err) => {
+      setActionError(err instanceof ApiError ? err.message : "Não foi possível rotacionar.");
+    },
+  });
 
   const active = CLIENTS.find((c) => c.id === client) ?? CLIENTS[0];
-  const tokenForSnippet = token || "cole-o-jwt-da-sessao-aqui";
-  const configSnippet = useMemo(
-    () => active.build(tokenForSnippet),
-    [active, tokenForSnippet],
-  );
+  const snippetToken = ENV_TOKEN_PLACEHOLDER;
+  const configSnippet = useMemo(() => active.build(snippetToken), [active, snippetToken]);
 
-  const maskedToken = token
-    ? `${token.slice(0, 12)}…${token.slice(-8)}`
-    : "(faça login de novo se o token não aparecer)";
+  const activeTokens = (tokensQuery.data?.tokens ?? []).filter((t) => t.active);
 
   async function handleCopy(kind: CopyKind) {
-    const value = kind === "token" ? token : kind === "url" ? MCP_URL : configSnippet;
+    const value =
+      kind === "token"
+        ? revealedValue
+        : kind === "url"
+          ? MCP_URL
+          : kind === "env"
+            ? revealedValue
+              ? `FANTASY2_TOKEN=${revealedValue}`
+              : null
+            : configSnippet;
     if (!value) return;
     try {
       await copyText(value);
@@ -181,6 +250,54 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
     } catch {
       setCopied(null);
     }
+  }
+
+  function renderTokenRow(t: ApiToken) {
+    return (
+      <div
+        key={t.id}
+        className="flex flex-col gap-3 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0 space-y-1">
+          <p className="font-medium">{t.name}</p>
+          <p className="font-mono text-xs text-muted-foreground">{t.prefix}…</p>
+          <p className="text-xs text-muted-foreground">
+            Criado {formatDt(t.createdAt)} · Último uso {formatDt(t.lastUsedAt)} · Expira{" "}
+            {formatDt(t.expiresAt)}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={rotateMutation.isPending || revokeMutation.isPending}
+            onClick={() => {
+              if (window.confirm("Rotacionar este token? O valor atual deixa de funcionar.")) {
+                rotateMutation.mutate(t.id);
+              }
+            }}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Rotacionar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={revokeMutation.isPending || rotateMutation.isPending}
+            onClick={() => {
+              if (window.confirm("Revogar este token? Clientes MCP que o usam vão falhar.")) {
+                revokeMutation.mutate(t.id);
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            Revogar
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -230,8 +347,9 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
                 Conectar MCP (remoto)
               </p>
               <p className="text-muted-foreground">
-                Serviço hospedado em produção — mesmas permissões do seu cargo. Não é preciso clonar
-                o projeto. URL:{" "}
+                Serviço hospedado em produção — mesmas permissões do seu cargo. Use um{" "}
+                <strong className="font-medium text-foreground">token de API</strong> (
+                <code className="rounded bg-muted px-1">f2h_</code>), não o JWT da sessão. URL:{" "}
                 <code className="break-all rounded bg-muted px-1 py-0.5 text-xs text-foreground">
                   {MCP_URL}
                 </code>
@@ -273,43 +391,94 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
               </ul>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Token da sessão (JWT)
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setRevealed((v) => !v)}
-                    disabled={!token}
-                  >
-                    {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    {revealed ? "Ocultar" : "Mostrar"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => handleCopy("token")}
-                    disabled={!token}
-                  >
-                    {copied === "token" ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                    {copied === "token" ? "Copiado" : "Copiar token"}
-                  </Button>
-                </div>
-              </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border bg-background p-3 text-xs leading-relaxed">
-                {revealed && token ? token : maskedToken}
-              </pre>
-              <p className="text-xs text-muted-foreground">
-                Equivale a estar logado. Não compartilhe nem committe. Cargos privilegiados: só após o 2FA.
+            <div className="space-y-3">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <KeyRound className="h-4 w-4 text-primary" />
+                Tokens de API
               </p>
+              <p className="text-xs text-muted-foreground">
+                Até 5 tokens ativos. Síndico/admin: validade de 90 dias e 2FA na criação. O valor
+                completo aparece só uma vez.
+              </p>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="apiTokenName">Nome</Label>
+                  <Input
+                    id="apiTokenName"
+                    value={tokenName}
+                    onChange={(e) => setTokenName(e.target.value)}
+                    placeholder="Ex: Cursor notebook"
+                    maxLength={80}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  disabled={createMutation.isPending || !tokenName.trim()}
+                  onClick={() => createMutation.mutate()}
+                >
+                  {createMutation.isPending ? "Gerando..." : "Gerar token de API"}
+                </Button>
+              </div>
+
+              {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+
+              {revealedValue && (
+                <div className="space-y-2 rounded-lg border border-primary/30 bg-background p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Token (copie agora — não será mostrado de novo)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowValue((v) => !v)}
+                      >
+                        {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showValue ? "Ocultar" : "Mostrar"}
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => handleCopy("token")}>
+                        {copied === "token" ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                        {copied === "token" ? "Copiado" : "Copiar token"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopy("env")}
+                      >
+                        {copied === "env" ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                        {copied === "env" ? "Copiado" : "Copiar FANTASY2_TOKEN=…"}
+                      </Button>
+                    </div>
+                  </div>
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border bg-muted/40 p-3 text-xs leading-relaxed">
+                    {showValue
+                      ? revealedValue
+                      : `${revealedValue.slice(0, 12)}…${revealedValue.slice(-6)}`}
+                  </pre>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {tokensQuery.isLoading && (
+                  <p className="text-sm text-muted-foreground">Carregando tokens…</p>
+                )}
+                {activeTokens.map(renderTokenRow)}
+                {tokensQuery.data && activeTokens.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Nenhum token ativo ainda.</p>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">

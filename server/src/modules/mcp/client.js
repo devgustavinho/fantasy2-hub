@@ -1,5 +1,6 @@
 /**
- * Thin HTTP client for the Fantasy 2 Hub API (Bearer session token).
+ * Thin HTTP client for the Fantasy 2 Hub API (Bearer JWT — sessão ou interno curto).
+ * O handler /mcp nunca passa f2h_ aqui; troca antes do loopback.
  */
 
 export class ApiError extends Error {

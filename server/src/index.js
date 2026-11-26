@@ -2,7 +2,8 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { env } from "./env.js";
-import { loadSession } from "./auth/guards.js";
+import { loadSession, rejectApiTokenOutsideMcp } from "./auth/guards.js";
+import { apiTokensRoutes } from "./modules/apiTokens/routes.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { apartmentsRoutes } from "./modules/apartments/routes.js";
 import { topicsRoutes } from "./modules/topics/routes.js";
@@ -35,6 +36,8 @@ const app = express();
 app.use(cors({ origin: env.CORS_ORIGIN }));
 app.use(express.json({ limit: "4mb" }));
 app.use(loadSession);
+// API token (f2h_) só no MCP — demais rotas exigem JWT de sessão.
+app.use(rejectApiTokenOutsideMcp);
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -75,7 +78,9 @@ app.use("/rag", ragRoutes());
 app.use("/docs", docsRoutes());
 app.use("/horarios", horariosRoutes());
 app.use("/contabil", contabilRoutes());
-// MCP remoto (Streamable HTTP) — clientes como Cursor usam URL + Bearer JWT da sessão.
+// Tokens de API rotativos (f2h_) — gestão só com sessão JWT; uso só em /mcp.
+app.use("/api-tokens", apiTokensRoutes());
+// MCP remoto (Streamable HTTP) — Bearer f2h_ (trocado por JWT interno) ou JWT de sessão.
 app.use("/mcp", mcpRoutes());
 // Bot WhatsApp (WAHA) — webhook público; autenticação via X-Webhook-Secret opcional.
 app.use("/waha", wahaRoutes());

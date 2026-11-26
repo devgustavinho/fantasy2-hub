@@ -8,6 +8,12 @@ import {
   userIsConselheiro,
   userIsStaff,
 } from "./roles.js";
+import { isApiTokenFormat } from "../modules/apiTokens/crypto.js";
+import {
+  lookupValidApiToken,
+  parseTokenScopes,
+  touchApiTokenLastUsed,
+} from "../modules/apiTokens/service.js";
 
 const getUserById = sqlite.prepare(
   `SELECT u.id, u.apartment_id, u.name, u.email, u.role, u.approval_status, u.whatsapp, u.whatsapp_visible,
@@ -23,15 +29,59 @@ const getUserById = sqlite.prepare(
 // mesmo com SameSite=None; Secure configurado certo. `Authorization: Bearer` não é cookie,
 // então nenhuma dessas regras de first/third-party se aplica — funciona igual em qualquer
 // navegador.
+//
+// Aceita JWT de sessão (login) ou API token `f2h_…` (MCP). API tokens só podem chamar `/mcp`
+// (ver rejectApiTokenOutsideMcp); o handler do MCP troca f2h_ por JWT interno curto no loopback.
 export function loadSession(req, _res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
   if (token) {
-    const payload = verifySession(token);
-    if (payload) {
-      const user = getUserById.get(payload.sub);
-      if (user) req.user = attachRoles(user);
+    if (isApiTokenFormat(token)) {
+      const row = lookupValidApiToken(token);
+      if (row) {
+        const user = getUserById.get(row.user_id);
+        if (user) {
+          req.user = attachRoles(user);
+          req.authKind = "api_token";
+          req.apiTokenId = row.id;
+          req.apiTokenScopes = parseTokenScopes(row);
+          touchApiTokenLastUsed(row);
+        }
+      }
+    } else {
+      const payload = verifySession(token);
+      if (payload) {
+        const user = getUserById.get(payload.sub);
+        if (user) {
+          req.user = attachRoles(user);
+          req.authKind = payload.kind === "internal" ? "internal" : "session";
+        }
+      }
     }
+  }
+  next();
+}
+
+/** Bloqueia API token fora de `/mcp` — REST e gestão de tokens usam só JWT. */
+export function rejectApiTokenOutsideMcp(req, res, next) {
+  if (req.authKind === "api_token") {
+    const path = req.path || "";
+    if (!path.startsWith("/mcp")) {
+      return res.status(403).json({
+        message: "API token só é aceito no endpoint MCP. Use a sessão do Hub para o restante.",
+      });
+    }
+  }
+  next();
+}
+
+/** Rotas de gestão de API tokens: somente sessão JWT (nunca f2h_ / internal). */
+export function requireJwtSession(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
+  if (req.authKind !== "session") {
+    return res.status(403).json({
+      message: "Gerencie tokens de API apenas com a sessão do Hub (login no navegador).",
+    });
   }
   next();
 }
