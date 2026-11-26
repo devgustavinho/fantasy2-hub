@@ -13,7 +13,8 @@
     "db:seed": "node --env-file=.env src/db/seed-apartments.js",
     "create-admin": "node --env-file=.env scripts/create-admin.js",
     "rag:reindex": "node --env-file=.env scripts/rag-reindex.js",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js",
+    "test:parity": "node src/modules/mcp/parity.selftest.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1119.0",

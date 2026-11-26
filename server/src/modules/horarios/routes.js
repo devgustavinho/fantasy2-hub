@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { z } from "zod";
 import { requireAuth, requireApproved, requireStaff } from "../../auth/guards.js";
 import { recordAudit } from "../audit/service.js";
+import { ingestHorarios, scheduleIngest } from "../rag/ingest.js";
 import {
   addBlockedDay,
   getAreaWifiPayload,
@@ -13,6 +14,10 @@ import {
   putMudancaSettings,
   removeBlockedDay,
 } from "./service.js";
+
+function scheduleHorariosIngest() {
+  scheduleIngest("horarios", () => ingestHorarios());
+}
 
 const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
@@ -108,6 +113,7 @@ export function horariosRoutes() {
           wifiSsid: area.wifiSsid,
         },
       });
+      scheduleHorariosIngest();
       res.json({ area });
     } catch (err) {
       res.status(err.status || 500).json({ message: err.message || "Falha ao salvar." });
@@ -129,6 +135,7 @@ export function horariosRoutes() {
         entityId: "1",
         details: { windows: parsed.data.windows.length, assemblyRef: parsed.data.assemblyRef },
       });
+      scheduleHorariosIngest();
       res.json({ mudanca });
     } catch (err) {
       res.status(err.status || 500).json({ message: err.message || "Falha ao salvar." });
@@ -150,6 +157,7 @@ export function horariosRoutes() {
         entityId: day.id,
         details: { date: day.date, reason: day.reason, source: day.source },
       });
+      scheduleHorariosIngest();
       res.status(201).json({ day });
     } catch (err) {
       res.status(err.status || 500).json({ message: err.message || "Falha ao bloquear." });
@@ -166,6 +174,7 @@ export function horariosRoutes() {
         entityType: "mudanca_blocked_day",
         entityId: req.params.id,
       });
+      scheduleHorariosIngest();
       res.json({ ok: true });
     } catch (err) {
       res.status(err.status || 500).json({ message: err.message || "Falha ao remover." });
@@ -193,6 +202,7 @@ export function horariosRoutes() {
           assemblyRef: parsed.data.assemblyRef,
         },
       });
+      scheduleHorariosIngest();
       res.json({ convivencia });
     } catch (err) {
       res.status(err.status || 500).json({ message: err.message || "Falha ao salvar." });

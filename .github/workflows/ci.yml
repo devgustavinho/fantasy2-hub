@@ -31,3 +31,13 @@ jobs:
         working-directory: server
       - name: Sanity-check backend syntax
         run: find server/src server/scripts -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: MCP API parity selftest
+        run: node src/modules/mcp/parity.selftest.js
+        working-directory: server
+      - name: Backend smoke selftests
+        working-directory: server
+        run: |
+          node src/modules/horarios/wifi.selftest.js
+          node src/modules/horarios/mudancaWindows.selftest.js
+          node src/modules/rag/perda-garantia.selftest.js
+          node src/modules/stats/routes.selftest.js
