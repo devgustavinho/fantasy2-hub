@@ -41,9 +41,22 @@ jobs:
           node --env-file=.env src/db/seed-apartments.js
           node --env-file=.env scripts/migrate-uploads-to-r2.js
           sudo -n systemctl restart "$SERVICE_NAME"
-          sleep 2
           sudo -n systemctl is-active "$SERVICE_NAME"
-          curl -f -s -o /dev/null "http://127.0.0.1:$HEALTH_PORT/health"
+          # Type=simple marca active ao spawnar o processo — /health pode demorar
+          # mais que 2s (módulo graph + SQLite após npm ci). Retry evita falso negativo.
+          health_ok=0
+          for attempt in $(seq 1 30); do
+            if curl -f -s -o /dev/null "http://127.0.0.1:$HEALTH_PORT/health"; then
+              echo "health ok (tentativa $attempt)"
+              health_ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$health_ok" -ne 1 ]; then
+            echo "health check falhou após ~30s em :$HEALTH_PORT/health" >&2
+            exit 1
+          fi
           echo "deploy ok: $(git rev-parse --short HEAD)"
 
           # RAG reindex pós-deploy (best-effort): não derruba o deploy se falhar.
