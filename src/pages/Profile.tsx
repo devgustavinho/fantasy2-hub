@@ -13,6 +13,7 @@ import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
 import * as authService from "@/services/auth";
 import { AdvancedSettingsCard } from "@/components/AdvancedSettingsCard";
+import { RoleSwitcherButtons } from "@/components/RoleSwitcher";
 import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
 import { cn } from "@/lib/utils";
 import {
@@ -23,8 +24,6 @@ import {
   roleRequires2fa,
   userRoles,
 } from "@/lib/roles";
-import type { Role } from "@/lib/types";
-import { ApiError } from "@/lib/api";
 
 export default function Profile() {
   const { user, setUser } = useAuth();
@@ -121,7 +120,6 @@ export default function Profile() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["push-subscription"] }),
   });
 
-  const [roleSwitchError, setRoleSwitchError] = useState<string | null>(null);
   const [totpOpen, setTotpOpen] = useState(false);
   const [totpQr, setTotpQr] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState("");
@@ -147,20 +145,6 @@ export default function Profile() {
       setTotpError(null);
     },
     onError: (err) => setTotpError(err instanceof Error ? err.message : "Código inválido."),
-  });
-
-  const activeRoleMutation = useMutation({
-    mutationFn: (role: Role) => authService.setActiveRole(role),
-    onSuccess: ({ user: next }) => {
-      setRoleSwitchError(null);
-      setUser(next);
-    },
-    onError: (err) => {
-      setRoleSwitchError(err instanceof Error ? err.message : "Não foi possível trocar o modo.");
-      if (err instanceof ApiError && err.code === "totp_required") {
-        startTotpMutation.mutate();
-      }
-    },
   });
 
   function handleTotpConfirm(e: FormEvent) {
@@ -216,30 +200,8 @@ export default function Profile() {
               perder os outros cargos.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {assignedRoles.map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  disabled={activeRoleMutation.isPending || role === user.role}
-                  onClick={() => activeRoleMutation.mutate(role)}
-                  aria-pressed={role === user.role}
-                  className={cn(
-                    "rounded-xl border px-3 py-3 text-left text-sm font-medium transition-colors",
-                    role === user.role
-                      ? "border-brand-navy bg-brand-navy text-white"
-                      : "hover:bg-muted",
-                  )}
-                >
-                  {roleLabel(role)}
-                  {role === user.role && (
-                    <span className="mt-0.5 block text-xs font-normal opacity-80">Ativo agora</span>
-                  )}
-                </button>
-              ))}
-            </div>
-            {roleSwitchError && <p className="text-sm text-destructive">{roleSwitchError}</p>}
+          <CardContent>
+            <RoleSwitcherButtons onTotpRequired={() => startTotpMutation.mutate()} />
           </CardContent>
         </Card>
       )}
