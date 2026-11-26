@@ -1,5 +1,6 @@
 /**
- * Thin HTTP client for the Fantasy 2 Hub API (Bearer session token).
+ * Thin HTTP client for the Fantasy 2 Hub API (Bearer JWT de sessão — modo legado stdio).
+ * Com f2h_, o pacote usa proxy HTTP → /mcp (ver proxyRemote.js), não este client.
  */
 
 export class ApiError extends Error {
@@ -11,14 +12,16 @@ export class ApiError extends Error {
   }
 }
 
-export function createApiClient({ baseUrl, token }) {
+export function createApiClient({ baseUrl, token, getToken }) {
   const root = baseUrl.replace(/\/+$/, "");
+  const resolveToken = typeof getToken === "function" ? getToken : async () => token;
 
   async function request(method, path, body) {
+    const bearer = await resolveToken();
     const res = await fetch(`${root}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${bearer}`,
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       },

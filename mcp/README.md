@@ -14,8 +14,10 @@ Cursor (ou outro cliente MCP) **sem clonar este repositório**.
 ## Para moradores (recomendado)
 
 1. Entre em [fantasy2-hub.pages.dev](https://fantasy2-hub.pages.dev) → **Perfil → Avançado**.
-2. Em **Conectar MCP**, escolha o cliente (**Claude**, **Cursor** ou **Antigravity**) e copie URL + JWT / snippet.
-3. Cole na config do cliente e reconecte.
+2. Em **Conectar MCP**, clique em **Gerar token de API** (valor `f2h_…` aparece **só uma vez**).
+3. Escolha o cliente (**Claude**, **Cursor** ou **Antigravity**) e copie URL + snippet.
+4. Preferível: exporte `FANTASY2_TOKEN` e use `Bearer ${env:FANTASY2_TOKEN}` na config.
+5. Cole na config do cliente e reconecte.
 
 **Avançado** também guarda **Dispositivos** (biometria/passkeys). A maioria dos moradores não precisa abrir.
 
@@ -25,7 +27,7 @@ Endpoint de produção:
 https://api-fantasy2.gcsolutions-devs.com.br/mcp
 ```
 
-Exemplo `~/.cursor/mcp.json`:
+Exemplo `~/.cursor/mcp.json` (recomendado com variável de ambiente):
 
 ```json
 {
@@ -33,16 +35,27 @@ Exemplo `~/.cursor/mcp.json`:
     "fantasy2-hub": {
       "url": "https://api-fantasy2.gcsolutions-devs.com.br/mcp",
       "headers": {
-        "Authorization": "Bearer cole-o-jwt-da-sessao-aqui"
+        "Authorization": "Bearer ${env:FANTASY2_TOKEN}"
       }
     }
   }
 }
 ```
 
-O JWT é o mesmo da sessão do Hub (`localStorage.fantasy2_token` após login; admin precisa do 2FA).
-Não compartilhe nem committe o token. Preferível: `Bearer ${env:FANTASY2_TOKEN}` e a variável no
-ambiente do Cursor.
+### Tokens de API (`f2h_`)
+
+- Formato: `f2h_` + 32 bytes aleatórios (base64url). Só o **SHA-256** e um prefixo curto ficam no SQLite.
+- O valor completo aparece **uma vez** na criação/rotação.
+- **Síndico/admin:** validade **obrigatória**, máximo **90 dias**; 2FA exigido **só na criação** (uso no `/mcp` sem 2FA).
+- **Morador/conselheiro:** expiração **opcional**; se informada, teto de **365 dias**.
+- Limite: 5 tokens ativos por usuário. Listar não devolve o valor; dá para rotacionar e revogar.
+- Token expirado ou revogado → **401** claro (`api_token_expired` / `api_token_revoked`).
+
+JWT de sessão no `/mcp` ainda funciona **temporariamente**, com aviso de depreciação — migre para `f2h_`.
+
+**Segurança:** o Bearer `f2h_` só é aceito em `/mcp`. Antes do loopback REST, o servidor troca o
+API token por um JWT interno de poucos minutos — e esse JWT **só vale em conexão loopback**
+(127.0.0.1); fora disso → 401. Gestão dos tokens (`/api-tokens`) exige sessão JWT.
 
 **Gate de permissão:** só conta **aprovada**; tools de staff/admin **não são registradas** para
 morador; a API ainda aplica 403.
@@ -52,18 +65,21 @@ morador; a API ainda aplica 403.
 | Peça | Onde |
 |---|---|
 | HTTP Streamable (produção) | `server/src/modules/mcp/` — montado em `POST /mcp` |
-| stdio (dev / offline) | este pacote `mcp/` — chama a API via `FANTASY2_API_URL` + `FANTASY2_TOKEN` |
+| Tokens de API | `server/src/modules/apiTokens/` — `f2h_`, migração `0045` |
+| stdio (dev / offline) | este pacote `mcp/` — `FANTASY2_API_URL` + `FANTASY2_TOKEN` (`f2h_` ou JWT) |
 
 ### stdio (opcional, desenvolvedores do monorepo)
 
 ```bash
 cd mcp && npm install
 export FANTASY2_API_URL=https://api-fantasy2.gcsolutions-devs.com.br
-export FANTASY2_TOKEN='eyJ…'
+export FANTASY2_TOKEN='f2h_…'   # preferível; JWT de sessão ainda funciona (legado)
 npm start
 ```
 
-Moradores **não** precisam deste fluxo.
+Com `f2h_`, o pacote faz **proxy stdio → HTTP** para `POST /mcp` (não troca por JWT REST).
+Com JWT de sessão, registra tools locais que chamam a API REST. Moradores **não** precisam
+deste fluxo.
 
 ## Tools por nível
 

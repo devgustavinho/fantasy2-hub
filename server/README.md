@@ -28,7 +28,8 @@ npm run dev
 - 2FA obrigatório pra admin (`src/auth/twoFactor.js`, TOTP via `otplib`, compatível com Google Authenticator): todo login de uma conta `admin` passa por `establishSession`, que só libera o token de sessão depois do código de 6 dígitos — na primeira vez, força o cadastro do 2FA (mostra QR code) antes de liberar. Vale tanto pra login por senha quanto por passkey.
 - Um apartamento tem no máximo 2 usuários vinculados: 1 titular (`household_role = 'owner'`, o que se cadastrou pelo `/register`) e 1 familiar convidado por ele (`household_role = 'family'`) — garantido por índice único composto (`idx_users_apartment_household` em `(apartment_id, household_role)`, `WHERE apartment_id IS NOT NULL`). Ver seção "Família" abaixo.
 - Cada domínio tem sua própria pasta em `src/modules/<domínio>/routes.js`, exportando uma função que retorna um `express.Router()`, registrada em `src/index.js`.
-- MCP remoto: `POST /mcp` (Streamable HTTP, `src/modules/mcp/`) — clientes (Cursor etc.) usam a URL da API + `Authorization: Bearer` com o JWT da sessão do Hub. Tools filtradas por cargo. Moradores não precisam do pacote stdio em `/mcp` do monorepo.
+- MCP remoto: `POST /mcp` (Streamable HTTP, `src/modules/mcp/`) — clientes usam `Authorization: Bearer` com **API token** `f2h_…` (Perfil → Avançado → Gerar token de API). JWT de sessão ainda é aceito **temporariamente** no `/mcp` (header `Deprecation` + `Warning`). Tokens em `api_tokens` (migração `0045`, módulo `src/modules/apiTokens/`): só SHA-256 + prefixo curto no SQLite; valor completo só uma vez na criação/rotação. Gestão em `/api-tokens` exige sessão JWT. Uso do `f2h_` só em `/mcp` (guard global); o handler troca `f2h_` por JWT interno curto (~5 min) **apenas no loopback** — `kind: "internal"` é rejeitado fora de 127.0.0.1 (`rejectInternalJwtOutsideLoopback`). Stdio com `f2h_` faz proxy HTTP → `/mcp` (não usa JWT REST). **Síndico/admin:** `expiresAt` obrigatório, teto fim do dia UTC de hoje+90 (aceita o default da UI), 2FA na criação **e** na rotação (uso no MCP sem 2FA). **Morador/conselheiro:** expiração opcional com teto fim do dia UTC de hoje+365. Expirado/revogado → 401 (`api_token_expired` / `api_token_revoked`). Limite: 5 ativos. Tools filtradas por cargo. Moradores não precisam do pacote stdio em `/mcp` do monorepo.
+- **Deploy:** após merge, rodar `npm run db:migrate` no server (aplica `0045_api_tokens.sql`) antes de subir o processo novo.
 - Variáveis de ambiente validadas com `zod` em `src/env.js` — processo encerra (`process.exit(1)`) se algo obrigatório faltar.
 
 ## Permissões por cargo
@@ -87,10 +88,11 @@ e em checagens específicas dentro das rotas (ex. dono da pauta em `PATCH /topic
 (`?actorUserId=`; `GET /audit/actors` lista quem já apareceu no log, pro front montar o filtro).
 Registra ações administrativas/de segurança e de conteúdo — login, cadastro, 2FA ativado,
 criar/promover/aprovar/recusar/resetar senha de usuário, criar/editar/excluir/agendar/votar/comentar
-pauta (incl. edição de comentário), criar/editar/excluir serviço e item de serviço. **Não** registra
-ações puramente de UI (marcar notificação como lida, inscrição de push) — não têm valor de auditoria
-real. Se um novo tipo de ação precisar de auditoria, chame `recordAudit` no mesmo lugar onde a ação
-acontece (não tem trigger automático no banco).
+pauta (incl. edição de comentário), criar/editar/excluir serviço e item de serviço, criar/revogar/
+rotacionar API token (`api_tokens.*`). **Não** registra ações puramente de UI (marcar notificação
+como lida, inscrição de push) — não têm valor de auditoria real. Se um novo tipo de ação precisar de
+auditoria, chame `recordAudit` no mesmo lugar onde a ação acontece (não tem trigger automático no
+banco).
 
 ## Serviços do condomínio
 

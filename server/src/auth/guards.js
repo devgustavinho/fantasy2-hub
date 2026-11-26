@@ -8,6 +8,13 @@ import {
   userIsConselheiro,
   userIsStaff,
 } from "./roles.js";
+import { isApiTokenFormat } from "../modules/apiTokens/crypto.js";
+import {
+  authenticateApiToken,
+  parseTokenScopes,
+  touchApiTokenLastUsed,
+} from "../modules/apiTokens/service.js";
+import { resolveInternalJwtAccess } from "./loopback.js";
 
 const getUserById = sqlite.prepare(
   `SELECT u.id, u.apartment_id, u.name, u.email, u.role, u.approval_status, u.whatsapp, u.whatsapp_visible,
@@ -18,20 +25,105 @@ const getUserById = sqlite.prepare(
    WHERE u.id = ?`,
 );
 
+const API_TOKEN_AUTH_ERRORS = {
+  expired: { code: "api_token_expired", message: "API token expirado." },
+  revoked: { code: "api_token_revoked", message: "API token revogado." },
+  invalid: { code: "api_token_invalid", message: "API token inválido." },
+};
+
 // Token via header (não mais cookie) — cookie cross-site (front no Cloudflare Pages, API na
 // VPS, domínios diferentes) esbarra no bloqueio de cookie de terceiro do Safari por padrão,
 // mesmo com SameSite=None; Secure configurado certo. `Authorization: Bearer` não é cookie,
 // então nenhuma dessas regras de first/third-party se aplica — funciona igual em qualquer
 // navegador.
+//
+// Aceita JWT de sessão (login) ou API token `f2h_…` (MCP). API tokens só podem chamar `/mcp`
+// (ver rejectApiTokenOutsideMcp); o handler do MCP troca f2h_ por JWT interno curto no loopback.
+// JWT interno (kind: "internal") só vale em conexão loopback — não amplia f2h_ para a REST
+// pública. JWT de sessão no /mcp ainda funciona, com aviso de depreciação.
 export function loadSession(req, _res, next) {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
   if (token) {
-    const payload = verifySession(token);
-    if (payload) {
-      const user = getUserById.get(payload.sub);
-      if (user) req.user = attachRoles(user);
+    if (isApiTokenFormat(token)) {
+      const auth = authenticateApiToken(token);
+      if (auth.ok) {
+        const user = getUserById.get(auth.row.user_id);
+        if (user) {
+          req.user = attachRoles(user);
+          req.authKind = "api_token";
+          req.apiTokenId = auth.row.id;
+          req.apiTokenScopes = parseTokenScopes(auth.row);
+          touchApiTokenLastUsed(auth.row);
+        } else {
+          req.apiTokenAuthError = "invalid";
+        }
+      } else {
+        req.apiTokenAuthError = auth.reason;
+      }
+    } else {
+      const payload = verifySession(token);
+      if (payload) {
+        if (payload.kind === "internal") {
+          const access = resolveInternalJwtAccess(req.socket?.remoteAddress);
+          if (!access.ok) {
+            req.internalJwtRejected = access;
+          } else {
+            const user = getUserById.get(payload.sub);
+            if (user) {
+              req.user = attachRoles(user);
+              req.authKind = "internal";
+            }
+          }
+        } else {
+          const user = getUserById.get(payload.sub);
+          if (user) {
+            req.user = attachRoles(user);
+            req.authKind = "session";
+          }
+        }
+      }
     }
+  }
+  next();
+}
+
+/** Bearer f2h_ expirado/revogado/inválido → 401 com mensagem clara (antes do requireAuth genérico). */
+export function rejectFailedApiToken(req, res, next) {
+  if (!req.apiTokenAuthError) return next();
+  const body = API_TOKEN_AUTH_ERRORS[req.apiTokenAuthError] || API_TOKEN_AUTH_ERRORS.invalid;
+  return res.status(401).json(body);
+}
+
+/** JWT interno fora de loopback → 401 (não autentica como sessão). */
+export function rejectInternalJwtOutsideLoopback(req, res, next) {
+  if (!req.internalJwtRejected) return next();
+  return res.status(401).json({
+    code: req.internalJwtRejected.code,
+    message: req.internalJwtRejected.message,
+  });
+}
+
+/** Bloqueia API token fora de `/mcp` — REST e gestão de tokens usam só JWT. */
+export function rejectApiTokenOutsideMcp(req, res, next) {
+  if (req.authKind === "api_token") {
+    const path = req.path || "";
+    if (!path.startsWith("/mcp")) {
+      return res.status(403).json({
+        message: "API token só é aceito no endpoint MCP. Use a sessão do Hub para o restante.",
+      });
+    }
+  }
+  next();
+}
+
+/** Rotas de gestão de API tokens: somente sessão JWT (nunca f2h_ / internal). */
+export function requireJwtSession(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: "Faça login para continuar." });
+  if (req.authKind !== "session") {
+    return res.status(403).json({
+      message: "Gerencie tokens de API apenas com a sessão do Hub (login no navegador).",
+    });
   }
   next();
 }
