@@ -103,7 +103,7 @@ chegar no `systemctl restart`) até você adicionar a variável no `.env` da VPS
 serviço antigo continua rodando), mas o deploy fica "parado no meio" — depois de adicionar a env var,
 complete manualmente via SSH: `node --env-file=.env src/db/migrate.js && node --env-file=.env
 src/db/seed-apartments.js && node --env-file=.env scripts/migrate-uploads-to-r2.js && sudo systemctl
-restart fantasy2-hub`.
+restart fantasy2-hub && node --env-file=.env scripts/rag-reindex.js`.
 
 Rode as migrations, o seed e crie o primeiro admin:
 
@@ -111,6 +111,14 @@ Rode as migrations, o seed e crie o primeiro admin:
 node --env-file=.env src/db/migrate.js
 node --env-file=.env src/db/seed-apartments.js
 node --env-file=.env scripts/create-admin.js --email=sindico@gcsolutions-devs.com.br --password="<senha-forte>" --name="Síndico"
+```
+
+Depois do primeiro boot (ou se o índice RAG estiver vazio / desatualizado), reindexe o corpus:
+
+```bash
+cd /home/fantasy2hub/fantasy2-hub/server
+npm run rag:reindex
+# se o conteúdo mudou mas o hash não (ex.: pós-fix de prep do Manual): npm run rag:reindex -- --force
 ```
 
 ## 5. Serviço systemd
@@ -213,7 +221,31 @@ precisa reverter.
 - `FANTASY2_DEPLOY_SSH_KEY` — chave privada do passo 2.
 
 Depois disso, todo push em `main` que toque em `server/**` dispara `.github/workflows/deploy-server.yml`
-automaticamente (SSH → git reset --hard → npm ci → migrate → seed → restart → healthcheck).
+automaticamente (SSH → git reset --hard → npm ci → migrate → seed → restart → healthcheck →
+`rag:reindex` best-effort com até 3 tentativas).
+
+### RAG reindex no deploy
+
+O job de deploy **não** bloqueia o healthcheck nem falha o workflow se o reindex cair
+(OpenAI fora, API key ausente, etc.): só loga `AVISO: rag:reindex falhou…` e o serviço
+já está no ar. O reindex roda **depois** do `/health` para não atrasar a subida.
+
+Se o aviso aparecer no log do Actions, na VPS:
+
+```bash
+ssh fantasy2hub@45.90.123.41
+cd /home/fantasy2hub/fantasy2-hub/server
+npm run rag:reindex
+# ou force: npm run rag:reindex -- --force
+```
+
+Alternativa UI: staff em **/perguntar → Avançado → Reindexar**.
+
+Se o processo de deploy mudar (ex.: sair do GitHub Actions SSH e passar a um script de
+release/`ExecStartPost` no systemd), mantenha o mesmo contrato: **migrate → restart →
+health → reindex best-effort**. Não coloque o reindex no `ExecStart` do serviço: falha de
+OpenAI não deve impedir o boot da API. Preferir o job de deploy (como hoje) ou um
+`ExecStartPost=` separado que ignore exit code ≠ 0.
 
 ## 9. Cloudflare Pages (frontend)
 

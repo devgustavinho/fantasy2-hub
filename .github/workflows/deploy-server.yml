@@ -45,4 +45,21 @@ jobs:
           sudo -n systemctl is-active "$SERVICE_NAME"
           curl -f -s -o /dev/null "http://127.0.0.1:$HEALTH_PORT/health"
           echo "deploy ok: $(git rev-parse --short HEAD)"
+
+          # RAG reindex pós-deploy (best-effort): não derruba o deploy se falhar.
+          # Roda depois do healthcheck para não atrasar/bloquear a subida do serviço.
+          echo "rag:reindex — iniciando (até 3 tentativas)…"
+          reindex_ok=0
+          for attempt in 1 2 3; do
+            if node --env-file=.env scripts/rag-reindex.js; then
+              echo "rag:reindex ok (tentativa $attempt)"
+              reindex_ok=1
+              break
+            fi
+            echo "rag:reindex falhou (tentativa $attempt/3); retry em 15s…" >&2
+            sleep 15
+          done
+          if [ "$reindex_ok" -ne 1 ]; then
+            echo "AVISO: rag:reindex falhou após 3 tentativas — deploy segue ok; rode manualmente: cd $APP_DIR/server && npm run rag:reindex" >&2
+          fi
           REMOTE
