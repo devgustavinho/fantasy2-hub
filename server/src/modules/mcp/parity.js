@@ -94,6 +94,11 @@ export const MCP_COVERAGE = {
   "GET /welcome/qr": "get_welcome_qr",
   "PUT /welcome": "update_welcome",
 
+  // group invite links (WhatsApp)
+  "GET /group-links": "get_group_links",
+  "GET /group-links/all": "get_group_links_all",
+  "PUT /group-links": "update_group_links",
+
   // climate
   "GET /climate": "list_climate",
   "POST /climate": "create_climate_survey",

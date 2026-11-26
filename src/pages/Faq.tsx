@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/QueryError";
 import { Markdown } from "@/components/Markdown";
+import { WelcomeSteps } from "@/components/WelcomeSteps";
 import { useAuth } from "@/contexts/AuthContext";
 import * as faqService from "@/services/faq";
 import type { FaqEntry } from "@/lib/types";
@@ -248,6 +249,8 @@ export default function Faq() {
           </CardContent>
         </Card>
       )}
+
+      <WelcomeSteps />
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
       {isError && <QueryError onRetry={() => refetch()} />}

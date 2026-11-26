@@ -256,6 +256,29 @@ export interface WelcomeQr {
   dataUrl: string;
 }
 
+/** Links de convite WhatsApp para o morador (geral + torre dele). */
+export interface GroupLinksForUser {
+  generalUrl: string | null;
+  tower: number | null;
+  towerUrl: string | null;
+}
+
+/** Todos os links (admin). */
+export interface GroupLinksAll {
+  generalUrl: string | null;
+  towers: Record<1 | 2 | 3 | 4 | 5, string | null>;
+  updatedAt: string | null;
+}
+
+export interface GroupLinksInput {
+  generalUrl?: string | null;
+  tower1Url?: string | null;
+  tower2Url?: string | null;
+  tower3Url?: string | null;
+  tower4Url?: string | null;
+  tower5Url?: string | null;
+}
+
 export type ClimateSurveyStatus = "open" | "closed";
 
 export interface ClimateSurveySummary {
