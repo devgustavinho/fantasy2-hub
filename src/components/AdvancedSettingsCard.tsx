@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, Eye, EyeOff, Fingerprint, KeyRound, Plug, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -192,7 +192,17 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isStaffUser = hasRole(user, "admin") || hasRole(user, "sindico");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(
+    () => typeof window !== "undefined" && window.location.hash === "#avancado",
+  );
+
+  useEffect(() => {
+    if (window.location.hash !== "#avancado") return;
+    setOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById("avancado")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
   const [client, setClient] = useState<ClientId>("cursor");
   const [tokenName, setTokenName] = useState("MCP");
   const [expiresDate, setExpiresDate] = useState(() =>
@@ -330,7 +340,7 @@ export function AdvancedSettingsCard({ devices }: AdvancedSettingsCardProps) {
   }
 
   return (
-    <Card>
+    <Card id="avancado">
       <CardHeader className="pb-3">
         <button
           type="button"

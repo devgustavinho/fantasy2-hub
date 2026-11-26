@@ -32,6 +32,7 @@ import ClimateDetail from "@/pages/ClimateDetail";
 import ImprovementsBoard from "@/pages/ImprovementsBoard";
 import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
+import SystemSettings from "@/pages/SystemSettings";
 import AskCondo from "@/pages/AskCondo";
 import Horarios from "@/pages/Horarios";
 import Documentos from "@/pages/Documentos";
@@ -256,9 +257,14 @@ export default function App() {
                   </AppLayout>
                 }
               />
-            </Route>
-
-            <Route element={<StaffRoute />}>
+              <Route
+                path="/admin/configuracoes"
+                element={
+                  <AppLayout>
+                    <SystemSettings />
+                  </AppLayout>
+                }
+              />
               <Route
                 path="/admin/usuarios"
                 element={

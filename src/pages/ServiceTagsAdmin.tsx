@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,12 +59,17 @@ export default function ServiceTagsAdmin() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Tags de negócios</h1>
-        <p className="text-sm text-muted-foreground">
-          Cadastre as tags disponíveis (ex. Comida) e atribua a cada negócio — os moradores também
-          podem escolher tags existentes em Meu negócio, e usam elas pra filtrar em Negócios.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Tags de negócios</h1>
+          <p className="text-sm text-muted-foreground">
+            Cadastre as tags disponíveis (ex. Comida) e atribua a cada negócio — os moradores também
+            podem escolher tags existentes em Meu negócio, e usam elas pra filtrar em Negócios.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin/configuracoes">← Configurações</Link>
+        </Button>
       </div>
 
       <Card>

@@ -15,10 +15,10 @@ import {
   Lightbulb,
   MessageCircleQuestion,
   ScrollText,
+  Settings2,
   Shield,
   ShoppingBag,
   Star,
-  Tag,
   User,
   Users,
 } from "lucide-react";
@@ -189,10 +189,10 @@ export function BottomDock() {
       description: "Pautas por engajamento e acessos",
     },
     {
-      title: "Índice RAG",
-      href: "/perguntar",
-      icon: <MessageCircleQuestion className="h-5 w-5" />,
-      description: isAdmin ? "Provedor, chave e reindexação" : "Status do índice e reindexação",
+      title: "Configurações",
+      href: "/admin/configuracoes",
+      icon: <Settings2 className="h-5 w-5" />,
+      description: "Boas-vindas, RAG, horários, FAQ e integrações",
     },
     {
       title: "Melhorias",
@@ -215,22 +215,10 @@ export function BottomDock() {
             description: "Histórico de ações",
           },
           {
-            title: "Tags",
-            href: "/admin/tags",
-            icon: <Tag className="h-5 w-5" />,
-            description: "Tags de serviços",
-          },
-          {
             title: "Apartamentos",
             href: "/admin/apartamentos",
             icon: <Building2 className="h-5 w-5" />,
             description: "Mapa das torres",
-          },
-          {
-            title: "Boas-vindas",
-            href: "/admin/boas-vindas",
-            icon: <Home className="h-5 w-5" />,
-            description: "Página do QR do elevador",
           },
         ]
       : []),
@@ -245,8 +233,12 @@ export function BottomDock() {
     return (
       <ul className="space-y-1">
         {links.map((link) => {
+          // `/admin` é prefixo de outras rotas — só marca ativo em match exato.
           const active =
-            location.pathname === link.href || location.pathname.startsWith(`${link.href}/`);
+            link.href === "/admin"
+              ? location.pathname === "/admin"
+              : location.pathname === link.href ||
+                location.pathname.startsWith(`${link.href}/`);
           return (
             <li key={`${link.href}-${link.title}`}>
               <button

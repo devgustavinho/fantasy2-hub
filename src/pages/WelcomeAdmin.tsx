@@ -282,9 +282,14 @@ export default function WelcomeAdmin() {
             Texto público das regras do condomínio. O QR Code abaixo aponta para essa página.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/boas-vindas">Ver página pública</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/admin/configuracoes">← Configurações</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/boas-vindas">Ver página pública</Link>
+          </Button>
+        </div>
       </div>
 
       {pageQuery.isLoading && <p className="text-muted-foreground">Carregando...</p>}

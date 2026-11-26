@@ -54,11 +54,9 @@ export default function AdminPanel() {
             Ordenado por saldo de votos (favor − contra) para ajudar a montar a pauta da próxima assembleia.
           </p>
         </div>
-        {isAdmin && (
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin/boas-vindas">Página de boas-vindas</Link>
-          </Button>
-        )}
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin/configuracoes">Configurações do sistema</Link>
+        </Button>
       </div>
 
       {isAdmin && (
