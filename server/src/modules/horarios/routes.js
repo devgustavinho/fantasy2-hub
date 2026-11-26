@@ -46,10 +46,16 @@ const blockedSchema = z.object({
   source: z.enum(["national", "fortaleza", "custom"]).optional(),
 });
 
-const convivenciaSchema = z.object({
-  noiseUntil: hm,
-  assemblyRef: z.string().trim().max(200).nullable().optional(),
-});
+const convivenciaSchema = z
+  .object({
+    noiseFrom: hm,
+    noiseUntil: hm,
+    assemblyRef: z.string().trim().max(200).nullable().optional(),
+  })
+  .refine((d) => d.noiseFrom < d.noiseUntil, {
+    message: "noise_from deve ser anterior a noise_until",
+    path: ["noiseFrom"],
+  });
 
 export function horariosRoutes() {
   const router = Router();
@@ -169,7 +175,9 @@ export function horariosRoutes() {
   router.put("/convivencia", requireStaff, (req, res) => {
     const parsed = convivenciaSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: "Informe o horário de silêncio (HH:MM)." });
+      return res.status(400).json({
+        message: "Informe barulho permitido das HH:MM até HH:MM (início anterior ao fim).",
+      });
     }
     try {
       const convivencia = putConvivenciaSettings(parsed.data, req.user.id);
@@ -179,7 +187,11 @@ export function horariosRoutes() {
         action: "horarios.convivencia_update",
         entityType: "convivencia_settings",
         entityId: "1",
-        details: { noiseUntil: parsed.data.noiseUntil, assemblyRef: parsed.data.assemblyRef },
+        details: {
+          noiseFrom: parsed.data.noiseFrom,
+          noiseUntil: parsed.data.noiseUntil,
+          assemblyRef: parsed.data.assemblyRef,
+        },
       });
       res.json({ convivencia });
     } catch (err) {

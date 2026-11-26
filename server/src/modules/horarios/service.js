@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sqlite } from "../../db/client.js";
 import { ensureHolidaySeed } from "./holidays.js";
 import { evaluateMudancaWindows } from "./mudancaWindows.js";
+import { evaluateNoise } from "./noise.js";
 import { addDays, fortalezaParts, isHm } from "./time.js";
 import { buildWifiUri, normalizeWifiSecurity, WIFI_SECURITIES } from "./wifi.js";
 
@@ -60,14 +61,14 @@ const insertBlocked = sqlite.prepare(`
 const deleteBlocked = sqlite.prepare("DELETE FROM mudanca_blocked_days WHERE id = ?");
 
 const getConvivencia = sqlite.prepare(`
-  SELECT noise_until AS noiseUntil, assembly_ref AS assemblyRef,
+  SELECT noise_from AS noiseFrom, noise_until AS noiseUntil, assembly_ref AS assemblyRef,
          updated_at AS updatedAt, updated_by AS updatedBy
   FROM convivencia_settings WHERE id = 1
 `);
 
 const updateConvivencia = sqlite.prepare(`
   UPDATE convivencia_settings
-  SET noise_until = @noise_until, assembly_ref = @assembly_ref,
+  SET noise_from = @noise_from, noise_until = @noise_until, assembly_ref = @assembly_ref,
       updated_at = @updated_at, updated_by = @updated_by
   WHERE id = 1
 `);
@@ -122,6 +123,7 @@ export function getHorariosBundle() {
       blockedDays: listBlocked.all(today),
     },
     convivencia: {
+      noiseFrom: convivencia.noiseFrom || "07:00",
       noiseUntil: convivencia.noiseUntil,
       assemblyRef: convivencia.assemblyRef,
       updatedAt: convivencia.updatedAt,
@@ -153,13 +155,15 @@ export function getHorariosStatus(now = new Date()) {
   const tomorrowParts = fortalezaParts(tomorrowUtcNoon);
 
   const windows = parseWindows(getMudanca.get().windowsJson);
-  const noiseUntil = getConvivencia.get().noiseUntil;
+  const convivencia = getConvivencia.get();
+  const noiseFrom = convivencia.noiseFrom || "07:00";
+  const noiseUntil = convivencia.noiseUntil;
 
   const mudancaNow = mudancaAllowedOn(parts.date, parts.day, parts.time, windows);
   const mudancaTomorrow = mudancaAllowedOn(tomorrowDate, tomorrowParts.day, null, windows);
 
-  // Barulho permitido das 00:00 até noiseUntil (a partir de noiseUntil = silêncio).
-  const canMakeNoise = parts.time < noiseUntil;
+  // Barulho permitido em [noiseFrom, noiseUntil) no fuso America/Fortaleza.
+  const noiseNow = evaluateNoise(parts.time, noiseFrom, noiseUntil);
 
   return {
     timezone: "America/Fortaleza",
@@ -177,13 +181,7 @@ export function getHorariosStatus(now = new Date()) {
       window: mudancaTomorrow.window,
       blocked: mudancaTomorrow.blocked,
     },
-    noiseNow: {
-      allowed: canMakeNoise,
-      noiseUntil,
-      reason: canMakeNoise
-        ? `Barulho permitido até ${noiseUntil}.`
-        : `Horário de silêncio (após ${noiseUntil}).`,
-    },
+    noiseNow,
   };
 }
 
@@ -361,12 +359,18 @@ export function removeBlockedDay(id) {
 }
 
 export function putConvivenciaSettings(input, actorUserId) {
-  if (!isHm(input.noiseUntil)) {
-    const err = new Error("Informe o horário de silêncio no formato HH:MM.");
+  if (!isHm(input.noiseFrom) || !isHm(input.noiseUntil)) {
+    const err = new Error("Informe início e fim do barulho no formato HH:MM.");
+    err.status = 400;
+    throw err;
+  }
+  if (!(input.noiseFrom < input.noiseUntil)) {
+    const err = new Error("O início do barulho (noise_from) deve ser anterior ao fim (noise_until).");
     err.status = 400;
     throw err;
   }
   updateConvivencia.run({
+    noise_from: input.noiseFrom,
     noise_until: input.noiseUntil,
     assembly_ref: input.assemblyRef?.trim() || null,
     updated_at: new Date().toISOString(),

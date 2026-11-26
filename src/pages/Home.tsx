@@ -102,7 +102,9 @@ export default function Home() {
                   Barulho nas áreas?
                 </CardDescription>
                 <CardTitle className="text-xl">
-                  {horariosStatus.data.noiseNow.allowed ? "Sim" : "Silêncio"}
+                  {horariosStatus.data.noiseNow.allowed
+                    ? `Sim (até ${horariosStatus.data.noiseNow.noiseUntil})`
+                    : `Silêncio (até ${horariosStatus.data.noiseNow.noiseFrom})`}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">

@@ -319,6 +319,7 @@ export default function Horarios() {
   const [areaError, setAreaError] = useState<string | null>(null);
   const [wifiAreaId, setWifiAreaId] = useState<string | null>(null);
   const [mudancaMsg, setMudancaMsg] = useState<string | null>(null);
+  const [noiseFrom, setNoiseFrom] = useState("");
   const [noiseUntil, setNoiseUntil] = useState("");
   const [noiseAssembly, setNoiseAssembly] = useState("");
   const [blockDate, setBlockDate] = useState("");
@@ -354,8 +355,11 @@ export default function Horarios() {
   });
 
   const convivenciaMutation = useMutation({
-    mutationFn: (data: { noiseUntil: string; assemblyRef?: string | null }) =>
-      horariosService.updateConvivencia(data),
+    mutationFn: (data: {
+      noiseFrom: string;
+      noiseUntil: string;
+      assemblyRef?: string | null;
+    }) => horariosService.updateConvivencia(data),
     onSuccess: () => {
       setMudancaMsg("Convivência atualizada.");
       queryClient.invalidateQueries({ queryKey: ["horarios"] });
@@ -436,7 +440,9 @@ export default function Horarios() {
                 Barulho agora
               </CardDescription>
               <CardTitle className="text-lg">
-                {statusQuery.data.noiseNow.allowed ? "Permitido" : "Silêncio"}
+                {statusQuery.data.noiseNow.allowed
+                  ? `Sim (até ${statusQuery.data.noiseNow.noiseUntil})`
+                  : `Silêncio (até ${statusQuery.data.noiseNow.noiseFrom})`}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
@@ -648,7 +654,8 @@ export default function Horarios() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Barulho nas áreas comuns</CardTitle>
                 <CardDescription>
-                  Permitido até {bundleQuery.data.convivencia.noiseUntil} (fuso Fortaleza).
+                  Barulho permitido das {bundleQuery.data.convivencia.noiseFrom} até{" "}
+                  {bundleQuery.data.convivencia.noiseUntil} (fuso Fortaleza).
                   {bundleQuery.data.convivencia.assemblyRef
                     ? ` Assembleia: ${bundleQuery.data.convivencia.assemblyRef}`
                     : ""}
@@ -660,15 +667,27 @@ export default function Horarios() {
                     className="flex flex-wrap items-end gap-2"
                     onSubmit={(e) => {
                       e.preventDefault();
+                      const from = noiseFrom || bundleQuery.data!.convivencia.noiseFrom;
                       const until = noiseUntil || bundleQuery.data!.convivencia.noiseUntil;
                       const assembly =
                         noiseAssembly || bundleQuery.data!.convivencia.assemblyRef || "";
                       convivenciaMutation.mutate({
+                        noiseFrom: from,
                         noiseUntil: until,
                         assemblyRef: assembly.trim() || null,
                       });
                     }}
                   >
+                    <div className="space-y-1">
+                      <Label htmlFor="noise-from">Das</Label>
+                      <Input
+                        id="noise-from"
+                        type="time"
+                        required
+                        value={noiseFrom || bundleQuery.data.convivencia.noiseFrom}
+                        onChange={(e) => setNoiseFrom(e.target.value)}
+                      />
+                    </div>
                     <div className="space-y-1">
                       <Label htmlFor="noise-until">Até</Label>
                       <Input

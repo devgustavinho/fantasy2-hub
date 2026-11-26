@@ -52,6 +52,7 @@ export type HorariosBundle = {
     blockedDays: BlockedDay[];
   };
   convivencia: {
+    noiseFrom: string;
     noiseUntil: string;
     assemblyRef: string | null;
     updatedAt: string | null;
@@ -76,6 +77,7 @@ export type HorariosStatus = {
   };
   noiseNow: {
     allowed: boolean;
+    noiseFrom: string;
     noiseUntil: string;
     reason: string;
   };
@@ -110,5 +112,8 @@ export const addBlockedDay = (data: { date: string; reason: string; source?: Blo
 export const deleteBlockedDay = (id: string) =>
   api.delete<{ ok: true }>(`/horarios/mudanca/blocked/${id}`);
 
-export const updateConvivencia = (data: { noiseUntil: string; assemblyRef?: string | null }) =>
-  api.put<{ convivencia: HorariosBundle["convivencia"] }>("/horarios/convivencia", data);
+export const updateConvivencia = (data: {
+  noiseFrom: string;
+  noiseUntil: string;
+  assemblyRef?: string | null;
+}) => api.put<{ convivencia: HorariosBundle["convivencia"] }>("/horarios/convivencia", data);

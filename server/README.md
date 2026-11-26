@@ -243,7 +243,7 @@ UI: `/documentos` (Mais → Documentos). Lista via `GET /docs`; pronta para novo
 
 ## Horários (áreas, mudanças, convivência)
 
-`src/modules/horarios/` — fuso `America/Fortaleza`. Migration `0035_horarios.sql`.
+`src/modules/horarios/` — fuso `America/Fortaleza` (via `Intl`, independente do TZ do processo). Migrations `0035_horarios.sql` + `0046_noise_from.sql` (`noise_from` default `07:00`, janela `[noise_from, noise_until)`).
 
 | Peça | Detalhe |
 |---|---|
