@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { PendingApproval } from "@/components/PendingApproval";
 import { useAuth } from "@/contexts/AuthContext";
+import { activeIsAdmin, activeIsStaff } from "@/lib/roles";
 import Landing from "@/pages/Landing";
 
 function ApprovalGate() {
@@ -46,7 +47,7 @@ export function StaffRoute() {
   const redirect = useLoginRedirect();
   if (loading) return null;
   if (!user) return redirect;
-  if (user.role !== "admin" && user.role !== "sindico") return <Navigate to="/" replace />;
+  if (!activeIsStaff(user.role)) return <Navigate to="/" replace />;
   return <ApprovalGate />;
 }
 
@@ -56,6 +57,6 @@ export function AdminOnlyRoute() {
   const redirect = useLoginRedirect();
   if (loading) return null;
   if (!user) return redirect;
-  if (user.role !== "admin") return <Navigate to="/" replace />;
+  if (!activeIsAdmin(user.role)) return <Navigate to="/" replace />;
   return <ApprovalGate />;
 }

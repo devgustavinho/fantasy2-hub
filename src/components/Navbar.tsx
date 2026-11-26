@@ -24,9 +24,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { NotificationBell } from "@/components/NotificationBell";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { FloatingDock, type FloatingDockItem } from "@/components/ui/floating-dock";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
-import { roleLabel, userRoles } from "@/lib/roles";
+import { activeIsAdmin, activeIsStaff, homePathForRole, userRoles } from "@/lib/roles";
 
 export function TopBar() {
   const { user, logout } = useAuth();
@@ -39,26 +40,18 @@ export function TopBar() {
 
   if (!user) return null;
 
-  const roles = userRoles(user);
-  const multiRole = roles.length > 1;
+  const multiRole = userRoles(user).length > 1;
+  const homeHref = homePathForRole(user.role);
 
   return (
     <header className="border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
-        <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold tracking-wide">
+        <Link to={homeHref} className="flex min-w-0 items-center gap-2 font-semibold tracking-wide">
           <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 shrink-0 rounded-full" />
           <span className="hidden truncate text-brand-gold sm:inline">Fantasy 2 Hub</span>
         </Link>
         <div className="flex shrink-0 items-center gap-2 text-sm sm:gap-3">
-          {multiRole && (
-            <Link
-              to="/perfil"
-              className="max-w-[7.5rem] truncate rounded-full border border-brand-gold/40 bg-white/10 px-2.5 py-1 text-xs text-brand-gold transition-colors hover:bg-white/15"
-              title="Trocar modo de visualização"
-            >
-              {roleLabel(user.role)}
-            </Link>
-          )}
+          {multiRole && <RoleSwitcher />}
           <NotificationBell />
           <Link
             to="/perfil"
@@ -102,8 +95,8 @@ export function BottomDock() {
 
   if (!user) return null;
 
-  const isStaff = user.role === "admin" || user.role === "sindico";
-  const isAdmin = user.role === "admin";
+  const staffMode = activeIsStaff(user.role);
+  const isAdmin = activeIsAdmin(user.role);
   const onAdminRoute = location.pathname.startsWith("/admin");
 
   const moreLinks: SheetLink[] = [
@@ -156,9 +149,8 @@ export function BottomDock() {
     (href) => location.pathname === href || location.pathname.startsWith(`${href}/`),
   );
 
-  // Dock enxuto no celular: atalhos principais + "Mais" (sheet) + Admin (staff).
-  // Evita 9–10 ícones estourando ~390px de largura.
-  const items: FloatingDockItem[] = [
+  // Dois modos exclusivos: morador/conselheiro OU admin/síndico — nunca misturados.
+  const residentItems: FloatingDockItem[] = [
     { title: "Início", icon: <Home className="h-full w-full" />, href: "/" },
     { title: "Pautas", icon: <ClipboardList className="h-full w-full" />, href: "/pautas" },
     { title: "Negócios", icon: <ShoppingBag className="h-full w-full" />, href: "/negocios" },
@@ -169,42 +161,47 @@ export function BottomDock() {
       onClick: () => setMoreOpen(true),
       active: onMoreRoute || moreOpen,
     },
-    ...(isStaff
-      ? [
-          {
-            title: "Admin",
-            icon: <Shield className="h-full w-full" />,
-            onClick: () => setAdminOpen(true),
-            active: onAdminRoute || adminOpen,
-          },
-        ]
-      : []),
   ];
 
-  const adminLinks: SheetLink[] = [
+  const onUsuarios = location.pathname.startsWith("/admin/usuarios");
+  const onMelhorias =
+    location.pathname === "/melhorias" || location.pathname.startsWith("/melhorias/");
+  const staffItems: FloatingDockItem[] = [
     {
       title: "Painel",
+      icon: <LayoutDashboard className="h-full w-full" />,
       href: "/admin",
-      icon: <LayoutDashboard className="h-5 w-5" />,
-      description: "Pautas por engajamento e acessos",
+      active: location.pathname === "/admin",
     },
+    {
+      title: "Usuários",
+      icon: <Users className="h-full w-full" />,
+      href: "/admin/usuarios",
+      active: onUsuarios,
+    },
+    {
+      title: "Melhorias",
+      icon: <Columns3 className="h-full w-full" />,
+      href: "/melhorias",
+      active: onMelhorias,
+    },
+    {
+      title: "Admin",
+      icon: <Shield className="h-full w-full" />,
+      onClick: () => setAdminOpen(true),
+      active:
+        adminOpen || (onAdminRoute && location.pathname !== "/admin" && !onUsuarios),
+    },
+  ];
+
+  const items = staffMode ? staffItems : residentItems;
+
+  const adminLinks: SheetLink[] = [
     {
       title: "Configurações",
       href: "/admin/configuracoes",
       icon: <Settings2 className="h-5 w-5" />,
       description: "Boas-vindas, RAG, horários, FAQ e integrações",
-    },
-    {
-      title: "Melhorias",
-      href: "/melhorias",
-      icon: <Columns3 className="h-5 w-5" />,
-      description: "Quadro de sugestões do Portal",
-    },
-    {
-      title: "Usuários",
-      href: "/admin/usuarios",
-      icon: <Users className="h-5 w-5" />,
-      description: "Moradores, cargos e aprovações",
     },
     ...(isAdmin
       ? [
@@ -269,23 +266,27 @@ export function BottomDock() {
         <FloatingDock items={items} className="max-w-full" />
       </div>
 
-      <BottomSheet
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        title="Mais"
-        description="Outras áreas do condomínio."
-      >
-        {renderSheetLinks(moreLinks, () => setMoreOpen(false))}
-      </BottomSheet>
+      {!staffMode && (
+        <BottomSheet
+          open={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          title="Mais"
+          description="Outras áreas do condomínio."
+        >
+          {renderSheetLinks(moreLinks, () => setMoreOpen(false))}
+        </BottomSheet>
+      )}
 
-      <BottomSheet
-        open={adminOpen}
-        onClose={() => setAdminOpen(false)}
-        title="Administração"
-        description="Atalhos do painel — pensado para o celular."
-      >
-        {renderSheetLinks(adminLinks, () => setAdminOpen(false))}
-      </BottomSheet>
+      {staffMode && (
+        <BottomSheet
+          open={adminOpen}
+          onClose={() => setAdminOpen(false)}
+          title="Administração"
+          description="Mais atalhos do painel — pensado para o celular."
+        >
+          {renderSheetLinks(adminLinks, () => setAdminOpen(false))}
+        </BottomSheet>
+      )}
     </>
   );
 }

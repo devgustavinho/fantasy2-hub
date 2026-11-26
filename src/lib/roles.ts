@@ -36,6 +36,20 @@ export function roleRequires2fa(role: Role) {
   return PRIVILEGED_ROLES.includes(role);
 }
 
+/** Visão ativa é staff (dock / rotas admin) — não membership. */
+export function activeIsStaff(role: Role | null | undefined) {
+  return role === "admin" || role === "sindico";
+}
+
+export function activeIsAdmin(role: Role | null | undefined) {
+  return role === "admin";
+}
+
+/** Destino após trocar o modo de visualização. */
+export function homePathForRole(role: Role) {
+  return activeIsStaff(role) ? "/admin" : "/";
+}
+
 export function needsTotpSetup(user: Pick<User, "role" | "roles" | "totpEnabled"> | null | undefined) {
   if (!user) return false;
   return hasAnyPrivilegedRole(user) && !user.totpEnabled;
