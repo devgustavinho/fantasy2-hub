@@ -20,7 +20,7 @@ function layout({ heading, bodyHtml, ctaText, ctaUrl }) {
             <tr>
               <td style="background:#01323c;padding:16px 32px;border-top:3px solid #ec1349">
                 <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                  <td style="padding-right:10px"><img src="${frontUrl("/logo.png")}" width="32" height="32" alt="" style="border-radius:999px;display:block"/></td>
+                  <td style="padding-right:10px"><img src="${frontUrl("/logo.png")}" width="32" height="32" alt="Fantasy 2 comunidade" style="border-radius:999px;display:block;object-fit:cover"/></td>
                   <td style="color:#ffad33;font-size:18px;font-weight:700">Fantasy 2 Hub</td>
                 </tr></table>
               </td>

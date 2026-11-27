@@ -232,7 +232,7 @@ export function DesktopSidebar() {
     >
       <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-4">
         <Link to={homeHref} className="flex min-w-0 items-center gap-2.5 font-semibold tracking-wide">
-          <img src="/logo.png" alt="" className="h-9 w-9 shrink-0 rounded-full" />
+          <img src="/logo.png" alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
           <span className="truncate text-brand-gold">Fantasy 2 Hub</span>
         </Link>
       </div>

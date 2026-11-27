@@ -66,7 +66,7 @@ export default function Register() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4 py-8">
       <div className="w-full max-w-lg space-y-6">
-      <img src="/logo.png" alt="Fantasy 2" className="mx-auto h-16 w-16" />
+      <img src="/logo.png" alt="Fantasy 2 comunidade" className="mx-auto h-16 w-16 rounded-full object-cover" />
       <GradientBorderCard>
       <Card className="border-none shadow-none">
         <CardHeader>

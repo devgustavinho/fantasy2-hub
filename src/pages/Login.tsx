@@ -117,7 +117,7 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4">
       <div className="w-full max-w-sm space-y-6">
-        <img src="/logo.png" alt="Fantasy 2" className="mx-auto h-20 w-20" />
+        <img src="/logo.png" alt="Fantasy 2 comunidade" className="mx-auto h-20 w-20 rounded-full object-cover" />
         <GradientBorderCard>
           <Card className="border-none shadow-none">
             {view.name === "email" && (
