@@ -343,7 +343,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "list_recommendations",
-    "Lista Contatos do condomínio (nome, tipo de serviço, WhatsApp/Instagram). Sem tags; média < 3 não aparece.",
+    "Lista Contatos do condomínio (nome, tipo de serviço, WhatsApp/Instagram). Sem tags nem avaliações.",
     {},
     async () => api.get("/recommendations"),
   );
@@ -375,7 +375,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "update_recommendation",
-    "Edita contato próprio do condomínio.",
+    "Edita um contato do condomínio (próprio ou, se admin/síndico, qualquer um).",
     {
       id: z.string().min(1),
       name: z.string().min(2).max(120),
