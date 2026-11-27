@@ -13,6 +13,8 @@ export function wahaRoutes() {
       configured: isWahaConfigured(),
       session: env.WAHA_SESSION || null,
       groupConfigured: Boolean(env.WAHA_GROUP_ID),
+      botPhoneConfigured: Boolean(String(env.WAHA_BOT_PHONE || "").trim()),
+      botLidConfigured: Boolean(String(env.WAHA_BOT_LID || "").trim()),
       summaryAllowlistConfigured: Boolean(String(env.WAHA_SUMMARY_ALLOWLIST || "").trim()),
     });
   });

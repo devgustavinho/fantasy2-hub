@@ -14,7 +14,20 @@ export function normalizeEvent(event) {
     ? String(payload.participant || payload.author || "")
     : chatId;
   const meId = event?.me?.id ? String(event.me.id) : "";
+  // WAHA/GOWS pode expor o LID do próprio bot em me.lid (issue #1015).
+  const meLid = event?.me?.lid
+    ? String(event.me.lid)
+    : event?.me?.Lid
+      ? String(event.me.Lid)
+      : "";
   const botPhone = digitsOnly(env.WAHA_BOT_PHONE) || phoneFromJid(meId);
+  const botLidEnvRaw = String(env.WAHA_BOT_LID || "").trim();
+  const botLidFromEnv = botLidEnvRaw
+    ? botLidEnvRaw.includes("@")
+      ? botLidEnvRaw
+      : `${digitsOnly(botLidEnvRaw)}@lid`
+    : "";
+  const botLid = botLidFromEnv || meLid;
 
   return {
     eventName: String(event?.event || ""),
@@ -31,6 +44,8 @@ export function normalizeEvent(event) {
     senderPhone: phoneFromJid(senderJid) || phoneFromJid(chatId),
     botPhone,
     meId,
+    meLid,
+    botLid,
     replyTo: extractReplyTo(payload),
     mentionIds: extractMentionIds(payload),
     raw: payload,
@@ -82,21 +97,35 @@ function extractReplyTo(payload) {
 /**
  * Coleta JIDs mencionados no payload WAHA (mentionedIds / mentions / @lid / contextInfo).
  * Não usa o texto da mensagem — só campos estruturados do envelope.
+ * Cobre NOWEB (camelCase) e GOWS (PascalCase / Info.Message).
  */
 export function extractMentionIds(payload) {
   const out = new Set();
+  const data = payload._data || {};
+  const extCtx =
+    data.message?.extendedTextMessage?.contextInfo ||
+    data.Message?.extendedTextMessage?.contextInfo ||
+    data.Message?.ExtendedTextMessage?.ContextInfo ||
+    data.Info?.Message?.extendedTextMessage?.contextInfo ||
+    data.Info?.Message?.ExtendedTextMessage?.ContextInfo ||
+    null;
   const lists = [
     payload.mentionIds,
     payload.mentionedIds,
     payload.mentionedJids,
     payload.mentions,
-    payload._data?.mentionedJidList,
-    payload._data?.mentionedJid,
-    payload._data?.mentions,
-    payload._data?.ContextInfo?.mentionedJid,
-    payload._data?.contextInfo?.mentionedJid,
-    payload._data?.message?.extendedTextMessage?.contextInfo?.mentionedJid,
-    payload._data?.message?.extendedTextMessage?.contextInfo?.mentionedJidList,
+    data.mentionedJidList,
+    data.mentionedJid,
+    data.MentionedJid,
+    data.mentions,
+    data.ContextInfo?.mentionedJid,
+    data.ContextInfo?.MentionedJid,
+    data.contextInfo?.mentionedJid,
+    data.contextInfo?.MentionedJid,
+    extCtx?.mentionedJid,
+    extCtx?.mentionedJidList,
+    extCtx?.MentionedJid,
+    extCtx?.MentionedJidList,
   ];
   for (const list of lists) {
     if (!list) continue;
@@ -105,7 +134,7 @@ export function extractMentionIds(payload) {
       const jid =
         typeof item === "string"
           ? item
-          : item?.id || item?._serialized || item?.jid || item?.user;
+          : item?.id || item?._serialized || item?.jid || item?.user || item?.JID || item?.Lid;
       if (jid) out.add(String(jid));
     }
   }
@@ -114,8 +143,12 @@ export function extractMentionIds(payload) {
 
 /**
  * True se o JID mencionado (telefone @c.us / @lid / etc.) é a identidade do bot.
+ * @param {string} mentionJid
+ * @param {string} botPhone
+ * @param {string} meId
+ * @param {string} [botLid] LID conhecido do bot (`…@lid`)
  */
-export function mentionMatchesBot(mentionJid, botPhone, meId) {
+export function mentionMatchesBot(mentionJid, botPhone, meId, botLid = "") {
   if (!mentionJid) return false;
   const mid = String(mentionJid);
   const midBase = mid.split("@")[0]?.split(":")[0] || "";
@@ -128,12 +161,38 @@ export function mentionMatchesBot(mentionJid, botPhone, meId) {
     if (phonesMatch(mid, me) || phoneFromJid(mid) === phoneFromJid(me)) return true;
   }
 
+  if (botLid) {
+    const lid = String(botLid);
+    if (mid === lid) return true;
+    const lidBase = lid.split("@")[0]?.split(":")[0] || "";
+    if (midBase && lidBase && midBase === lidBase) return true;
+  }
+
   if (botPhone) {
+    // Menção @lid NÃO casa com telefone por dígitos — LIDs não são E.164.
+    if (mid.endsWith("@lid")) return false;
     if (phonesMatch(mid, botPhone) || phoneFromJid(mid) === digitsOnly(botPhone)) {
       return true;
     }
   }
 
+  return false;
+}
+
+/**
+ * @telefone / @últimos-dígitos no body — menção explícita quando o payload
+ * não traz mentionedIds (engines incompletos). Não casa a palavra "bot".
+ */
+export function bodyMentionsBotPhone(body, botPhone, botLid = "") {
+  const text = String(body || "");
+  const dig = digitsOnly(botPhone);
+  if (dig) {
+    if (new RegExp(`@${dig}\\b`, "i").test(text)) return true;
+    if (dig.length >= 8 && new RegExp(`@${dig.slice(-8)}\\b`, "i").test(text)) return true;
+    if (dig.length >= 9 && new RegExp(`@${dig.slice(-9)}\\b`, "i").test(text)) return true;
+  }
+  const lidDig = digitsOnly(botLid) || (String(botLid).includes("@lid") ? phoneFromJid(botLid) : "");
+  if (lidDig && new RegExp(`@${lidDig}\\b`, "i").test(text)) return true;
   return false;
 }
 
@@ -222,8 +281,9 @@ function offsetDayKey(offsetDays) {
 
 /**
  * No grupo: só responde se houver menção explícita no payload WAHA
- * (mentionedIds / mentions / @lid) ou reply a uma mensagem do bot.
- * NÃO dispara por substring "bot" / "@bot" no texto.
+ * (mentionedIds / mentions / @lid) — incluindo LID do bot —, @telefone/@lid
+ * no body, ou reply a uma mensagem do bot.
+ * NÃO dispara por substring "bot" / "@bot" no texto sem marcar o contato.
  * Em DM: qualquer mensagem (não fromMe) conta.
  */
 export function isAddressedToBot(msg) {
@@ -231,14 +291,20 @@ export function isAddressedToBot(msg) {
   if (!msg.isGroup) return true;
 
   const bot = msg.botPhone;
+  const botLid = msg.botLid || msg.meLid || "";
   for (const mid of msg.mentionIds || []) {
-    if (mentionMatchesBot(mid, bot, msg.meId)) return true;
+    if (mentionMatchesBot(mid, bot, msg.meId, botLid)) return true;
   }
 
   if (msg.replyTo?.fromMe) return true;
-  if (msg.replyTo?.participant && mentionMatchesBot(msg.replyTo.participant, bot, msg.meId)) {
+  if (
+    msg.replyTo?.participant &&
+    mentionMatchesBot(msg.replyTo.participant, bot, msg.meId, botLid)
+  ) {
     return true;
   }
+
+  if (bodyMentionsBotPhone(msg.body, bot, botLid)) return true;
 
   return false;
 }
