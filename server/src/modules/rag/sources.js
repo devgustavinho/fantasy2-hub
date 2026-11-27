@@ -45,18 +45,11 @@ const listServiceTags = sqlite.prepare(`
   WHERE st.service_id = ? ORDER BY t.name ASC
 `);
 
-// Contatos com média < 3 não entram no RAG (espelha CONTACT_MIN_AVG_RATING da API).
-const CONTACT_ELIGIBLE = `
-  (
-    (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = recommendations.id) = 0
-    OR (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = recommendations.id) >= 3
-  )
-`;
 const getRecommendation = sqlite.prepare(
-  `SELECT id, name, description, whatsapp, instagram FROM recommendations WHERE id = ? AND ${CONTACT_ELIGIBLE}`,
+  "SELECT id, name, description, whatsapp, instagram FROM recommendations WHERE id = ?",
 );
 const listRecommendations = sqlite.prepare(
-  `SELECT id, name, description, whatsapp, instagram FROM recommendations WHERE ${CONTACT_ELIGIBLE}`,
+  "SELECT id, name, description, whatsapp, instagram FROM recommendations",
 );
 const getTopic = sqlite.prepare(`
   SELECT id, title, description, status, status_note AS statusNote,

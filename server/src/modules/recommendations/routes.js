@@ -14,9 +14,6 @@ const MAX_MEDIA_PER_COMMENT = 4;
 const VIDEO_MIMETYPES = new Set(["video/mp4", "video/quicktime", "video/webm"]);
 const IMAGE_MIMETYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
-/** Média abaixo disso → ocultar na listagem e auto-excluir (purge) o contato. */
-export const CONTACT_MIN_AVG_RATING = 3;
-
 // Vídeo curto de celular passa fácil de alguns MB — bem mais que uma foto — daí o limite bem
 // mais alto que o das imagens de serviço (15MB).
 const upload = multer({
@@ -58,8 +55,6 @@ const contactSchema = z
     message: "Informe pelo menos um WhatsApp ou Instagram.",
   });
 
-const ratingSchema = z.object({ stars: z.coerce.number().int().min(1).max(5) });
-
 const commentSchema = z
   .object({ body: z.string().trim().max(2000).optional().nullable() })
   .transform((data) => ({ body: data.body || null }));
@@ -69,36 +64,16 @@ const getRecommendationById = sqlite.prepare("SELECT * FROM recommendations WHER
 const RECOMMENDATION_SELECT = `
   SELECT r.id, r.name, r.description, r.whatsapp, r.instagram, r.created_at AS createdAt,
          r.created_by AS createdById,
-         (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = r.id) AS ratingCount,
-         (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = r.id) AS avgRating,
          (SELECT COUNT(*) FROM recommendation_comments WHERE recommendation_id = r.id) AS commentCount
   FROM recommendations r
 `;
 
-// Contatos com média < CONTACT_MIN_AVG_RATING ficam ocultos (e devem ser purged no rating).
-const ELIGIBLE_AVG_SQL = `
-  (
-    (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = r.id) = 0
-    OR (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = r.id) >= ${CONTACT_MIN_AVG_RATING}
-  )
-`;
-
 const listRecommendationsBase = sqlite.prepare(
-  `${RECOMMENDATION_SELECT} WHERE ${ELIGIBLE_AVG_SQL} ORDER BY r.created_at DESC`,
+  `${RECOMMENDATION_SELECT} ORDER BY r.created_at DESC`,
 );
 const getRecommendationWithStats = sqlite.prepare(
-  `${RECOMMENDATION_SELECT} WHERE r.id = ? AND ${ELIGIBLE_AVG_SQL}`,
+  `${RECOMMENDATION_SELECT} WHERE r.id = ?`,
 );
-
-const getMyRating = sqlite.prepare(
-  "SELECT stars FROM recommendation_ratings WHERE recommendation_id = ? AND user_id = ?",
-);
-
-const upsertRating = sqlite.prepare(`
-  INSERT INTO recommendation_ratings (id, recommendation_id, user_id, stars)
-  VALUES (@id, @recommendation_id, @user_id, @stars)
-  ON CONFLICT(recommendation_id, user_id) DO UPDATE SET stars = excluded.stars, updated_at = @updated_at
-`);
 
 const listCommentsByRecommendation = sqlite.prepare(`
   SELECT c.id, c.body, c.created_at AS createdAt, c.user_id AS userId, u.name AS userName
@@ -139,16 +114,9 @@ const updateRecommendation = sqlite.prepare(`
 
 const deleteRecommendationById = sqlite.prepare("DELETE FROM recommendations WHERE id = ?");
 
-const listLowRatedIds = sqlite.prepare(`
-  SELECT r.id
-  FROM recommendations r
-  WHERE (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = r.id) > 0
-    AND (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = r.id) < ${CONTACT_MIN_AVG_RATING}
-`);
-
 /**
  * Serializa contato sem expor nome de quem cadastrou (admins incluídos).
- * Tags não fazem parte desta feature — sempre [].
+ * Tags e avaliações não fazem parte desta feature.
  */
 function serializeRecommendation(row) {
   return {
@@ -159,8 +127,6 @@ function serializeRecommendation(row) {
     instagram: row.instagram,
     createdAt: row.createdAt,
     createdBy: { id: row.createdById },
-    ratingCount: row.ratingCount,
-    avgRating: row.avgRating,
     commentCount: row.commentCount,
     tags: [],
   };
@@ -202,38 +168,9 @@ function deleteContactAssets(recommendationId) {
   removeDocument("recommendation", recommendationId);
 }
 
-/**
- * Purge: apaga do banco + índice RAG contatos com média < CONTACT_MIN_AVG_RATING.
- * Chamado no boot do router e após cada rating que derruba a média.
- */
-function purgeLowRatedContacts() {
-  const ids = listLowRatedIds.all().map((r) => r.id);
-  for (const id of ids) {
-    const row = getRecommendationById.get(id);
-    if (!row) continue;
-    deleteContactAssets(id);
-    recordAudit({
-      actorUserId: null,
-      actorName: "sistema",
-      action: "recommendations.auto_purge_low_rating",
-      entityType: "recommendation",
-      entityId: id,
-      details: { name: row.name, reason: `avgRating < ${CONTACT_MIN_AVG_RATING}` },
-    });
-  }
-  return ids.length;
-}
-
 export function recommendationsRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
-
-  // Limpa legado/órfãos com nota baixa (hide + purge).
-  try {
-    purgeLowRatedContacts();
-  } catch (err) {
-    console.error("[contatos] falha ao purgar notas baixas:", err?.message || err);
-  }
 
   router.get("/", (_req, res) => {
     // Tags não filtram mais esta feature.
@@ -248,7 +185,6 @@ export function recommendationsRoutes() {
     res.json({
       recommendation: serializeRecommendation(recommendation),
       comments: listCommentsByRecommendation.all(recommendation.id).map(serializeComment),
-      myRating: getMyRating.get(recommendation.id, req.user.id)?.stars ?? null,
     });
   });
 
@@ -335,42 +271,6 @@ export function recommendationsRoutes() {
     });
 
     res.status(204).end();
-  });
-
-  router.put("/:id/rating", (req, res) => {
-    const recommendation = getRecommendationById.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
-
-    const parsed = ratingSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Escolha uma nota de 1 a 5 estrelas." });
-
-    upsertRating.run({
-      id: randomUUID(),
-      recommendation_id: recommendation.id,
-      user_id: req.user.id,
-      stars: parsed.data.stars,
-      updated_at: nowIso(),
-    });
-
-    const updated = getRecommendationWithStats.get(recommendation.id);
-    // Hide + purge: média < 3 remove o contato do hub e do RAG.
-    if (!updated) {
-      deleteContactAssets(recommendation.id);
-      recordAudit({
-        actorUserId: req.user.id,
-        actorName: req.user.name,
-        action: "recommendations.auto_purge_low_rating",
-        entityType: "recommendation",
-        entityId: recommendation.id,
-        details: { name: recommendation.name, reason: `avgRating < ${CONTACT_MIN_AVG_RATING}` },
-      });
-      return res.status(200).json({
-        purged: true,
-        message: `Contato removido automaticamente por avaliação média abaixo de ${CONTACT_MIN_AVG_RATING}.`,
-      });
-    }
-
-    res.json({ recommendation: serializeRecommendation(updated) });
   });
 
   // Comentários mantidos na API por compat (MCP legado); a UI de Contatos não usa mais.

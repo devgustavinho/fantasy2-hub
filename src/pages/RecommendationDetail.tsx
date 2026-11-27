@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { StarRating } from "@/components/StarRating";
 import { useAuth } from "@/contexts/AuthContext";
 import * as recommendationsService from "@/services/recommendations";
 import { buildInstagramLink, buildWhatsAppLink } from "@/lib/utils";
@@ -35,18 +34,6 @@ export default function RecommendationDetail() {
     queryClient.invalidateQueries({ queryKey: ["recommendation", id] });
     queryClient.invalidateQueries({ queryKey: ["recommendations"] });
   }
-
-  const rateMutation = useMutation({
-    mutationFn: (stars: number) => recommendationsService.rateRecommendation(id!, stars),
-    onSuccess: (result) => {
-      if ("purged" in result && result.purged) {
-        queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-        navigate("/contatos-condominio");
-        return;
-      }
-      invalidate();
-    },
-  });
 
   const editMutation = useMutation({
     mutationFn: () =>
@@ -90,7 +77,7 @@ export default function RecommendationDetail() {
     );
   }
 
-  const { recommendation, myRating } = data;
+  const { recommendation } = data;
   const isOwner = user?.id === recommendation.createdBy.id;
   const isStaff = user?.role === "admin" || user?.role === "sindico";
   const canDelete = isOwner || isStaff;
@@ -215,24 +202,6 @@ export default function RecommendationDetail() {
                 </a>
               </Button>
             )}
-          </div>
-
-          <div className="flex items-center gap-3 border-t pt-4">
-            <StarRating value={recommendation.avgRating ?? 0} />
-            <span className="text-sm text-muted-foreground">
-              {recommendation.avgRating ? recommendation.avgRating.toFixed(1) : "Sem avaliações"}
-              {recommendation.ratingCount > 0 ? ` (${recommendation.ratingCount} avaliações)` : ""}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <span className="text-sm">Sua avaliação:</span>
-              <StarRating value={myRating ?? 0} onChange={(stars) => rateMutation.mutate(stars)} size="lg" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Contatos com média abaixo de 3 estrelas são removidos automaticamente.
-            </p>
           </div>
         </CardContent>
       </Card>

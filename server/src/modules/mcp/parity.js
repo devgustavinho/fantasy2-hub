@@ -79,7 +79,6 @@ export const MCP_COVERAGE = {
   "POST /recommendations": "create_recommendation",
   "PATCH /recommendations/:id": "update_recommendation",
   "DELETE /recommendations/:id": "delete_recommendation",
-  "PUT /recommendations/:id/rating": "rate_recommendation",
   "POST /recommendations/:id/comments": "comment_recommendation",
   "DELETE /recommendations/:id/comments/:commentId": "delete_recommendation_comment",
 

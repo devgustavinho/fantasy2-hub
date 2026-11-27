@@ -200,7 +200,7 @@ Auditado: `tags.create`, `tags.delete`.
 `src/modules/rag/` — índice semântico no SQLite (`rag_documents` + `rag_chunks` com embeddings
 `text-embedding-3-small`). Fontes: FAQ, boas-vindas, **horários** (convivência/silêncio, áreas comuns,
 janelas de mudança — **sem** senhas de Wi‑Fi), serviços, contatos do condomínio (ex-recomendações;
-média &lt; 3 fora do índice), campos oficiais de pautas (sem comentários/PII de clima), embeds
+sem avaliações), campos oficiais de pautas (sem comentários/PII de clima), embeds
 externos e **Manual do Proprietário**
 (`source_type=manual`, texto em `assets/docs/manual-do-proprietario.txt`).
 

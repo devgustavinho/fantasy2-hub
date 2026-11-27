@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { QueryError } from "@/components/QueryError";
-import { StarRating } from "@/components/StarRating";
 import * as recommendationsService from "@/services/recommendations";
 import { buildInstagramLink, buildWhatsAppLink } from "@/lib/utils";
 
@@ -162,15 +161,6 @@ export default function RecommendationsList() {
                   </Button>
                 )}
               </div>
-              {(rec.ratingCount > 0 || rec.avgRating) && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <StarRating value={rec.avgRating ?? 0} size="sm" />
-                  <span>
-                    {rec.avgRating ? rec.avgRating.toFixed(1) : "—"}
-                    {rec.ratingCount > 0 ? ` (${rec.ratingCount})` : ""}
-                  </span>
-                </div>
-              )}
             </CardContent>
           </Card>
         ))}

@@ -5,7 +5,7 @@ export const listRecommendations = () =>
   api.get<{ recommendations: Recommendation[] }>("/recommendations");
 
 export const getRecommendation = (id: string) =>
-  api.get<{ recommendation: Recommendation; comments: RecommendationComment[]; myRating: number | null }>(
+  api.get<{ recommendation: Recommendation; comments: RecommendationComment[] }>(
     `/recommendations/${id}`,
   );
 
@@ -23,12 +23,6 @@ export const updateRecommendation = (id: string, data: RecommendationInput) =>
   api.patch<{ recommendation: Recommendation }>(`/recommendations/${id}`, data);
 
 export const deleteRecommendation = (id: string) => api.delete<void>(`/recommendations/${id}`);
-
-export const rateRecommendation = (id: string, stars: number) =>
-  api.put<{ recommendation?: Recommendation; purged?: boolean; message?: string }>(
-    `/recommendations/${id}/rating`,
-    { stars },
-  );
 
 export const addRecommendationComment = (id: string, body: string, media: File[]) => {
   const form = new FormData();
