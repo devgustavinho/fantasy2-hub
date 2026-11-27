@@ -401,18 +401,6 @@ export function registerToolsForUser(server, api, user) {
 
   tool(
     server,
-    "rate_recommendation",
-    "Avalia um contato (1 a 5). Média < 3 remove o contato automaticamente.",
-    {
-      id: z.string().min(1),
-      stars: z.number().int().min(1).max(5),
-    },
-    async ({ id, stars }) => api.put(`/recommendations/${id}/rating`, { stars }),
-  );
-  add("rate_recommendation");
-
-  tool(
-    server,
     "comment_recommendation",
     "Comenta num contato (legado; a UI de Contatos não usa comentários).",
     {

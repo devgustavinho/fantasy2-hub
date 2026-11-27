@@ -224,8 +224,6 @@ export interface Recommendation {
   instagram: string | null;
   createdAt: string;
   createdBy: RecommendationAuthor;
-  ratingCount: number;
-  avgRating: number | null;
   commentCount: number;
   /** Sempre vazio — tags não afetam Contatos do condomínio. */
   tags: Tag[];

@@ -94,7 +94,7 @@ deste fluxo. Mantenha `mcp/src/tools.js` em paridade com `server/src/modules/mcp
 `update_my_service`, `delete_my_service`, `set_my_service_tags`,
 `add_my_service_item`, `update_my_service_item`, `delete_my_service_item`, `set_my_service_item_option_groups`,
 `list_recommendations`, `get_recommendation`, `create_recommendation`, `update_recommendation`,
-`delete_recommendation`, `rate_recommendation`, `comment_recommendation`, `delete_recommendation_comment`,
+`delete_recommendation`, `comment_recommendation`, `delete_recommendation_comment`,
 `list_faq`, `ask_condo`, `get_rag_status`, `list_tags`,
 `list_climate`, `get_climate`, `respond_climate`,
 `list_improvements`, `create_improvement`, `delete_improvement`,
