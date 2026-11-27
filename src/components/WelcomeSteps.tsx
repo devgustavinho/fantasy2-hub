@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import type { GroupLinksForUser } from "@/lib/types";
 import * as groupLinksService from "@/services/groupLinks";
 
 type StepId = "general" | "tower" | "tutorial";
@@ -99,24 +100,42 @@ function InviteActions({
   );
 }
 
-export function WelcomeSteps() {
+type WelcomeStepsProps = {
+  /** Admin preview: usa links mock e não grava progresso no aparelho. */
+  preview?: boolean;
+  mockLinks?: GroupLinksForUser;
+};
+
+export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps = {}) {
   const { user } = useAuth();
-  const userId = user?.id ?? "anon";
-  const [done, setDone] = useState(() => readProgress(userId));
+  const userId = preview ? "preview" : (user?.id ?? "anon");
+  const [done, setDone] = useState<Partial<Record<StepId, boolean>>>(() =>
+    preview ? {} : readProgress(userId),
+  );
   const [active, setActive] = useState<StepId>(() => {
+    if (preview) return "general";
     const progress = readProgress(userId);
     return STEPS.find((s) => !progress[s.id])?.id ?? "tutorial";
   });
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["group-links"],
-    queryFn: groupLinksService.getGroupLinks,
+    queryKey: preview ? ["group-links", "preview"] : ["group-links"],
+    queryFn: () =>
+      preview
+        ? Promise.resolve(
+            mockLinks ?? {
+              generalUrl: "https://chat.whatsapp.com/preview-grupo-geral",
+              tower: 3,
+              towerUrl: "https://chat.whatsapp.com/preview-torre-3",
+            },
+          )
+        : groupLinksService.getGroupLinks(),
   });
 
   function mark(step: StepId) {
     const next = { ...done, [step]: true };
     setDone(next);
-    writeProgress(userId, next);
+    if (!preview) writeProgress(userId, next);
     const following = STEPS.find((s) => !next[s.id]);
     if (following) setActive(following.id);
   }
