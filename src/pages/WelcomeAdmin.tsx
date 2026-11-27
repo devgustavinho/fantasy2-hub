@@ -161,7 +161,7 @@ function GroupLinksAdminCard() {
       <CardHeader>
         <CardTitle className="text-base">Links dos grupos WhatsApp</CardTitle>
         <CardDescription>
-          Convites que o morador vê no FAQ (primeiros passos). Use links https de convite do
+          Convites do fluxo de boas-vindas no Portal e do FAQ (primeiros passos). Use links https de convite do
           WhatsApp.
         </CardDescription>
       </CardHeader>

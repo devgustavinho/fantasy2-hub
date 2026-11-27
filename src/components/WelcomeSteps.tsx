@@ -1,18 +1,23 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, SkipForward } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { GroupInviteActions } from "@/components/GroupInviteActions";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import {
+  readWelcomeProgress,
+  writeWelcomeProgress,
+  type WelcomeProgress,
+  type WelcomeStepId,
+} from "@/lib/welcomeProgress";
 import type { GroupLinksForUser } from "@/lib/types";
 import * as groupLinksService from "@/services/groupLinks";
 
-type StepId = "general" | "tower" | "tutorial";
-
-const STEPS: { id: StepId; title: string; blurb: string }[] = [
+const STEPS: { id: WelcomeStepId; title: string; blurb: string }[] = [
   {
     id: "general",
     title: "Grupo geral Fantasy 2",
@@ -25,80 +30,10 @@ const STEPS: { id: StepId; title: string; blurb: string }[] = [
   },
   {
     id: "tutorial",
-    title: "Conhecer o Hub",
-    blurb: "Um passeio rápido pelas funções do dia a dia (visão de morador).",
+    title: "Conheça o Hub",
+    blurb: "Explore a página inicial e o app no seu ritmo — sem checklist obrigatório.",
   },
 ];
-
-const TUTORIAL_LINKS: { to: string; label: string; tip: string }[] = [
-  { to: "/", label: "Início", tip: "Resumo de pautas e o que está aberto agora." },
-  { to: "/pautas", label: "Pautas", tip: "Sugira temas, vote e comente." },
-  { to: "/negocios", label: "Negócios", tip: "Serviços de moradores do Fantasy 2." },
-  { to: "/contatos-condominio", label: "Contatos do condomínio", tip: "Prestadores e comércios úteis." },
-  { to: "/horarios", label: "Horários", tip: "Áreas comuns, silêncio e mudanças." },
-  { to: "/faq", label: "FAQ", tip: "Dúvidas frequentes — e estes primeiros passos." },
-  { to: "/perguntar", label: "Perguntar", tip: "Pergunte ao conhecimento do condomínio." },
-  { to: "/documentos", label: "Documentos", tip: "Manual do Proprietário e afins." },
-  { to: "/perfil", label: "Perfil", tip: "Passkey, notificações e dados da conta." },
-];
-
-function progressKey(userId: string) {
-  return `f2hub_welcome_steps_${userId}`;
-}
-
-function readProgress(userId: string): Partial<Record<StepId, boolean>> {
-  try {
-    const raw = localStorage.getItem(progressKey(userId));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Partial<Record<StepId, boolean>>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeProgress(userId: string, next: Partial<Record<StepId, boolean>>) {
-  try {
-    localStorage.setItem(progressKey(userId), JSON.stringify(next));
-  } catch {
-    // modo privado — progresso só nesta sessão
-  }
-}
-
-function InviteActions({
-  url,
-  missingLabel,
-}: {
-  url: string | null;
-  missingLabel: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  if (!url) {
-    return <p className="text-sm text-muted-foreground">{missingLabel}</p>;
-  }
-
-  async function copy() {
-    await navigator.clipboard.writeText(url!);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Button asChild size="sm">
-        <a href={url} target="_blank" rel="noopener noreferrer">
-          <ExternalLink className="h-3.5 w-3.5" />
-          Abrir convite
-        </a>
-      </Button>
-      <Button type="button" size="sm" variant="outline" onClick={copy}>
-        <Copy className="h-3.5 w-3.5" />
-        {copied ? "Copiado" : "Copiar link"}
-      </Button>
-    </div>
-  );
-}
 
 type WelcomeStepsProps = {
   /** Admin preview: usa links mock e não grava progresso no aparelho. */
@@ -109,12 +44,10 @@ type WelcomeStepsProps = {
 export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps = {}) {
   const { user } = useAuth();
   const userId = preview ? "preview" : (user?.id ?? "anon");
-  const [done, setDone] = useState<Partial<Record<StepId, boolean>>>(() =>
-    preview ? {} : readProgress(userId),
-  );
-  const [active, setActive] = useState<StepId>(() => {
+  const [done, setDone] = useState<WelcomeProgress>(() => (preview ? {} : readWelcomeProgress(userId)));
+  const [active, setActive] = useState<WelcomeStepId>(() => {
     if (preview) return "general";
-    const progress = readProgress(userId);
+    const progress = readWelcomeProgress(userId);
     return STEPS.find((s) => !progress[s.id])?.id ?? "tutorial";
   });
 
@@ -132,16 +65,16 @@ export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps =
         : groupLinksService.getGroupLinks(),
   });
 
-  function mark(step: StepId) {
-    const next = { ...done, [step]: true };
+  function persist(next: WelcomeProgress) {
     setDone(next);
-    if (!preview) writeProgress(userId, next);
-    const following = STEPS.find((s) => !next[s.id]);
-    if (following) setActive(following.id);
+    if (!preview) writeWelcomeProgress(userId, next);
   }
 
-  function skip(step: StepId) {
-    mark(step);
+  function mark(step: WelcomeStepId) {
+    const next = { ...done, [step]: true };
+    persist(next);
+    const following = STEPS.find((s) => !next[s.id]);
+    if (following) setActive(following.id);
   }
 
   return (
@@ -149,8 +82,7 @@ export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps =
       <CardHeader>
         <CardTitle className="text-base">Primeiros passos</CardTitle>
         <CardDescription>
-          Fluxo de boas-vindas sempre disponível aqui no FAQ. Pode pular etapas e voltar quando
-          quiser.
+          Links dos grupos e um atalho para explorar o Hub. Pode voltar aqui quando quiser.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -192,19 +124,14 @@ export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps =
         {active === "general" && (
           <div className="space-y-3 rounded-md border bg-background p-3">
             <p className="text-sm">Abra o convite do grupo geral do Fantasy 2:</p>
-            <InviteActions
+            <GroupInviteActions
               url={data?.generalUrl ?? null}
               missingLabel="A administração ainda não configurou o link do grupo geral."
+              onOpen={() => mark("general")}
             />
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={() => mark("general")} disabled={!data?.generalUrl}>
-                Marcar como feito
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => skip("general")}>
-                <SkipForward className="h-3.5 w-3.5" />
-                Pular
-              </Button>
-            </div>
+            <Button type="button" size="sm" onClick={() => mark("general")}>
+              Próximo
+            </Button>
           </div>
         )}
 
@@ -218,51 +145,35 @@ export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps =
                 unidade associada.
               </p>
             )}
-            <InviteActions
+            <GroupInviteActions
               url={data?.towerUrl ?? null}
               missingLabel={
                 data?.tower != null
                   ? `A administração ainda não configurou o link da Torre ${data.tower}.`
                   : "Sem torre vinculada."
               }
+              onOpen={() => mark("tower")}
             />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => mark("tower")}
-                disabled={!data?.towerUrl}
-              >
-                Marcar como feito
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => skip("tower")}>
-                <SkipForward className="h-3.5 w-3.5" />
-                Pular
-              </Button>
-            </div>
+            <Button type="button" size="sm" onClick={() => mark("tower")}>
+              Próximo
+            </Button>
           </div>
         )}
 
         {active === "tutorial" && (
           <div className="space-y-3 rounded-md border bg-background p-3">
-            <p className="text-sm">Principais cantos do Hub para o morador:</p>
-            <ul className="space-y-2">
-              {TUTORIAL_LINKS.map((item) => (
-                <li key={item.to} className="text-sm">
-                  <Link to={item.to} className="font-medium text-primary underline-offset-2 hover:underline">
-                    {item.label}
-                  </Link>
-                  <span className="text-muted-foreground"> — {item.tip}</span>
-                </li>
-              ))}
-            </ul>
+            <p className="text-sm">
+              O Hub está liberado — comece pela página inicial e navegue pelas abas quando quiser.
+              Não há checklist obrigatório.
+            </p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={() => mark("tutorial")}>
-                Marcar como feito
+              <Button asChild size="sm">
+                <Link to="/" onClick={() => mark("tutorial")}>
+                  Ir para o início
+                </Link>
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => skip("tutorial")}>
-                <SkipForward className="h-3.5 w-3.5" />
-                Pular
+              <Button type="button" size="sm" variant="ghost" onClick={() => mark("tutorial")}>
+                Próximo
               </Button>
             </div>
           </div>
@@ -273,7 +184,7 @@ export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps =
           <div className="space-y-3">
             <div>
               <p className="mb-1 text-xs text-muted-foreground">Grupo geral</p>
-              <InviteActions
+              <GroupInviteActions
                 url={data?.generalUrl ?? null}
                 missingLabel="Link do grupo geral ainda não configurado."
               />
@@ -282,7 +193,7 @@ export function WelcomeSteps({ preview = false, mockLinks }: WelcomeStepsProps =
               <p className="mb-1 text-xs text-muted-foreground">
                 Grupo da torre{data?.tower != null ? ` (${data.tower})` : ""}
               </p>
-              <InviteActions
+              <GroupInviteActions
                 url={data?.towerUrl ?? null}
                 missingLabel={
                   data?.tower != null

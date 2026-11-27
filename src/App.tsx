@@ -5,12 +5,14 @@ import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/Protect
 import { TopBar, BottomDock } from "@/components/Navbar";
 import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { OnboardingBanner } from "@/components/OnboardingBanner";
+import { PortalWelcomeGate } from "@/components/PortalWelcomeGate";
 import { VisitBeacon } from "@/components/VisitBeacon";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ResetPassword from "@/pages/ResetPassword";
 import ForgotPassword from "@/pages/ForgotPassword";
 import Home from "@/pages/Home";
+import PortalWelcome from "@/pages/PortalWelcome";
 import TopicsList from "@/pages/TopicsList";
 import TopicsHistory from "@/pages/TopicsHistory";
 import TopicDetail from "@/pages/TopicDetail";
@@ -54,19 +56,26 @@ function RedirectRecomendacaoToContato() {
   return <Navigate to={`/contatos-condominio/${id}`} replace />;
 }
 
-function AppLayout({ children }: { children: React.ReactNode }) {
+function AppLayout({
+  children,
+  bare = false,
+}: {
+  children: React.ReactNode;
+  /** Wizard de boas-vindas: sem banner de dispositivo nem dock pesado. */
+  bare?: boolean;
+}) {
   // Shell de viewport: TopBar + main (scroll) + tab bar (mobile).
   // A tab bar fica FORA do main — não usa sticky/fixed e não some ao rolar.
   return (
     <div className="flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
-      <DesktopSidebar />
+      {!bare && <DesktopSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <TopBar />
-        <OnboardingBanner />
+        {!bare && <TopBar />}
+        {!bare && <OnboardingBanner />}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain md:px-2 lg:px-4">
-          {children}
+          <PortalWelcomeGate>{children}</PortalWelcomeGate>
         </main>
-        <BottomDock />
+        {!bare && <BottomDock />}
       </div>
     </div>
   );
@@ -86,6 +95,14 @@ export default function App() {
             <Route path="/boas-vindas" element={<Welcome />} />
 
             <Route element={<ProtectedRoute />}>
+              <Route
+                path="/primeiros-passos"
+                element={
+                  <AppLayout bare>
+                    <PortalWelcome />
+                  </AppLayout>
+                }
+              />
               <Route
                 path="/"
                 element={
