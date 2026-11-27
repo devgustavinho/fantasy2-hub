@@ -27,6 +27,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { TabBar, type TabBarItem } from "@/components/ui/tab-bar";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { anyPathMatches, pathMatches } from "@/lib/nav";
 import { activeIsAdmin, activeIsStaff, homePathForRole, userRoles } from "@/lib/roles";
 
 export function TopBar() {
@@ -44,9 +45,13 @@ export function TopBar() {
   const homeHref = homePathForRole(user.role);
 
   return (
-    <header className="border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
-        <Link to={homeHref} className="flex min-w-0 items-center gap-2 font-semibold tracking-wide">
+    <header className="sticky top-0 z-20 border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
+      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4 md:max-w-none md:justify-end md:px-6 lg:px-8">
+        {/* Marca só no mobile — no desktop a sidebar carrega o brand. */}
+        <Link
+          to={homeHref}
+          className="flex min-w-0 items-center gap-2 font-semibold tracking-wide md:hidden"
+        >
           <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 shrink-0 rounded-full" />
           <span className="hidden truncate text-brand-gold sm:inline">Fantasy 2 Hub</span>
         </Link>
@@ -59,7 +64,7 @@ export function TopBar() {
             className="flex items-center gap-1.5 text-white/70 transition-colors hover:text-brand-gold"
           >
             <User className="h-5 w-5 sm:hidden" />
-            <span className="hidden max-w-[10rem] truncate sm:inline">{user.name}</span>
+            <span className="hidden max-w-[12rem] truncate sm:inline">{user.name}</span>
           </Link>
           <button
             onClick={handleLogout}
@@ -82,6 +87,7 @@ type SheetLink = {
 
 // Tab bar no fluxo flex (`sticky bottom-0`, não `fixed`): evita vão sob a barra do browser
 // e a cápsula flutuante do FloatingDock antigo. Ícone + rótulo — Opção A do plano de nav.
+// Em md+ a DesktopSidebar assume a navegação; esta barra fica só no mobile.
 export function BottomDock() {
   const { user } = useAuth();
   const location = useLocation();
@@ -142,9 +148,7 @@ export function BottomDock() {
   ];
 
   const moreHrefs = moreLinks.map((l) => l.href);
-  const onMoreRoute = moreHrefs.some(
-    (href) => path === href || path.startsWith(`${href}/`),
-  );
+  const onMoreRoute = anyPathMatches(path, moreHrefs);
 
   const iconCls = "h-5 w-5";
 
@@ -255,12 +259,7 @@ export function BottomDock() {
     return (
       <ul className="space-y-1">
         {links.map((link) => {
-          // `/admin` é prefixo de outras rotas — só marca ativo em match exato.
-          const active =
-            link.href === "/admin"
-              ? location.pathname === "/admin"
-              : location.pathname === link.href ||
-                location.pathname.startsWith(`${link.href}/`);
+          const active = pathMatches(location.pathname, link.href);
           return (
             <li key={`${link.href}-${link.title}`}>
               <button
@@ -286,7 +285,7 @@ export function BottomDock() {
   }
 
   return (
-    <>
+    <div className="md:hidden">
       <TabBar items={items} />
 
       {!staffMode && (
@@ -310,6 +309,6 @@ export function BottomDock() {
           {renderSheetLinks(adminLinks, () => setAdminOpen(false))}
         </BottomSheet>
       )}
-    </>
+    </div>
   );
 }
