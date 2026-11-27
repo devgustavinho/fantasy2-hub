@@ -143,6 +143,7 @@ export function BottomDock() {
       title: "Organização contábil",
       href: "/contabil",
       icon: <FileSpreadsheet className="h-5 w-5" />,
+      // Morador: só consulta; conselheiro também dá parecer nesta área.
       description: "Balancetes e pareceres do conselho",
     },
   ];
@@ -194,6 +195,7 @@ export function BottomDock() {
 
   const onUsuarios = path.startsWith("/admin/usuarios");
   const onMelhorias = path === "/melhorias" || path.startsWith("/melhorias/");
+  const onContabil = path === "/contabil" || path.startsWith("/contabil/");
   const staffItems: TabBarItem[] = [
     {
       title: "Painel",
@@ -219,13 +221,23 @@ export function BottomDock() {
       title: "Admin",
       icon: <Shield className={iconCls} />,
       onClick: () => setAdminOpen(true),
-      active: adminOpen || (onAdminRoute && path !== "/admin" && !onUsuarios),
+      // Contábil fica no sheet Admin (não é /admin/*) — manter o tab ativo.
+      active:
+        adminOpen ||
+        onContabil ||
+        (onAdminRoute && path !== "/admin" && !onUsuarios),
     },
   ];
 
   const items = staffMode ? staffItems : residentItems;
 
   const adminLinks: SheetLink[] = [
+    {
+      title: "Organização contábil",
+      href: "/contabil",
+      icon: <FileSpreadsheet className="h-5 w-5" />,
+      description: "Publicar e gerenciar balancetes",
+    },
     {
       title: "Configurações",
       href: "/admin/configuracoes",

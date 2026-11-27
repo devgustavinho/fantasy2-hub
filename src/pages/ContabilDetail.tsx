@@ -16,6 +16,7 @@ import {
   OBS_TIPO_META,
   PARECER_STATUS_META,
 } from "@/lib/contabilLabels";
+import { activeIsConselheiro, activeIsStaff } from "@/lib/roles";
 import type { ObservacaoTipo, ParecerDecision } from "@/lib/types";
 import * as contabilService from "@/services/contabil";
 import { cn } from "@/lib/utils";
@@ -31,8 +32,9 @@ export default function ContabilDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const isStaff = user?.role === "admin" || user?.role === "sindico";
-  const isCounselor = user?.role === "conselheiro";
+  // Role ativa: staff gerencia; conselheiro dá parecer; morador só lê (PDF + finalizados).
+  const canManage = activeIsStaff(user?.role);
+  const isCounselor = activeIsConselheiro(user?.role);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["contabil", id],
@@ -165,7 +167,7 @@ export default function ContabilDetail() {
           {myFinalized && (
             <p className="text-sm text-muted-foreground">Seu parecer já foi finalizado.</p>
           )}
-          {isStaff && (
+          {canManage && (
             <Button
               variant="destructive"
               className="w-full"

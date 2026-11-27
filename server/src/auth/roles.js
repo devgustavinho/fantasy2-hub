@@ -84,6 +84,11 @@ export function activeIsAdmin(role) {
   return role === "admin";
 }
 
+/** Active-view conselheiro (parecer contábil UI), not membership. */
+export function activeIsConselheiro(role) {
+  return role === "conselheiro";
+}
+
 export function ensureUserRole(userId, role) {
   insertRoleStmt.run(userId, role);
 }

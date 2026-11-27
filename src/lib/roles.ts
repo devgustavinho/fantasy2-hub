@@ -67,6 +67,11 @@ export function activeIsAdmin(role: Role | null | undefined) {
   return role === "admin";
 }
 
+/** Visão ativa de conselheiro (parecer contábil) — não membership. */
+export function activeIsConselheiro(role: Role | null | undefined) {
+  return role === "conselheiro";
+}
+
 /** Destino após trocar o modo de visualização. */
 export function homePathForRole(role: Role) {
   return activeIsStaff(role) ? "/admin" : "/";
