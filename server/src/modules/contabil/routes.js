@@ -15,9 +15,15 @@ import {
   deleteBalancete,
 } from "./service.js";
 
+// Limite Contábil-específico (não compartilhado com uploads de imagem).
+// Manter alinhado com `MAX_BALANCETE_PDF_BYTES` no front e com
+// `client_max_body_size` do nginx da API (docs/RUNBOOK-DEPLOY.md).
+export const MAX_BALANCETE_PDF_BYTES = 150 * 1024 * 1024; // 150 MB
+export const MAX_BALANCETE_PDF_MB = 150;
+
 const uploadPdf = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  limits: { fileSize: MAX_BALANCETE_PDF_BYTES, files: 1 },
   fileFilter(_req, file, cb) {
     if (file.mimetype !== "application/pdf") {
       return cb(new Error("Envie um arquivo PDF."));
@@ -28,7 +34,14 @@ const uploadPdf = multer({
 
 function handlePdfUpload(req, res, next) {
   uploadPdf.single("pdf")(req, res, (err) => {
-    if (err) return res.status(400).json({ message: err.message || "Erro no upload do PDF." });
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          message: `O PDF do balancete pode ter no máximo ${MAX_BALANCETE_PDF_MB} MB.`,
+        });
+      }
+      return res.status(400).json({ message: err.message || "Erro no upload do PDF." });
+    }
     next();
   });
 }

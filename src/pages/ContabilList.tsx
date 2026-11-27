@@ -42,11 +42,24 @@ export default function ContabilList() {
     onError: (err) => setError(err instanceof Error ? err.message : "Erro ao publicar."),
   });
 
+  function onPdfChange(file: File | null) {
+    setPdf(file);
+    if (file && file.size > contabilService.MAX_BALANCETE_PDF_BYTES) {
+      setError(contabilService.balancetePdfTooLargeMessage(file.size));
+      return;
+    }
+    setError(null);
+  }
+
   function handlePublish(e: FormEvent) {
     e.preventDefault();
     setError(null);
     if (!pdf) {
       setError("Anexe o PDF do balancete.");
+      return;
+    }
+    if (pdf.size > contabilService.MAX_BALANCETE_PDF_BYTES) {
+      setError(contabilService.balancetePdfTooLargeMessage(pdf.size));
       return;
     }
     publishMutation.mutate();
@@ -137,8 +150,11 @@ export default function ContabilList() {
               type="file"
               accept="application/pdf,.pdf"
               required
-              onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
+              onChange={(e) => onPdfChange(e.target.files?.[0] ?? null)}
             />
+            <p className="text-xs text-muted-foreground">
+              Tamanho máximo: {contabilService.MAX_BALANCETE_PDF_MB} MB.
+            </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={publishMutation.isPending}>

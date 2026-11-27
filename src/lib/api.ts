@@ -34,25 +34,32 @@ export function setToken(token: string | null) {
 }
 
 const REQUEST_TIMEOUT_MS = 20_000;
+/** Uploads multipart (ex.: PDF de balancete até 150 MB) — 20s corta no meio. */
+const FORM_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+
+type RequestOptions = RequestInit & { timeoutMs?: number };
 
 // Sem isso, um `fetch` que trava (rede ruim, servidor engasgado) deixa a query do react-query
 // pendurada pra sempre: nem `isLoading` nem `isError` resolvem, e a tela fica presa em
 // "Carregando..." sem chance de retry. Isso limita qualquer request a no máximo 20s antes de
-// virar um erro de verdade.
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// virar um erro de verdade (uploads FormData usam timeout maior).
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const token = getToken();
 
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
-        ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+        ...(fetchOptions.body && !(fetchOptions.body instanceof FormData)
+          ? { "Content-Type": "application/json" }
+          : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
+        ...fetchOptions.headers,
       },
     });
   } catch (err) {
@@ -72,7 +79,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       if (body?.message) message = body.message;
       if (typeof body?.code === "string") code = body.code;
     } catch {
-      // resposta sem corpo JSON
+      // resposta sem corpo JSON (ex.: 413 HTML do nginx)
+    }
+    if (res.status === 413 && message === `Erro ${res.status}`) {
+      message = "Arquivo grande demais para o servidor. Reduza o tamanho e tente de novo.";
     }
     throw new ApiError(message, res.status, code);
   }
@@ -99,6 +109,16 @@ export const api = {
     request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
-  postForm: <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form }),
-  patchForm: <T>(path: string, form: FormData) => request<T>(path, { method: "PATCH", body: form }),
+  postForm: <T>(path: string, form: FormData, opts?: { timeoutMs?: number }) =>
+    request<T>(path, {
+      method: "POST",
+      body: form,
+      timeoutMs: opts?.timeoutMs ?? FORM_UPLOAD_TIMEOUT_MS,
+    }),
+  patchForm: <T>(path: string, form: FormData, opts?: { timeoutMs?: number }) =>
+    request<T>(path, {
+      method: "PATCH",
+      body: form,
+      timeoutMs: opts?.timeoutMs ?? FORM_UPLOAD_TIMEOUT_MS,
+    }),
 };

@@ -170,6 +170,10 @@ server {
     listen [::]:80;
     server_name api-fantasy2.gcsolutions-devs.com.br;
 
+    # PDF de balancete Contábil: multer aceita até 150 MB. Sem isto o nginx
+    # responde 413 Request Entity Too Large antes da API (default nginx = 1m).
+    client_max_body_size 150m;
+
     limit_req zone=fantasy2_api burst=30 nodelay;
 
     location / {
@@ -179,11 +183,26 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # Uploads longos (PDF grande) — evita 504 no proxy enquanto o R2 sobe.
+        proxy_read_timeout 900s;
+        proxy_send_timeout 900s;
     }
 }
 ```
 
 (zona de rate limit `fantasy2_api` adicionada em `/etc/nginx/conf.d/rate-limit-zones.conf`, mesmo padrão do `getflix_api`)
+
+### Ajuste de `client_max_body_size` (VPS em produção)
+
+Se uploads Contábil > ~limite atual do nginx retornarem **413**, na VPS (como root):
+
+```bash
+# No server block de api-fantasy2.gcsolutions-devs.com.br (80 e 443 pós-certbot):
+#   client_max_body_size 150m;
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+O deploy do app (`deploy-server.yml`) **não** altera nginx — só o processo Node. Sem este reload, multer em 150 MB não basta contra o 413 do proxy.
 
 Depois que o DNS abaixo estiver resolvendo para a VPS:
 
