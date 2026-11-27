@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GradientBorderCard } from "@/components/ui/gradient-border-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import * as authService from "@/services/auth";
 import { listApartmentsByTower } from "@/services/apartments";
@@ -19,6 +20,7 @@ function floorLabel(floor: number) {
 }
 
 export default function Register() {
+  const { user, loading: authLoading } = useAuth();
   const [tower, setTower] = useState<number | null>(null);
   const [apartments, setApartments] = useState<Apartment[]>([]);
   const [floor, setFloor] = useState<number | null>(null);
@@ -44,6 +46,10 @@ export default function Register() {
     () => apartments.filter((a) => a.floor === floor).sort((a, b) => a.unitNumber - b.unitNumber),
     [apartments, floor],
   );
+
+  // Mesmo padrão de Landing/Login: usuário autenticado vai para a home.
+  if (authLoading) return null;
+  if (user) return <Navigate to="/" replace />;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

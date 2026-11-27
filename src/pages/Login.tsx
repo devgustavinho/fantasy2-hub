@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { Fingerprint } from "lucide-react";
@@ -30,11 +30,15 @@ export default function Login() {
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [view, setView] = useState<View>({ name: "email" });
-  const { setUser } = useAuth();
+  const { user, loading: authLoading, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = (location.state as { from?: string } | null)?.from || "/";
   const supportsBiometric = browserSupportsWebAuthn();
+
+  // Mesmo padrão de Landing: sessão ativa não deve ver formulário de auth.
+  if (authLoading) return null;
+  if (user) return <Navigate to="/" replace />;
 
   function handleResult(result: LoginResult) {
     if (result.status === "ok") {
