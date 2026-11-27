@@ -11,12 +11,14 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { QueryError } from "@/components/QueryError";
 import { useAuth } from "@/contexts/AuthContext";
 import { BALANCETE_STATUS_META, formatReferenceMonth } from "@/lib/contabilLabels";
+import { activeIsStaff } from "@/lib/roles";
 import * as contabilService from "@/services/contabil";
 
 export default function ContabilList() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const isStaff = user?.role === "admin" || user?.role === "sindico";
+  // Publicar só no modo staff (admin/síndico). Morador e conselheiro: só leitura da lista.
+  const canPublish = activeIsStaff(user?.role);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["contabil"],
@@ -56,10 +58,12 @@ export default function ContabilList() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Organização contábil</h1>
           <p className="text-sm text-muted-foreground">
-            Balancetes mensais e pareceres do conselho fiscal.
+            {canPublish
+              ? "Publique balancetes e acompanhe os pareceres do conselho."
+              : "Consulte balancetes mensais e pareceres finalizados do conselho."}
           </p>
         </div>
-        {isStaff && (
+        {canPublish && (
           <Button className="w-full shrink-0 sm:w-auto" onClick={() => setPublishOpen(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
             Publicar balancete

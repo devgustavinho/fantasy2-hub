@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { activeIsConselheiro, activeIsStaff } from "../../auth/roles.js";
 import { sqlite } from "../../db/client.js";
 
 const nowIso = () => new Date().toISOString();
@@ -173,8 +174,9 @@ export function buildDetail(balanceteId, viewer) {
   const balancete = getBalancete(balanceteId);
   if (!balancete) return null;
 
-  const isStaff = viewer.role === "admin" || viewer.role === "sindico";
-  const isCounselor = viewer.role === "conselheiro";
+  // Role ativa (modo de visualização): morador não vê rascunhos nem myParecer.
+  const isStaff = activeIsStaff(viewer.role);
+  const isCounselor = activeIsConselheiro(viewer.role);
   const pareceres = listPareceresSql.all(balanceteId);
 
   const analysis = pareceres.map((p) => ({

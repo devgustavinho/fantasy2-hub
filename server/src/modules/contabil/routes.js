@@ -46,10 +46,18 @@ const parecerSchema = z.object({
   finalize: z.boolean().default(false),
 });
 
+/**
+ * Contábil (balancetes):
+ * - GET list/detail: qualquer aprovado (morador, conselheiro, staff).
+ * - POST/DELETE: só staff (admin/síndico membership + 2FA) via requireStaff.
+ * - PUT parecer: só conselheiro membership + 2FA via requireConselheiro.
+ * A UI exclusiviza por role ativa; a API mantém membership (padrão do Hub).
+ */
 export function contabilRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
 
+  // Leitura — morador inclusive (lista, detalhe, PDF).
   router.get("/", (_req, res) => {
     res.json({ balancetes: listBalancetes() });
   });
@@ -60,6 +68,7 @@ export function contabilRoutes() {
     res.json(detail);
   });
 
+  // Publicar — só staff (admin / síndico).
   router.post("/", requireStaff, handlePdfUpload, async (req, res) => {
     const referenceMonth = typeof req.body?.referenceMonth === "string" ? req.body.referenceMonth.trim() : "";
     const parsedMonth = monthSchema.safeParse(referenceMonth);
@@ -110,6 +119,7 @@ export function contabilRoutes() {
     }
   });
 
+  // Parecer — só conselheiro (não morador, não staff sem cargo de conselheiro).
   router.put("/:id/parecer", requireConselheiro, (req, res) => {
     const parsed = parecerSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -152,6 +162,7 @@ export function contabilRoutes() {
     res.json(detail);
   });
 
+  // Excluir — só staff.
   router.delete("/:id", requireStaff, (req, res) => {
     const row = deleteBalancete(req.params.id);
     if (!row) return res.status(404).json({ message: "Balancete não encontrado." });

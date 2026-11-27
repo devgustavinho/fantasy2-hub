@@ -95,6 +95,7 @@ function residentSecondary(): NavLink[] {
     {
       title: "Organização contábil",
       href: "/contabil",
+      // Visível no modo morador/conselheiro — morador só lê; conselheiro dá parecer.
       description: "Balancetes e pareceres",
       icon: <FileSpreadsheet className={iconCls} />,
     },
@@ -126,6 +127,12 @@ function staffPrimary(): NavLink[] {
 
 function staffSecondary(isAdmin: boolean): NavLink[] {
   return [
+    {
+      title: "Organização contábil",
+      href: "/contabil",
+      description: "Publicar e gerenciar balancetes",
+      icon: <FileSpreadsheet className={iconCls} />,
+    },
     {
       title: "Configurações",
       href: "/admin/configuracoes",
