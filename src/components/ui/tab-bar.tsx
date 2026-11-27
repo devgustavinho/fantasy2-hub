@@ -25,7 +25,7 @@ export function TabBar({ items, className }: { items: TabBarItem[]; className?: 
         className,
       )}
     >
-      <ul className="mx-auto flex max-w-4xl items-stretch">
+      <ul className="mx-auto flex max-w-4xl items-stretch md:max-w-none">
         {items.map((item) => (
           <li key={item.title} className="min-w-0 flex-1">
             <TabButton {...item} />

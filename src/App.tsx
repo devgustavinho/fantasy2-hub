@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AdminOnlyRoute, ProtectedRoute, StaffRoute } from "@/components/ProtectedRoute";
 import { TopBar, BottomDock } from "@/components/Navbar";
+import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { OnboardingBanner } from "@/components/OnboardingBanner";
 import { VisitBeacon } from "@/components/VisitBeacon";
 import Login from "@/pages/Login";
@@ -50,13 +51,18 @@ function RedirectServicoToNegocio() {
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-background"
+      className="flex min-h-screen min-w-0 overflow-x-hidden bg-background md:h-[100dvh] md:min-h-0 md:overflow-hidden"
       style={{ minHeight: "100dvh" }}
     >
-      <TopBar />
-      <OnboardingBanner />
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">{children}</main>
-      <BottomDock />
+      <DesktopSidebar />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <TopBar />
+        <OnboardingBanner />
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden md:overflow-y-auto md:px-2 lg:px-4">
+          {children}
+        </main>
+        <BottomDock />
+      </div>
     </div>
   );
 }
