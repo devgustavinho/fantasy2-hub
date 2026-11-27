@@ -184,7 +184,8 @@ familiar continua `role: 'morador'`, só muda o `household_role`. Endpoints em
   apartamento com titular+familiar apareceria duplicado na lista.
 - `GET /apartments/map?tower=` (admin) — mapa de apartamentos por torre pra administração não se
   perder em meio a centenas de usuários: cada unidade com seus moradores (titular e familiar, se
-  houver). Página em `/admin/apartamentos`.
+  houver). Também devolve `coverage` (torre selecionada) e `towersCoverage` (todas as torres):
+  % de apartamentos com pelo menos um morador **aprovado** no portal. Página em `/admin/apartamentos`.
 
 ## Tags de serviço
 

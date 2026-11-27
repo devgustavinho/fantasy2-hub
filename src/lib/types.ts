@@ -54,6 +54,14 @@ export interface ApartmentMapEntry {
   }[];
 }
 
+/** Cobertura no portal: aptos com pelo menos um morador aprovado. */
+export interface TowerPortalCoverage {
+  tower: number;
+  total: number;
+  onPortal: number;
+  percent: number;
+}
+
 export interface Apartment {
   id: string;
   tower: number;
