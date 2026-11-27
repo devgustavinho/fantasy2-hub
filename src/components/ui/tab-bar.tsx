@@ -13,15 +13,16 @@ export type TabBarItem = {
 };
 
 /**
- * Tab bar clássica mobile-first: barra edge-to-edge, ícone + texto, sem float/magnify.
- * Fica no fluxo flex (`sticky bottom-0`) — evita o vão do `position: fixed` com a barra do browser.
+ * Tab bar mobile: barra edge-to-edge, ícone + texto, sem float.
+ * Fica como irmã do `<main>` no shell (`h-[100dvh]`) — `shrink-0`, não sticky/fixed.
+ * O conteúdo rola no main; a barra permanece visível com safe-area.
  */
 export function TabBar({ items, className }: { items: TabBarItem[]; className?: string }) {
   return (
     <nav
       aria-label="Navegação principal"
       className={cn(
-        "sticky bottom-0 z-30 mt-auto w-full border-t border-brand-navy/80 bg-brand-navy text-white [padding-bottom:env(safe-area-inset-bottom)]",
+        "z-30 w-full shrink-0 border-t border-brand-navy/80 bg-brand-navy text-white [padding-bottom:env(safe-area-inset-bottom,0px)]",
         className,
       )}
     >

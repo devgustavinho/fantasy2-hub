@@ -45,7 +45,7 @@ export function TopBar() {
   const homeHref = homePathForRole(user.role);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
+    <header className="z-20 shrink-0 border-b border-brand-navy/60 bg-brand-navy text-white shadow-sm">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-3 py-2.5 sm:px-4 md:max-w-none md:justify-end md:px-6 lg:px-8">
         {/* Marca só no mobile — no desktop a sidebar carrega o brand. */}
         <Link
@@ -85,9 +85,8 @@ type SheetLink = {
   description: string;
 };
 
-// Tab bar no fluxo flex (`sticky bottom-0`, não `fixed`): evita vão sob a barra do browser
-// e a cápsula flutuante do FloatingDock antigo. Ícone + rótulo — Opção A do plano de nav.
-// Em md+ a DesktopSidebar assume a navegação; esta barra fica só no mobile.
+// Tab bar no shell flex (irmã do main, fora do scroll) — ícone + rótulo.
+// Em md+ a DesktopSidebar assume; esta barra fica só no mobile (`md:hidden`).
 export function BottomDock() {
   const { user } = useAuth();
   const location = useLocation();
@@ -297,7 +296,7 @@ export function BottomDock() {
   }
 
   return (
-    <div className="md:hidden">
+    <div className="shrink-0 md:hidden">
       <TabBar items={items} />
 
       {!staffMode && (
