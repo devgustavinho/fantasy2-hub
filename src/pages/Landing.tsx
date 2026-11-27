@@ -14,7 +14,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-brand-navy px-4 py-12 text-white">
       <div className="mx-auto flex max-w-md flex-col items-center gap-6 text-center">
-        <img src="/logo.png" alt="Fantasy 2" className="h-24 w-24" />
+        <img src="/logo.png" alt="Fantasy 2 comunidade" className="h-24 w-24 rounded-full object-cover" />
         <div className="space-y-2">
           <h1 className="text-2xl font-bold text-brand-gold">Fantasy 2 Hub</h1>
           <p className="text-white/80">

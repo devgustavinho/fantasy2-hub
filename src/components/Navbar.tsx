@@ -52,7 +52,7 @@ export function TopBar() {
           to={homeHref}
           className="flex min-w-0 items-center gap-2 font-semibold tracking-wide md:hidden"
         >
-          <img src="/logo.png" alt="Fantasy 2" className="h-9 w-9 shrink-0 rounded-full" />
+          <img src="/logo.png" alt="Fantasy 2 comunidade" className="h-9 w-9 shrink-0 rounded-full object-cover" />
           <span className="hidden truncate text-brand-gold sm:inline">Fantasy 2 Hub</span>
         </Link>
         <div className="flex shrink-0 items-center gap-2 text-sm sm:gap-3">

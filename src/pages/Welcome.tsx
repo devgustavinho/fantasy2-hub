@@ -24,7 +24,7 @@ export default function Welcome() {
     <div className="min-h-screen bg-muted/40">
       <header className="bg-brand-navy px-4 py-6 text-white">
         <div className="mx-auto flex max-w-2xl items-center gap-4">
-          <img src="/logo.png" alt="" className="h-14 w-14 rounded-full bg-white/10" />
+          <img src="/logo.png" alt="" className="h-14 w-14 rounded-full object-cover" />
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-brand-gold">Fantasy 2</p>
             <h1 className="text-2xl font-bold leading-tight">{data?.title ?? "Boas-vindas"}</h1>
