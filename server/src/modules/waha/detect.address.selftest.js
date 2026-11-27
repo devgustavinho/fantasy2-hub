@@ -2,7 +2,7 @@
  * Smoke puro: node src/modules/waha/detect.address.selftest.js
  *
  * Garante que o bot no grupo só responde a menção explícita no payload
- * (mentionedIds / @lid / reply), nunca à palavra "bot" no texto.
+ * (mentionedIds / @lid / reply / @telefone), nunca à palavra "bot" no texto.
  */
 function stubEnv() {
   const defaults = {
@@ -28,6 +28,7 @@ function stubEnv() {
 stubEnv();
 
 const {
+  bodyMentionsBotPhone,
   extractMentionIds,
   isAddressedToBot,
   mentionMatchesBot,
@@ -44,7 +45,15 @@ const lid = "123456789012345@lid";
 
 assert(mentionMatchesBot(`${bot}@c.us`, bot, meId) === true, "mention phone@c.us");
 assert(mentionMatchesBot(meId, bot, meId) === true, "mention meId exact");
-assert(mentionMatchesBot(lid, bot, lid) === true, "mention @lid == meId");
+assert(mentionMatchesBot(lid, bot, lid) === true, "mention @lid == meId (meId é lid)");
+assert(
+  mentionMatchesBot(lid, bot, meId, lid) === true,
+  "mention @lid == botLid (meId é telefone)",
+);
+assert(
+  mentionMatchesBot(lid, bot, meId) === false,
+  "mention @lid NÃO casa com telefone sem botLid",
+);
 assert(mentionMatchesBot("5585111111111@c.us", bot, meId) === false, "other phone");
 
 assert(
@@ -61,6 +70,22 @@ assert(
   }).includes(meId),
   "extract contextInfo.mentionedJid",
 );
+assert(
+  extractMentionIds({
+    _data: {
+      Info: {
+        Message: {
+          ExtendedTextMessage: { ContextInfo: { MentionedJid: [lid] } },
+        },
+      },
+    },
+  }).includes(lid),
+  "extract GOWS Info.Message MentionedJid",
+);
+
+assert(bodyMentionsBotPhone(`@${bot} oi`, bot) === true, "body @phone");
+assert(bodyMentionsBotPhone("oi bot", bot) === false, "body palavra bot não conta");
+assert(bodyMentionsBotPhone(`@${lid.split("@")[0]} oi`, bot, lid) === true, "body @lid digits");
 
 const base = {
   fromMe: false,
@@ -68,6 +93,8 @@ const base = {
   body: "",
   botPhone: bot,
   meId,
+  botLid: "",
+  meLid: "",
   mentionIds: [],
   replyTo: null,
 };
@@ -89,8 +116,8 @@ assert(
     ...base,
     body: `@${bot} qual o horário?`,
     mentionIds: [],
-  }) === false,
-  "@telefone só no texto (sem payload) NÃO endereça",
+  }) === true,
+  "@telefone no texto → endereça (fallback sem payload)",
 );
 assert(
   isAddressedToBot({
@@ -107,7 +134,24 @@ assert(
     mentionIds: [lid],
     meId: lid,
   }) === true,
-  "menção @lid do bot → endereça",
+  "menção @lid do bot (== meId) → endereça",
+);
+assert(
+  isAddressedToBot({
+    ...base,
+    body: "qual o horário?",
+    mentionIds: [lid],
+    botLid: lid,
+  }) === true,
+  "menção @lid do bot (== botLid) → endereça",
+);
+assert(
+  isAddressedToBot({
+    ...base,
+    body: "qual o horário?",
+    mentionIds: [lid],
+  }) === false,
+  "menção @lid sem botLid/meLid → NÃO endereça (precisa resolução async)",
 );
 assert(
   isAddressedToBot({

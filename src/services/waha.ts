@@ -6,6 +6,8 @@ export type WahaHealth = {
   configured: boolean;
   session: string | null;
   groupConfigured: boolean;
+  botPhoneConfigured?: boolean;
+  botLidConfigured?: boolean;
   summaryAllowlistConfigured: boolean;
 };
 

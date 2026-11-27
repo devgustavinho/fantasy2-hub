@@ -227,8 +227,8 @@ PDF do manual: `/documentos` (API `GET /docs/manual-do-proprietario`, morador ap
 
 | Peça | Detalhe |
 |---|---|
-| Env | `WAHA_ENABLED`, `WAHA_URL`, `WAHA_API_KEY`, `WAHA_SESSION`, `WAHA_BOT_PHONE`, `WAHA_GROUP_ID`, `WAHA_SUMMARY_ALLOWLIST`, … (ver `.env.example`) |
-| Ask | Menção/reply/@bot no grupo ou DM → `askCondo` + cota 5/24h por número (`waha_ask_log`) |
+| Env | `WAHA_ENABLED`, `WAHA_URL`, `WAHA_API_KEY`, `WAHA_SESSION`, `WAHA_BOT_PHONE`, `WAHA_BOT_LID` (opc.), `WAHA_GROUP_ID`, `WAHA_SUMMARY_ALLOWLIST`, … (ver `.env.example`) |
+| Ask | Menção (telefone ou `@lid`)/reply/@telefone no grupo ou DM → `askCondo` + cota 5/24h por número (`waha_ask_log`) |
 | Resumo | Mensagem `resumo` só de números na allowlist → resume o chat do dia do Fantasy 2 |
 | Store | SQLite por dia em `WAHA_CHAT_DATA_DIR`, retenção 7 dias |
 | Health | `GET /waha/health` |

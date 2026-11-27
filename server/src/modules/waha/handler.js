@@ -6,13 +6,39 @@ import { appendGroupMessage } from "./chatStore.js";
 import {
   isAddressedToBot,
   isFantasy2Group,
+  mentionMatchesBot,
   normalizeEvent,
   parseResumoCommand,
   stripBotAddressing,
 } from "./detect.js";
-import { isAllowlisted } from "./phones.js";
+import { resolveBotLid, resolveLidToPhone } from "./lids.js";
+import { isAllowlisted, phonesMatch } from "./phones.js";
 import { quotaPayload, releaseWahaAskSlot, reserveWahaAskSlot } from "./quota.js";
 import { summarizeFantasy2Day } from "./summary.js";
+
+/**
+ * Grupo: menção pode vir só como @lid (WhatsApp LID addressing).
+ * Completa botLid via API/env e, se preciso, resolve cada @lid → telefone.
+ */
+async function isAddressedToBotResolved(msg) {
+  if (isAddressedToBot(msg)) return true;
+  if (!msg.isGroup || msg.fromMe) return false;
+
+  const botLid = msg.botLid || (await resolveBotLid());
+  if (botLid) {
+    const withLid = { ...msg, botLid };
+    if (isAddressedToBot(withLid)) return true;
+  }
+
+  for (const mid of msg.mentionIds || []) {
+    if (!String(mid).endsWith("@lid")) continue;
+    if (mentionMatchesBot(mid, msg.botPhone, msg.meId, botLid)) return true;
+    const pn = await resolveLidToPhone(mid);
+    if (pn && msg.botPhone && phonesMatch(pn, msg.botPhone)) return true;
+  }
+
+  return false;
+}
 
 /**
  * Processa um evento WAHA (message / message.any).
@@ -108,21 +134,35 @@ export async function handleWahaEvent(event) {
   const inFantasyGroup = storedGroup;
   const isDm = !msg.isGroup;
   if (!inFantasyGroup && !isDm) {
+    console.info("[waha] skip other_chat", {
+      chatId: msg.chatId,
+      configuredGroup: env.WAHA_GROUP_ID || null,
+    });
     return { skipped: "other_chat" };
   }
-  if (inFantasyGroup && !isAddressedToBot(msg)) {
+
+  const addressed = isDm ? true : await isAddressedToBotResolved(msg);
+  if (inFantasyGroup && !addressed) {
+    console.info("[waha] skip not_addressed", {
+      chatId: msg.chatId,
+      mentionIds: msg.mentionIds,
+      hasReply: Boolean(msg.replyTo),
+      botPhone: msg.botPhone || null,
+      meId: msg.meId || null,
+      botLid: msg.botLid || null,
+    });
     return { skipped: "not_addressed" };
   }
 
   const question = stripBotAddressing(msg.body, msg.botPhone);
   if (!question || question.length < 3) {
-    if (isDm || isAddressedToBot(msg)) {
+    if (isDm || addressed) {
       if (!claimInboundMessage(msg.id, "short")) {
         return { skipped: "duplicate" };
       }
       await sendText({
         chatId: msg.chatId,
-        text: "Me chama com uma pergunta (menciona o bot no grupo, ex.: horário da academia?).",
+        text: "Me chama com uma pergunta (menciona o bot no grupo, ex.: @Bot horário da academia?).",
         replyTo: msg.id,
       }).catch(() => {});
     }

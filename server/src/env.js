@@ -38,6 +38,12 @@ const schema = z.object({
   WAHA_SESSION: z.string().optional().default("default"),
   /** Número E.164 do bot, só dígitos (ex. 5585…). */
   WAHA_BOT_PHONE: z.string().optional().default(""),
+  /**
+   * LID do bot (`…@lid` ou só dígitos). Em grupos com addressing LID o
+   * WhatsApp manda menções como @lid; sem isso (ou resolução via API)
+   * o bot responde em DM mas ignora @menção no grupo.
+   */
+  WAHA_BOT_LID: z.string().optional().default(""),
   /** JID do grupo Fantasy 2 (`…@g.us`). */
   WAHA_GROUP_ID: z.string().optional().default(""),
   WAHA_GROUP_NAME: z.string().optional().default("Fantasy 2"),
