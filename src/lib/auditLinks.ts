@@ -38,9 +38,9 @@ function entityLabel(entityType: string): string {
     case "service_item":
       return "Item de serviço";
     case "recommendation":
-      return "Recomendação";
+      return "Contato do condomínio";
     case "recommendation_comment":
-      return "Comentário de recomendação";
+      return "Comentário de contato";
     case "climate_survey":
       return "Pesquisa de clima";
     case "portal_improvement":
@@ -107,14 +107,14 @@ export function resolveAuditTarget(entry: AuditEntry): AuditTarget {
       const name = str(details, "name");
       return {
         label: name ? `${typeLabel}: ${name}` : typeLabel,
-        href: deleted ? null : `/recomendacoes/${entityId}`,
+        href: deleted ? null : `/contatos-condominio/${entityId}`,
       };
     }
     case "recommendation_comment": {
       const recommendationId = str(details, "recommendationId");
       return {
         label: typeLabel,
-        href: recommendationId ? `/recomendacoes/${recommendationId}` : null,
+        href: recommendationId ? `/contatos-condominio/${recommendationId}` : null,
       };
     }
     case "climate_survey": {

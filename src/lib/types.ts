@@ -210,9 +210,10 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+/** Quem cadastrou — só o id (nome nunca é exposto em Contatos do condomínio). */
 export interface RecommendationAuthor {
   id: string;
-  name: string;
+  name?: string;
 }
 
 export interface Recommendation {
@@ -226,6 +227,7 @@ export interface Recommendation {
   ratingCount: number;
   avgRating: number | null;
   commentCount: number;
+  /** Sempre vazio — tags não afetam Contatos do condomínio. */
   tags: Tag[];
 }
 

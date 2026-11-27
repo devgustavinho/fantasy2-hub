@@ -18,7 +18,7 @@ import {
   Settings2,
   Shield,
   ShoppingBag,
-  Star,
+  ContactRound,
   User,
   Users,
 } from "lucide-react";
@@ -103,10 +103,10 @@ export function BottomDock() {
 
   const moreLinks: SheetLink[] = [
     {
-      title: "Recomendações",
-      href: "/recomendacoes",
-      icon: <Star className="h-5 w-5" />,
-      description: "Indicações da comunidade",
+      title: "Contatos do condomínio",
+      href: "/contatos-condominio",
+      icon: <ContactRound className="h-5 w-5" />,
+      description: "Prestadores e comércios úteis",
     },
     {
       title: "FAQ",

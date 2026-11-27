@@ -199,8 +199,9 @@ Auditado: `tags.create`, `tags.delete`.
 
 `src/modules/rag/` — índice semântico no SQLite (`rag_documents` + `rag_chunks` com embeddings
 `text-embedding-3-small`). Fontes: FAQ, boas-vindas, **horários** (convivência/silêncio, áreas comuns,
-janelas de mudança — **sem** senhas de Wi‑Fi), serviços, recomendações, campos oficiais de
-pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietário**
+janelas de mudança — **sem** senhas de Wi‑Fi), serviços, contatos do condomínio (ex-recomendações;
+média &lt; 3 fora do índice), campos oficiais de pautas (sem comentários/PII de clima), embeds
+externos e **Manual do Proprietário**
 (`source_type=manual`, texto em `assets/docs/manual-do-proprietario.txt`).
 
 | Peça | Detalhe |
@@ -215,7 +216,7 @@ pautas (sem comentários/PII de clima), embeds externos e **Manual do Proprietá
 | Reindex | `POST /rag/reindex` (staff) ou `npm run rag:reindex` / `--force`; no deploy da API o Actions roda reindex best-effort após o healthcheck (ver `docs/RUNBOOK-DEPLOY.md`) |
 | Selftest | `node src/modules/rag/perda-garantia.selftest.js` — chunking + ranking da pergunta de perda de garantia |
 | MCP | `ask_condo` + admin/staff tools de status/reindex/embeds; paridade em `mcp/parity.selftest.js` |
-| Hooks | CRUD de FAQ/welcome/horários/serviços/recomendações/pautas agenda reindex do documento |
+| Hooks | CRUD de FAQ/welcome/horários/serviços/contatos do condomínio/pautas agenda reindex do documento |
 
 UI: `/perguntar` (dock **Perguntar**; Avançado → admin: provedor/key + embeds externos; staff: índice/reindex).
 PDF do manual: `/documentos` (API `GET /docs/manual-do-proprietario`, morador aprovado).

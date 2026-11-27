@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { SendHorizontal, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { Markdown } from "@/components/Markdown";
 import { RagAdminPanel } from "@/components/RagAdminPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import * as ragService from "@/services/rag";
@@ -12,10 +13,11 @@ const SOURCE_LABEL: Record<string, string> = {
   faq: "FAQ",
   welcome: "Boas-vindas",
   service: "Negócio",
-  recommendation: "Recomendação",
+  recommendation: "Contato",
   topic: "Pauta",
   external: "Embed",
   manual: "Manual",
+  horarios: "Horários",
 };
 
 type ChatMessage = {
@@ -35,7 +37,7 @@ function newId() {
 const WELCOME: ChatMessage = {
   id: "welcome",
   role: "system",
-  text: "Olá! Pergunte sobre regras, horários, serviços e recomendações do Fantasy 2. Eu só respondo com base no material do condomínio.",
+  text: "Olá! Pergunte sobre regras, horários, negócios e contatos do condomínio. Eu só respondo com base no material do Fantasy 2.",
   at: Date.now(),
 };
 
@@ -194,7 +196,13 @@ export default function AskCondo() {
                       : "rounded-bl-md bg-white text-foreground dark:bg-zinc-900"
                 } ${m.pending ? "opacity-70 italic" : ""}`}
               >
-                <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                {mine || m.error || m.pending ? (
+                  <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                ) : (
+                  <div className="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0">
+                    <Markdown>{m.text}</Markdown>
+                  </div>
+                )}
                 {m.citations && m.citations.length > 0 && (
                   <div
                     className={`mt-2 space-y-1 border-t pt-2 text-[11px] ${

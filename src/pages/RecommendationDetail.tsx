@@ -1,7 +1,7 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Instagram, MessageCircle, Trash2 } from "lucide-react";
+import { ArrowLeft, Instagram, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,11 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "@/components/StarRating";
 import { useAuth } from "@/contexts/AuthContext";
 import * as recommendationsService from "@/services/recommendations";
-import * as tagsApi from "@/services/tags";
-import { resolveMediaUrl } from "@/lib/api";
-import { buildInstagramLink, buildWhatsAppLink, cn } from "@/lib/utils";
-
-const MAX_MEDIA_PER_COMMENT = 4;
+import { buildInstagramLink, buildWhatsAppLink } from "@/lib/utils";
 
 export default function RecommendationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -27,21 +23,9 @@ export default function RecommendationDetail() {
   const [editDescription, setEditDescription] = useState("");
   const [editWhatsapp, setEditWhatsapp] = useState("");
   const [editInstagram, setEditInstagram] = useState("");
-  const [editTagIds, setEditTagIds] = useState<string[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
 
-  const { data: tagsData } = useQuery({ queryKey: ["tags"], queryFn: tagsApi.listTags });
-  const tags = useMemo(() => tagsData?.tags ?? [], [tagsData]);
-
-  function toggleEditTag(id: string) {
-    setEditTagIds((current) => (current.includes(id) ? current.filter((t) => t !== id) : [...current, id]));
-  }
-
-  const [commentBody, setCommentBody] = useState("");
-  const [commentFiles, setCommentFiles] = useState<File[]>([]);
-  const [commentError, setCommentError] = useState<string | null>(null);
-
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["recommendation", id],
     queryFn: () => recommendationsService.getRecommendation(id!),
     enabled: !!id,
@@ -54,17 +38,23 @@ export default function RecommendationDetail() {
 
   const rateMutation = useMutation({
     mutationFn: (stars: number) => recommendationsService.rateRecommendation(id!, stars),
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      if ("purged" in result && result.purged) {
+        queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+        navigate("/contatos-condominio");
+        return;
+      }
+      invalidate();
+    },
   });
 
   const editMutation = useMutation({
     mutationFn: () =>
       recommendationsService.updateRecommendation(id!, {
         name: editName,
-        description: editDescription || undefined,
+        description: editDescription,
         whatsapp: editWhatsapp || undefined,
         instagram: editInstagram || undefined,
-        tagIds: editTagIds,
       }),
     onSuccess: () => {
       setIsEditing(false);
@@ -78,31 +68,29 @@ export default function RecommendationDetail() {
     mutationFn: () => recommendationsService.deleteRecommendation(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recommendations"] });
-      navigate("/recomendacoes");
+      navigate("/contatos-condominio");
     },
   });
 
-  const commentMutation = useMutation({
-    mutationFn: () => recommendationsService.addRecommendationComment(id!, commentBody, commentFiles),
-    onSuccess: () => {
-      setCommentBody("");
-      setCommentFiles([]);
-      setCommentError(null);
-      invalidate();
-    },
-    onError: (err) => setCommentError(err instanceof Error ? err.message : "Erro ao comentar."),
-  });
-
-  const deleteCommentMutation = useMutation({
-    mutationFn: (commentId: string) => recommendationsService.deleteRecommendationComment(id!, commentId),
-    onSuccess: invalidate,
-  });
-
-  if (isLoading || !data) {
+  if (isLoading) {
     return <p className="mx-auto max-w-4xl px-4 py-8 text-muted-foreground">Carregando...</p>;
   }
 
-  const { recommendation, comments, myRating } = data;
+  if (isError || !data) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4 px-4 py-8">
+        <Link
+          to="/contatos-condominio"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Voltar para contatos
+        </Link>
+        <p className="text-sm text-muted-foreground">Contato não encontrado.</p>
+      </div>
+    );
+  }
+
+  const { recommendation, myRating } = data;
   const isOwner = user?.id === recommendation.createdBy.id;
   const isStaff = user?.role === "admin" || user?.role === "sindico";
   const canDelete = isOwner || isStaff;
@@ -112,7 +100,6 @@ export default function RecommendationDetail() {
     setEditDescription(recommendation.description ?? "");
     setEditWhatsapp(recommendation.whatsapp ?? "");
     setEditInstagram(recommendation.instagram ?? "");
-    setEditTagIds(recommendation.tags.map((t) => t.id));
     setEditError(null);
     setIsEditing(true);
   }
@@ -124,43 +111,18 @@ export default function RecommendationDetail() {
   }
 
   function handleDelete() {
-    if (window.confirm("Tem certeza que deseja excluir esta recomendação? Essa ação não pode ser desfeita.")) {
+    if (window.confirm("Tem certeza que deseja excluir este contato? Essa ação não pode ser desfeita.")) {
       deleteMutation.mutate();
-    }
-  }
-
-  function handleFiles(files: FileList | null) {
-    if (!files) return;
-    const combined = [...commentFiles, ...Array.from(files)].slice(0, MAX_MEDIA_PER_COMMENT);
-    setCommentFiles(combined);
-  }
-
-  function removeFile(index: number) {
-    setCommentFiles((current) => current.filter((_, i) => i !== index));
-  }
-
-  function handleComment(e: FormEvent) {
-    e.preventDefault();
-    if (!commentBody.trim() && commentFiles.length === 0) {
-      setCommentError("Escreva um comentário ou anexe uma foto/vídeo.");
-      return;
-    }
-    commentMutation.mutate();
-  }
-
-  function handleDeleteComment(commentId: string) {
-    if (window.confirm("Excluir este comentário?")) {
-      deleteCommentMutation.mutate(commentId);
     }
   }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <Link
-        to="/recomendacoes"
+        to="/contatos-condominio"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Voltar para recomendações
+        <ArrowLeft className="h-4 w-4" /> Voltar para contatos
       </Link>
 
       <Card>
@@ -185,13 +147,15 @@ export default function RecommendationDetail() {
           {isEditing ? (
             <form onSubmit={handleEditSubmit} className="space-y-3">
               <div className="space-y-2">
-                <Label htmlFor="editName">Nome</Label>
-                <Input id="editName" required value={editName} onChange={(e) => setEditName(e.target.value)} />
+                <Label htmlFor="editName">Nome do negócio</Label>
+                <Input id="editName" required minLength={2} value={editName} onChange={(e) => setEditName(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editDescription">Descrição</Label>
+                <Label htmlFor="editDescription">Tipo de serviço</Label>
                 <Textarea
                   id="editDescription"
+                  required
+                  minLength={2}
                   rows={3}
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
@@ -215,28 +179,6 @@ export default function RecommendationDetail() {
                   />
                 </div>
               </div>
-              {tags.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Tags</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => toggleEditTag(tag.id)}
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-xs transition-colors",
-                          editTagIds.includes(tag.id)
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-input bg-background text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {tag.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {editError && <p className="text-sm text-destructive">{editError}</p>}
               <div className="flex gap-2">
                 <Button type="submit" size="sm" disabled={editMutation.isPending}>
@@ -248,31 +190,16 @@ export default function RecommendationDetail() {
               </div>
             </form>
           ) : (
-            <>
-              {recommendation.description && (
-                <p className="whitespace-pre-wrap text-sm">{recommendation.description}</p>
-              )}
-              <p className="text-xs text-muted-foreground">Recomendado por {recommendation.createdBy.name}</p>
-              {recommendation.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {recommendation.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-                    >
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </>
+            recommendation.description && (
+              <p className="whitespace-pre-wrap text-sm">{recommendation.description}</p>
+            )
           )}
 
           <div className="flex flex-wrap items-center gap-3">
             {recommendation.whatsapp && (
               <Button variant="outline" size="sm" asChild>
                 <a
-                  href={buildWhatsAppLink(recommendation.whatsapp, `Olá! Vi sua recomendação no Fantasy 2 Hub.`)}
+                  href={buildWhatsAppLink(recommendation.whatsapp, `Olá! Vi seu contato no Fantasy 2 Hub.`)}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -298,105 +225,14 @@ export default function RecommendationDetail() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm">Sua avaliação:</span>
-            <StarRating value={myRating ?? 0} onChange={(stars) => rateMutation.mutate(stars)} size="lg" />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Comentários ({comments.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={handleComment} className="space-y-2">
-            <Textarea
-              placeholder="Conte como foi o serviço..."
-              value={commentBody}
-              onChange={(e) => setCommentBody(e.target.value)}
-              rows={2}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              {commentFiles.map((file, index) => (
-                <span
-                  key={`${file.name}-${index}`}
-                  className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
-                >
-                  {file.name}
-                  <button type="button" onClick={() => removeFile(index)} className="text-muted-foreground hover:text-destructive">
-                    ×
-                  </button>
-                </span>
-              ))}
-              {commentFiles.length < MAX_MEDIA_PER_COMMENT && (
-                <label className="flex cursor-pointer items-center rounded-md border border-dashed px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/50">
-                  + foto/vídeo
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      handleFiles(e.target.files);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <span className="text-sm">Sua avaliação:</span>
+              <StarRating value={myRating ?? 0} onChange={(stars) => rateMutation.mutate(stars)} size="lg" />
             </div>
-            {commentError && <p className="text-sm text-destructive">{commentError}</p>}
-            <Button type="submit" size="sm" disabled={commentMutation.isPending}>
-              {commentMutation.isPending ? "Enviando..." : "Comentar"}
-            </Button>
-          </form>
-
-          <div className="space-y-3">
-            {comments.map((comment) => {
-              const canDeleteComment = !!user && (user.id === comment.author.id || isStaff);
-              return (
-                <div key={comment.id} className="rounded-md border p-3 text-sm">
-                  {comment.body && <p className="whitespace-pre-wrap">{comment.body}</p>}
-                  {comment.media.length > 0 && (
-                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {comment.media.map((media) =>
-                        media.mediaType === "video" ? (
-                          <video
-                            key={media.id}
-                            src={resolveMediaUrl(media.path)}
-                            controls
-                            className="aspect-square w-full rounded-md bg-black object-cover"
-                          />
-                        ) : (
-                          <img
-                            key={media.id}
-                            src={resolveMediaUrl(media.path)}
-                            alt=""
-                            className="aspect-square w-full rounded-md object-cover"
-                          />
-                        ),
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>
-                      {comment.author.name} · {new Date(comment.createdAt).toLocaleString("pt-BR")}
-                    </span>
-                    {canDeleteComment && (
-                      <button
-                        type="button"
-                        className="ml-auto inline-flex items-center gap-1 hover:text-destructive"
-                        onClick={() => handleDeleteComment(comment.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Excluir
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {comments.length === 0 && <p className="text-sm text-muted-foreground">Nenhum comentário ainda.</p>}
+            <p className="text-xs text-muted-foreground">
+              Contatos com média abaixo de 3 estrelas são removidos automaticamente.
+            </p>
           </div>
         </CardContent>
       </Card>

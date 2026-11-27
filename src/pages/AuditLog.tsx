@@ -61,9 +61,10 @@ const ACTION_LABELS: Record<string, string> = {
   "faq.create": "FAQ criado",
   "faq.edit": "FAQ editado",
   "faq.delete": "FAQ excluído",
-  "recommendations.create": "Recomendação criada",
-  "recommendations.edit": "Recomendação editada",
-  "recommendations.delete": "Recomendação excluída",
+  "recommendations.create": "Contato cadastrado",
+  "recommendations.edit": "Contato editado",
+  "recommendations.delete": "Contato excluído",
+  "recommendations.auto_purge_low_rating": "Contato removido (nota baixa)",
   "welcome.update": "Boas-vindas atualizadas",
 };
 

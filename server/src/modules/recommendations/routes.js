@@ -14,6 +14,9 @@ const MAX_MEDIA_PER_COMMENT = 4;
 const VIDEO_MIMETYPES = new Set(["video/mp4", "video/quicktime", "video/webm"]);
 const IMAGE_MIMETYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
+/** Média abaixo disso → ocultar na listagem e auto-excluir (purge) o contato. */
+export const CONTACT_MIN_AVG_RATING = 3;
+
 // Vídeo curto de celular passa fácil de alguns MB — bem mais que uma foto — daí o limite bem
 // mais alto que o das imagens de serviço (15MB).
 const upload = multer({
@@ -42,16 +45,17 @@ function normalizeInstagram(value) {
   return cleaned || null;
 }
 
-const recommendationSchema = z
+const contactSchema = z
   .object({
     name: z.string().trim().min(2).max(120),
-    description: z.string().trim().max(1000).optional().nullable(),
+    description: z.string().trim().min(2).max(1000),
     whatsapp: z.string().trim().max(30).optional().nullable(),
     instagram: z.string().trim().max(60).optional().nullable(),
+    // Tags não afetam mais Contatos do condomínio — aceito e ignorado por compat.
     tagIds: z.array(z.string()).max(20).optional(),
   })
   .refine((data) => Boolean(data.whatsapp) || Boolean(data.instagram), {
-    message: "Informe pelo menos um WhatsApp ou uma rede social.",
+    message: "Informe pelo menos um WhatsApp ou Instagram.",
   });
 
 const ratingSchema = z.object({ stars: z.coerce.number().int().min(1).max(5) });
@@ -64,16 +68,27 @@ const getRecommendationById = sqlite.prepare("SELECT * FROM recommendations WHER
 
 const RECOMMENDATION_SELECT = `
   SELECT r.id, r.name, r.description, r.whatsapp, r.instagram, r.created_at AS createdAt,
-         r.created_by AS createdById, u.name AS createdByName,
+         r.created_by AS createdById,
          (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = r.id) AS ratingCount,
          (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = r.id) AS avgRating,
          (SELECT COUNT(*) FROM recommendation_comments WHERE recommendation_id = r.id) AS commentCount
   FROM recommendations r
-  JOIN users u ON u.id = r.created_by
 `;
 
-const listRecommendationsBase = sqlite.prepare(`${RECOMMENDATION_SELECT} ORDER BY r.created_at DESC`);
-const getRecommendationWithStats = sqlite.prepare(`${RECOMMENDATION_SELECT} WHERE r.id = ?`);
+// Contatos com média < CONTACT_MIN_AVG_RATING ficam ocultos (e devem ser purged no rating).
+const ELIGIBLE_AVG_SQL = `
+  (
+    (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = r.id) = 0
+    OR (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = r.id) >= ${CONTACT_MIN_AVG_RATING}
+  )
+`;
+
+const listRecommendationsBase = sqlite.prepare(
+  `${RECOMMENDATION_SELECT} WHERE ${ELIGIBLE_AVG_SQL} ORDER BY r.created_at DESC`,
+);
+const getRecommendationWithStats = sqlite.prepare(
+  `${RECOMMENDATION_SELECT} WHERE r.id = ? AND ${ELIGIBLE_AVG_SQL}`,
+);
 
 const getMyRating = sqlite.prepare(
   "SELECT stars FROM recommendation_ratings WHERE recommendation_id = ? AND user_id = ?",
@@ -111,31 +126,6 @@ const insertMedia = sqlite.prepare(`
 const getCommentById = sqlite.prepare("SELECT * FROM recommendation_comments WHERE id = ?");
 const deleteCommentById = sqlite.prepare("DELETE FROM recommendation_comments WHERE id = ?");
 
-// Mesmo vocabulário de tags dos serviços (`tags`, curado em `/admin/tags`) — só a associação é
-// própria da recomendação. Diferente de serviços (só admin atribui tag), aqui quem cadastrou a
-// recomendação escolhe as próprias tags: são muitas recomendações informais, não um único
-// anúncio por morador, então centralizar em admin geraria gargalo sem ganho real de consistência.
-const listTagsByRecommendation = sqlite.prepare(`
-  SELECT t.id, t.name FROM recommendation_tags rt JOIN tags t ON t.id = rt.tag_id
-  WHERE rt.recommendation_id = ? ORDER BY t.name ASC
-`);
-const deleteRecommendationTags = sqlite.prepare("DELETE FROM recommendation_tags WHERE recommendation_id = ?");
-const insertRecommendationTag = sqlite.prepare(
-  "INSERT OR IGNORE INTO recommendation_tags (recommendation_id, tag_id) VALUES (?, ?)",
-);
-const getTagById = sqlite.prepare("SELECT id FROM tags WHERE id = ?");
-
-const applyRecommendationTags = sqlite.transaction((recommendationId, tagIds) => {
-  deleteRecommendationTags.run(recommendationId);
-  for (const tagId of tagIds) insertRecommendationTag.run(recommendationId, tagId);
-});
-
-// Valida antes de tocar no banco — sem isso, uma tag inexistente no meio da lista deixaria a
-// recomendação já criada/editada mas com tags parcialmente aplicadas.
-function allTagsExist(tagIds) {
-  return tagIds.every((tagId) => Boolean(getTagById.get(tagId)));
-}
-
 const insertRecommendation = sqlite.prepare(`
   INSERT INTO recommendations (id, created_by, name, description, whatsapp, instagram)
   VALUES (@id, @created_by, @name, @description, @whatsapp, @instagram)
@@ -149,6 +139,17 @@ const updateRecommendation = sqlite.prepare(`
 
 const deleteRecommendationById = sqlite.prepare("DELETE FROM recommendations WHERE id = ?");
 
+const listLowRatedIds = sqlite.prepare(`
+  SELECT r.id
+  FROM recommendations r
+  WHERE (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = r.id) > 0
+    AND (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = r.id) < ${CONTACT_MIN_AVG_RATING}
+`);
+
+/**
+ * Serializa contato sem expor nome de quem cadastrou (admins incluídos).
+ * Tags não fazem parte desta feature — sempre [].
+ */
 function serializeRecommendation(row) {
   return {
     id: row.id,
@@ -157,11 +158,11 @@ function serializeRecommendation(row) {
     whatsapp: row.whatsapp,
     instagram: row.instagram,
     createdAt: row.createdAt,
-    createdBy: { id: row.createdById, name: row.createdByName },
+    createdBy: { id: row.createdById },
     ratingCount: row.ratingCount,
     avgRating: row.avgRating,
     commentCount: row.commentCount,
-    tags: listTagsByRecommendation.all(row.id),
+    tags: [],
   };
 }
 
@@ -191,24 +192,58 @@ async function saveMediaFiles(commentId, files) {
   }
 }
 
+function deleteContactAssets(recommendationId) {
+  for (const comment of listCommentsByRecommendation.all(recommendationId)) {
+    for (const media of listMediaByComment.all(comment.id)) {
+      deleteFromR2(media.path);
+    }
+  }
+  deleteRecommendationById.run(recommendationId);
+  removeDocument("recommendation", recommendationId);
+}
+
+/**
+ * Purge: apaga do banco + índice RAG contatos com média < CONTACT_MIN_AVG_RATING.
+ * Chamado no boot do router e após cada rating que derruba a média.
+ */
+function purgeLowRatedContacts() {
+  const ids = listLowRatedIds.all().map((r) => r.id);
+  for (const id of ids) {
+    const row = getRecommendationById.get(id);
+    if (!row) continue;
+    deleteContactAssets(id);
+    recordAudit({
+      actorUserId: null,
+      actorName: "sistema",
+      action: "recommendations.auto_purge_low_rating",
+      entityType: "recommendation",
+      entityId: id,
+      details: { name: row.name, reason: `avgRating < ${CONTACT_MIN_AVG_RATING}` },
+    });
+  }
+  return ids.length;
+}
+
 export function recommendationsRoutes() {
   const router = Router();
   router.use(requireAuth, requireApproved);
 
-  router.get("/", (req, res) => {
-    const tagFilter = typeof req.query.tags === "string" ? req.query.tags.split(",").filter(Boolean) : [];
+  // Limpa legado/órfãos com nota baixa (hide + purge).
+  try {
+    purgeLowRatedContacts();
+  } catch (err) {
+    console.error("[contatos] falha ao purgar notas baixas:", err?.message || err);
+  }
 
-    let recommendations = listRecommendationsBase.all().map(serializeRecommendation);
-    if (tagFilter.length > 0) {
-      recommendations = recommendations.filter((r) => r.tags.some((t) => tagFilter.includes(t.id)));
-    }
-
+  router.get("/", (_req, res) => {
+    // Tags não filtram mais esta feature.
+    const recommendations = listRecommendationsBase.all().map(serializeRecommendation);
     res.json({ recommendations });
   });
 
   router.get("/:id", (req, res) => {
     const recommendation = getRecommendationWithStats.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Recomendação não encontrada." });
+    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
 
     res.json({
       recommendation: serializeRecommendation(recommendation),
@@ -218,14 +253,9 @@ export function recommendationsRoutes() {
   });
 
   router.post("/", (req, res) => {
-    const parsed = recommendationSchema.safeParse(req.body);
+    const parsed = contactSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Dados inválidos." });
-    }
-
-    const tagIds = parsed.data.tagIds ?? [];
-    if (!allTagsExist(tagIds)) {
-      return res.status(400).json({ message: "Tag inexistente." });
     }
 
     const id = randomUUID();
@@ -233,11 +263,10 @@ export function recommendationsRoutes() {
       id,
       created_by: req.user.id,
       name: parsed.data.name,
-      description: parsed.data.description || null,
+      description: parsed.data.description,
       whatsapp: parsed.data.whatsapp || null,
       instagram: normalizeInstagram(parsed.data.instagram),
     });
-    if (tagIds.length > 0) applyRecommendationTags(id, tagIds);
 
     recordAudit({
       actorUserId: req.user.id,
@@ -254,30 +283,24 @@ export function recommendationsRoutes() {
 
   router.patch("/:id", (req, res) => {
     const recommendation = getRecommendationById.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Recomendação não encontrada." });
+    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
     if (recommendation.created_by !== req.user.id) {
-      return res.status(403).json({ message: "Só quem cadastrou a recomendação pode editá-la." });
+      return res.status(403).json({ message: "Só quem cadastrou o contato pode editá-lo." });
     }
 
-    const parsed = recommendationSchema.safeParse(req.body);
+    const parsed = contactSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Dados inválidos." });
-    }
-
-    if (parsed.data.tagIds && !allTagsExist(parsed.data.tagIds)) {
-      return res.status(400).json({ message: "Tag inexistente." });
     }
 
     updateRecommendation.run({
       id: recommendation.id,
       name: parsed.data.name,
-      description: parsed.data.description || null,
+      description: parsed.data.description,
       whatsapp: parsed.data.whatsapp || null,
       instagram: normalizeInstagram(parsed.data.instagram),
       updated_at: nowIso(),
     });
-    // `tagIds` ausente = não mexe nas tags atuais; presente (mesmo vazio) = substitui tudo.
-    if (parsed.data.tagIds) applyRecommendationTags(recommendation.id, parsed.data.tagIds);
 
     recordAudit({
       actorUserId: req.user.id,
@@ -293,20 +316,14 @@ export function recommendationsRoutes() {
 
   router.delete("/:id", (req, res) => {
     const recommendation = getRecommendationById.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Recomendação não encontrada." });
+    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
     const isOwner = recommendation.created_by === req.user.id;
     const isStaff = req.user.role === "admin" || req.user.role === "sindico";
     if (!isOwner && !isStaff) {
-      return res.status(403).json({ message: "Só quem cadastrou a recomendação (ou a administração) pode excluí-la." });
+      return res.status(403).json({ message: "Só quem cadastrou o contato (ou a administração) pode excluí-lo." });
     }
 
-    for (const comment of listCommentsByRecommendation.all(recommendation.id)) {
-      for (const media of listMediaByComment.all(comment.id)) {
-        deleteFromR2(media.path);
-      }
-    }
-    deleteRecommendationById.run(recommendation.id);
-    removeDocument("recommendation", recommendation.id);
+    deleteContactAssets(recommendation.id);
 
     recordAudit({
       actorUserId: req.user.id,
@@ -322,7 +339,7 @@ export function recommendationsRoutes() {
 
   router.put("/:id/rating", (req, res) => {
     const recommendation = getRecommendationById.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Recomendação não encontrada." });
+    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
 
     const parsed = ratingSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Escolha uma nota de 1 a 5 estrelas." });
@@ -335,12 +352,31 @@ export function recommendationsRoutes() {
       updated_at: nowIso(),
     });
 
-    res.json({ recommendation: serializeRecommendation(getRecommendationWithStats.get(recommendation.id)) });
+    const updated = getRecommendationWithStats.get(recommendation.id);
+    // Hide + purge: média < 3 remove o contato do hub e do RAG.
+    if (!updated) {
+      deleteContactAssets(recommendation.id);
+      recordAudit({
+        actorUserId: req.user.id,
+        actorName: req.user.name,
+        action: "recommendations.auto_purge_low_rating",
+        entityType: "recommendation",
+        entityId: recommendation.id,
+        details: { name: recommendation.name, reason: `avgRating < ${CONTACT_MIN_AVG_RATING}` },
+      });
+      return res.status(200).json({
+        purged: true,
+        message: `Contato removido automaticamente por avaliação média abaixo de ${CONTACT_MIN_AVG_RATING}.`,
+      });
+    }
+
+    res.json({ recommendation: serializeRecommendation(updated) });
   });
 
+  // Comentários mantidos na API por compat (MCP legado); a UI de Contatos não usa mais.
   router.post("/:id/comments", handleMediaUpload, async (req, res) => {
-    const recommendation = getRecommendationById.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Recomendação não encontrada." });
+    const recommendation = getRecommendationWithStats.get(req.params.id);
+    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
 
     const parsed = commentSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -362,11 +398,11 @@ export function recommendationsRoutes() {
       return res.status(400).json({ message: err.message || "Não foi possível processar os arquivos enviados." });
     }
 
-    if (recommendation.created_by !== req.user.id) {
+    if (recommendation.createdById !== req.user.id) {
       notifyUser({
-        userId: recommendation.created_by,
-        linkUrl: `/recomendacoes/${recommendation.id}`,
-        message: `${req.user.name} comentou na recomendação "${recommendation.name}"`,
+        userId: recommendation.createdById,
+        linkUrl: `/contatos-condominio/${recommendation.id}`,
+        message: `${req.user.name} comentou no contato "${recommendation.name}"`,
       });
     }
 
@@ -383,8 +419,8 @@ export function recommendationsRoutes() {
   });
 
   router.delete("/:id/comments/:commentId", (req, res) => {
-    const recommendation = getRecommendationById.get(req.params.id);
-    if (!recommendation) return res.status(404).json({ message: "Recomendação não encontrada." });
+    const recommendation = getRecommendationWithStats.get(req.params.id);
+    if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
 
     const comment = getCommentById.get(req.params.commentId);
     if (!comment || comment.recommendation_id !== recommendation.id) {

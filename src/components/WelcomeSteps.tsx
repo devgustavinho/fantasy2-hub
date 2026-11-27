@@ -34,7 +34,7 @@ const TUTORIAL_LINKS: { to: string; label: string; tip: string }[] = [
   { to: "/", label: "Início", tip: "Resumo de pautas e o que está aberto agora." },
   { to: "/pautas", label: "Pautas", tip: "Sugira temas, vote e comente." },
   { to: "/negocios", label: "Negócios", tip: "Serviços de moradores do Fantasy 2." },
-  { to: "/recomendacoes", label: "Recomendações", tip: "Indicações da comunidade." },
+  { to: "/contatos-condominio", label: "Contatos do condomínio", tip: "Prestadores e comércios úteis." },
   { to: "/horarios", label: "Horários", tip: "Áreas comuns, silêncio e mudanças." },
   { to: "/faq", label: "FAQ", tip: "Dúvidas frequentes — e estes primeiros passos." },
   { to: "/perguntar", label: "Perguntar", tip: "Pergunte ao conhecimento do condomínio." },

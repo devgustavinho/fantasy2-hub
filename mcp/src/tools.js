@@ -340,15 +340,19 @@ export function registerToolsForUser(server, api, user) {
   );
   add("set_my_service_item_option_groups");
 
-  tool(server, "list_recommendations", "Lista recomendações de moradores.", {}, async () =>
-    api.get("/recommendations"),
+  tool(
+    server,
+    "list_recommendations",
+    "Lista Contatos do condomínio (nome, tipo de serviço, WhatsApp/Instagram). Sem tags; média < 3 não aparece.",
+    {},
+    async () => api.get("/recommendations"),
   );
   add("list_recommendations");
 
   tool(
     server,
     "get_recommendation",
-    "Detalhe de uma recomendação.",
+    "Detalhe de um contato do condomínio.",
     { id: z.string().min(1) },
     async ({ id }) => api.get(`/recommendations/${id}`),
   );
@@ -357,13 +361,12 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "create_recommendation",
-    "Cadastra uma recomendação (WhatsApp ou Instagram obrigatório).",
+    "Cadastra um contato do condomínio (nome, descrição do serviço; WhatsApp e/ou Instagram).",
     {
       name: z.string().min(2).max(120),
-      description: z.string().max(1000).nullable().optional(),
+      description: z.string().min(2).max(1000),
       whatsapp: z.string().max(30).nullable().optional(),
       instagram: z.string().max(60).nullable().optional(),
-      tagIds: z.array(z.string()).max(20).optional(),
     },
     async (body) => api.post("/recommendations", body),
   );
@@ -372,14 +375,13 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "update_recommendation",
-    "Edita recomendação própria.",
+    "Edita contato próprio do condomínio.",
     {
       id: z.string().min(1),
       name: z.string().min(2).max(120),
-      description: z.string().max(1000).nullable().optional(),
+      description: z.string().min(2).max(1000),
       whatsapp: z.string().max(30).nullable().optional(),
       instagram: z.string().max(60).nullable().optional(),
-      tagIds: z.array(z.string()).max(20).optional(),
     },
     async ({ id, ...body }) => api.patch(`/recommendations/${id}`, body),
   );
@@ -388,7 +390,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "delete_recommendation",
-    "Exclui recomendação (autor ou staff).",
+    "Exclui contato do condomínio (autor ou staff).",
     { id: z.string().min(1) },
     async ({ id }) => {
       await api.delete(`/recommendations/${id}`);
@@ -400,7 +402,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "rate_recommendation",
-    "Avalia uma recomendação (1 a 5 estrelas).",
+    "Avalia um contato (1 a 5). Média < 3 remove o contato automaticamente.",
     {
       id: z.string().min(1),
       stars: z.number().int().min(1).max(5),
@@ -412,7 +414,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "comment_recommendation",
-    "Comenta numa recomendação (texto; mídia só pelo Hub).",
+    "Comenta num contato (legado; a UI de Contatos não usa comentários).",
     {
       id: z.string().min(1),
       body: z.string().min(1).max(2000),
@@ -424,7 +426,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "delete_recommendation_comment",
-    "Exclui comentário de recomendação (autor ou staff).",
+    "Exclui comentário de contato (autor ou staff).",
     {
       id: z.string().min(1),
       commentId: z.string().min(1),
@@ -442,7 +444,7 @@ export function registerToolsForUser(server, api, user) {
   tool(
     server,
     "ask_condo",
-    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, horários/convivência/áreas/mudança, serviços, recomendações, pautas, embeds e Manual do Proprietário). Sem senhas de Wi‑Fi no índice. Limite: 5 perguntas / usuário / 24h.",
+    "Pergunta ao conhecimento do condomínio (FAQ, boas-vindas, horários/convivência/áreas/mudança, negócios, contatos do condomínio, pautas, embeds e Manual do Proprietário). Contatos incluem link WhatsApp quando houver. Sem senhas de Wi‑Fi no índice. Limite: 5 perguntas / usuário / 24h.",
     {
       question: z.string().min(3).max(500).describe("Pergunta em português"),
     },
@@ -455,7 +457,7 @@ export function registerToolsForUser(server, api, user) {
   );
   add("get_rag_status");
 
-  tool(server, "list_tags", "Lista tags curadas (serviços/recomendações).", {}, async () =>
+  tool(server, "list_tags", "Lista tags curadas (negócios). Contatos do condomínio não usam tags.", {}, async () =>
     api.get("/tags"),
   );
   add("list_tags");
@@ -1045,7 +1047,7 @@ export function registerToolsForUser(server, api, user) {
     tool(
       server,
       "create_tag",
-      "Cria tag curada (serviços/recomendações).",
+      "Cria tag curada (negócios).",
       { name: z.string().min(2).max(40) },
       async (body) => api.post("/tags", body),
     );
