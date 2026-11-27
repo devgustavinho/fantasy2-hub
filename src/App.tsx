@@ -49,6 +49,11 @@ function RedirectServicoToNegocio() {
   return <Navigate to={`/negocios/${id}`} replace />;
 }
 
+function RedirectRecomendacaoToContato() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/contatos-condominio/${id}`} replace />;
+}
+
 function AppLayout({ children }: { children: React.ReactNode }) {
   // Shell de viewport: TopBar + main (scroll) + tab bar (mobile).
   // A tab bar fica FORA do main — não usa sticky/fixed e não some ao rolar.
@@ -165,7 +170,7 @@ export default function App() {
               <Route path="/servicos/meu" element={<Navigate to="/negocios/meu" replace />} />
               <Route path="/servicos/:id" element={<RedirectServicoToNegocio />} />
               <Route
-                path="/recomendacoes"
+                path="/contatos-condominio"
                 element={
                   <AppLayout>
                     <RecommendationsList />
@@ -173,13 +178,15 @@ export default function App() {
                 }
               />
               <Route
-                path="/recomendacoes/:id"
+                path="/contatos-condominio/:id"
                 element={
                   <AppLayout>
                     <RecommendationDetail />
                   </AppLayout>
                 }
               />
+              <Route path="/recomendacoes" element={<Navigate to="/contatos-condominio" replace />} />
+              <Route path="/recomendacoes/:id" element={<RedirectRecomendacaoToContato />} />
               <Route
                 path="/faq"
                 element={

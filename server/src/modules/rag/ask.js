@@ -111,7 +111,7 @@ export async function askCondo(question) {
   if (top.length === 0) {
     return {
       answer:
-        "Não encontrei essa informação no material indexado do condomínio (FAQ, boas-vindas, serviços, recomendações, pautas oficiais e Manual do Proprietário).",
+        "Não encontrei essa informação no material indexado do condomínio (FAQ, boas-vindas, serviços, contatos do condomínio, pautas oficiais e Manual do Proprietário).",
       citations: [],
       scores: scored.slice(0, 3).map((s) => ({
         title: s.title,

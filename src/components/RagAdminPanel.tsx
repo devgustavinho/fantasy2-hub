@@ -11,7 +11,7 @@ const SOURCE_LABEL: Record<string, string> = {
   faq: "FAQ",
   welcome: "Boas-vindas",
   service: "Negócio",
-  recommendation: "Recomendação",
+  recommendation: "Contato",
   topic: "Pauta",
   external: "Embed",
   manual: "Manual",

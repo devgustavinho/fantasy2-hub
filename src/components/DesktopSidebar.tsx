@@ -15,7 +15,7 @@ import {
   ScrollText,
   Settings2,
   ShoppingBag,
-  Star,
+  ContactRound,
   Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -57,10 +57,10 @@ function residentPrimary(): NavLink[] {
 function residentSecondary(): NavLink[] {
   return [
     {
-      title: "Recomendações",
-      href: "/recomendacoes",
-      description: "Indicações da comunidade",
-      icon: <Star className={iconCls} />,
+      title: "Contatos do condomínio",
+      href: "/contatos-condominio",
+      description: "Prestadores e comércios úteis",
+      icon: <ContactRound className={iconCls} />,
     },
     {
       title: "FAQ",

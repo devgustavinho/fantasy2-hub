@@ -45,17 +45,19 @@ const listServiceTags = sqlite.prepare(`
   WHERE st.service_id = ? ORDER BY t.name ASC
 `);
 
+// Contatos com média < 3 não entram no RAG (espelha CONTACT_MIN_AVG_RATING da API).
+const CONTACT_ELIGIBLE = `
+  (
+    (SELECT COUNT(*) FROM recommendation_ratings WHERE recommendation_id = recommendations.id) = 0
+    OR (SELECT AVG(stars) FROM recommendation_ratings WHERE recommendation_id = recommendations.id) >= 3
+  )
+`;
 const getRecommendation = sqlite.prepare(
-  "SELECT id, name, description, whatsapp, instagram FROM recommendations WHERE id = ?",
+  `SELECT id, name, description, whatsapp, instagram FROM recommendations WHERE id = ? AND ${CONTACT_ELIGIBLE}`,
 );
 const listRecommendations = sqlite.prepare(
-  "SELECT id, name, description, whatsapp, instagram FROM recommendations",
+  `SELECT id, name, description, whatsapp, instagram FROM recommendations WHERE ${CONTACT_ELIGIBLE}`,
 );
-const listRecommendationTags = sqlite.prepare(`
-  SELECT t.name FROM recommendation_tags rt JOIN tags t ON t.id = rt.tag_id
-  WHERE rt.recommendation_id = ? ORDER BY t.name ASC
-`);
-
 const getTopic = sqlite.prepare(`
   SELECT id, title, description, status, status_note AS statusNote,
          assembly_date AS assemblyDate, close_kind AS closeKind, close_reason AS closeReason
@@ -151,21 +153,29 @@ export function buildServiceDocument(id) {
   };
 }
 
+/** Digitos wa.me — espelha `buildWhatsAppLink` do front (assume BR 55). */
+function whatsappMeUrl(phone) {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D/g, "");
+  if (!digits) return null;
+  const number = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+  return `https://wa.me/${number}`;
+}
+
+/**
+ * Contatos do condomínio (ex-recomendações). Sem tags; inclui link clicável wa.me.
+ * Só indexa contatos elegíveis (sem média < 3) — a API já purga, mas reindex legado passa pelo get.
+ */
 export function buildRecommendationDocument(id) {
   const row = getRecommendation.get(id);
   if (!row) return null;
-  let tags = [];
-  try {
-    tags = listRecommendationTags.all(id).map((t) => t.name);
-  } catch {
-    // tabela de tags de recomendação pode não existir em DBs muito antigos — ignore
-  }
+  const wa = whatsappMeUrl(row.whatsapp);
   const lines = [
-    `Recomendação: ${row.name}`,
-    row.description ? `Descrição: ${row.description}` : null,
-    tags.length ? `Tags: ${tags.join(", ")}` : null,
-    row.whatsapp ? `WhatsApp: ${row.whatsapp}` : null,
-    row.instagram ? `Instagram: @${row.instagram}` : null,
+    `Contato do condomínio: ${row.name}`,
+    row.description ? `Tipo de serviço / descrição: ${row.description}` : null,
+    wa ? `WhatsApp (link clicável): ${wa}` : null,
+    row.whatsapp && !wa ? `WhatsApp: ${row.whatsapp}` : null,
+    row.instagram ? `Instagram: https://instagram.com/${row.instagram}` : null,
   ].filter(Boolean);
 
   return {

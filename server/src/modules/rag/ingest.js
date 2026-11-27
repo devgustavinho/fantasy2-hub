@@ -178,7 +178,7 @@ export function scheduleIngest(label, fn) {
 }
 
 /**
- * Reindexa todo o corpus (FAQ, welcome, horários, serviços, recomendações, pautas, embeds, manual).
+ * Reindexa todo o corpus (FAQ, welcome, horários, serviços, contatos do condomínio, pautas, embeds, manual).
  * @param {{ force?: boolean, onProgress?: (info: object) => void }} [opts]
  */
 export async function reindexAll(opts = {}) {
