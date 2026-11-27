@@ -28,36 +28,52 @@ function initialStep(progress: WelcomeProgress): PortalStep {
 type PortalWelcomeProps = {
   preview?: boolean;
   mockLinks?: GroupLinksForUser;
+  /** Simulador admin: progresso controlado pelo pai. */
+  controlledProgress?: WelcomeProgress;
+  onControlledProgressChange?: (next: WelcomeProgress) => void;
+  /** Simulador: ao clicar “Ir para o início”, entrega o progresso final. */
+  onPreviewFinished?: (progress: WelcomeProgress) => void;
 };
 
-export default function PortalWelcome({ preview = false, mockLinks }: PortalWelcomeProps = {}) {
+export default function PortalWelcome({
+  preview = false,
+  mockLinks,
+  controlledProgress,
+  onControlledProgressChange,
+  onPreviewFinished,
+}: PortalWelcomeProps = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const userId = preview ? "preview" : (user?.id ?? "anon");
+  const controlled = preview && controlledProgress != null;
 
-  const [progress, setProgress] = useState<WelcomeProgress>(() =>
-    preview ? {} : readWelcomeProgress(userId),
+  const [localProgress, setLocalProgress] = useState<WelcomeProgress>(() =>
+    preview ? (controlledProgress ?? {}) : readWelcomeProgress(userId),
   );
+  const progress = controlled ? controlledProgress! : localProgress;
   const [step, setStep] = useState<PortalStep>(() =>
-    preview ? "general" : initialStep(readWelcomeProgress(userId)),
+    preview ? initialStep(controlledProgress ?? {}) : initialStep(readWelcomeProgress(userId)),
   );
+
+  const resolvedLinks =
+    mockLinks ??
+    ({
+      generalUrl: "https://chat.whatsapp.com/preview-grupo-geral",
+      tower: 3,
+      towerUrl: "https://chat.whatsapp.com/preview-torre-3",
+    } satisfies GroupLinksForUser);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: preview ? ["group-links", "preview"] : ["group-links"],
+    queryKey: preview
+      ? ["group-links", "preview", resolvedLinks.tower, resolvedLinks.generalUrl, resolvedLinks.towerUrl]
+      : ["group-links"],
     queryFn: () =>
-      preview
-        ? Promise.resolve(
-            mockLinks ?? {
-              generalUrl: "https://chat.whatsapp.com/preview-grupo-geral",
-              tower: 3,
-              towerUrl: "https://chat.whatsapp.com/preview-torre-3",
-            },
-          )
-        : groupLinksService.getGroupLinks(),
+      preview ? Promise.resolve(resolvedLinks) : groupLinksService.getGroupLinks(),
   });
 
   function persist(next: WelcomeProgress) {
-    setProgress(next);
+    if (controlled) onControlledProgressChange?.(next);
+    else setLocalProgress(next);
     if (!preview) writeWelcomeProgress(userId, next);
   }
 
@@ -69,6 +85,7 @@ export default function PortalWelcome({ preview = false, mockLinks }: PortalWelc
     const next = { ...progress, tutorial: true };
     persist(next);
     if (!preview) navigate("/", { replace: true });
+    else if (onPreviewFinished) onPreviewFinished(next);
     else setStep("hub");
   }
 

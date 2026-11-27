@@ -287,7 +287,10 @@ export default function WelcomeAdmin() {
             <Link to="/admin/configuracoes">← Configurações</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link to="/admin/preview-onboarding#boas-vindas">Preview boas-vindas</Link>
+            <Link to="/admin/preview-onboarding#simulador">Simulador de onboarding</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/admin/preview-onboarding#boas-vindas">Preview página pública</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link to="/boas-vindas">Ver página pública</Link>

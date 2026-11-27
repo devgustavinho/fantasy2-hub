@@ -89,9 +89,9 @@ export default function SystemSettings() {
             adminOnly: true,
           },
           {
-            title: "Ver onboarding",
-            description: "Preview mockado do banner e dos primeiros passos",
-            href: "/admin/preview-onboarding#onboarding",
+            title: "Simulador de onboarding",
+            description: "Percorra o fluxo WhatsApp do Portal (geral → torre → Hub + nudge)",
+            href: "/admin/preview-onboarding#simulador",
             icon: <Eye className="h-5 w-5" />,
             adminOnly: true,
           },

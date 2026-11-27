@@ -11,49 +11,66 @@ import {
   writeWelcomeProgress,
   type WelcomeProgress,
 } from "@/lib/welcomeProgress";
+import type { GroupLinksForUser } from "@/lib/types";
 import * as groupLinksService from "@/services/groupLinks";
 
 type TowerGroupNudgeProps = {
   preview?: boolean;
   /** Força o nudge no preview admin. */
   forceShow?: boolean;
+  mockLinks?: GroupLinksForUser;
+  controlledProgress?: WelcomeProgress;
+  onControlledProgressChange?: (next: WelcomeProgress) => void;
 };
 
-export function TowerGroupNudge({ preview = false, forceShow = false }: TowerGroupNudgeProps = {}) {
+export function TowerGroupNudge({
+  preview = false,
+  forceShow = false,
+  mockLinks,
+  controlledProgress,
+  onControlledProgressChange,
+}: TowerGroupNudgeProps = {}) {
   const { user } = useAuth();
   const userId = preview ? "preview" : (user?.id ?? "anon");
+  const controlled = preview && controlledProgress != null;
 
-  const [progress, setProgress] = useState<WelcomeProgress>(() =>
+  const [localProgress, setLocalProgress] = useState<WelcomeProgress>(() =>
     preview
-      ? forceShow
-        ? { general: true, tutorial: true, homeSeenAfterWizard: true }
-        : {}
+      ? (controlledProgress ??
+          (forceShow ? { general: true, tutorial: true, homeSeenAfterWizard: true } : {}))
       : readWelcomeProgress(userId),
   );
+  const progress = controlled ? controlledProgress! : localProgress;
   // Só mostra se JÁ era elegível ao montar (visita seguinte). A 1ª Home só grava a flag.
   const [eligibleOnMount] = useState(() =>
-    preview ? forceShow : shouldShowTowerNudge(readWelcomeProgress(userId)),
+    preview
+      ? forceShow || shouldShowTowerNudge(controlledProgress ?? localProgress)
+      : shouldShowTowerNudge(readWelcomeProgress(userId)),
   );
   const [hidden, setHidden] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     if (preview) return;
-    setProgress((current) => noteHomeVisitAfterWizard(userId, current));
+    setLocalProgress((current) => noteHomeVisitAfterWizard(userId, current));
   }, [preview, userId]);
 
-  const show = (preview ? forceShow : eligibleOnMount) && !hidden;
+  const show = (preview ? forceShow || eligibleOnMount : eligibleOnMount) && !hidden;
+
+  const resolvedLinks =
+    mockLinks ??
+    ({
+      generalUrl: "https://chat.whatsapp.com/preview-grupo-geral",
+      tower: 3,
+      towerUrl: "https://chat.whatsapp.com/preview-torre-3",
+    } satisfies GroupLinksForUser);
 
   const { data } = useQuery({
-    queryKey: preview ? ["group-links", "preview"] : ["group-links"],
+    queryKey: preview
+      ? ["group-links", "preview-nudge", resolvedLinks.tower, resolvedLinks.towerUrl]
+      : ["group-links"],
     queryFn: () =>
-      preview
-        ? Promise.resolve({
-            generalUrl: "https://chat.whatsapp.com/preview-grupo-geral",
-            tower: 3,
-            towerUrl: "https://chat.whatsapp.com/preview-torre-3",
-          })
-        : groupLinksService.getGroupLinks(),
+      preview ? Promise.resolve(resolvedLinks) : groupLinksService.getGroupLinks(),
     enabled: show,
   });
 
@@ -61,7 +78,8 @@ export function TowerGroupNudge({ preview = false, forceShow = false }: TowerGro
 
   function completeTower() {
     const next = { ...progress, tower: true };
-    setProgress(next);
+    if (controlled) onControlledProgressChange?.(next);
+    else setLocalProgress(next);
     if (!preview) writeWelcomeProgress(userId, next);
     setHidden(true);
   }
