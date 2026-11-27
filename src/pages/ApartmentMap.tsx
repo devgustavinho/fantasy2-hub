@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QueryError } from "@/components/QueryError";
 import * as apartmentsService from "@/services/apartments";
 import { cn } from "@/lib/utils";
-import type { HouseholdRole } from "@/lib/types";
+import type { HouseholdRole, TowerPortalCoverage } from "@/lib/types";
 
 const TOWERS = [1, 2, 3, 4, 5];
 
@@ -16,6 +16,11 @@ function floorLabel(floor: number) {
 
 function householdBadge(role: HouseholdRole) {
   return role === "owner" ? "Titular" : "Familiar";
+}
+
+function coverageLabel(c: TowerPortalCoverage | undefined) {
+  if (!c || c.total === 0) return null;
+  return `${c.onPortal} de ${c.total} no portal (${c.percent}%)`;
 }
 
 export default function ApartmentMap() {
@@ -31,6 +36,8 @@ export default function ApartmentMap() {
   });
 
   const floors = Array.from(new Set(data?.apartments.map((a) => a.floor) ?? [])).sort((a, b) => b - a);
+  const towersCoverage = data?.towersCoverage ?? [];
+  const coverage = data?.coverage ?? towersCoverage.find((c) => c.tower === tower);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -41,23 +48,43 @@ export default function ApartmentMap() {
         </p>
       </div>
 
-      <div className="flex gap-2">
-        {TOWERS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTower(t)}
-            className={cn(
-              "rounded-md border px-3 py-1.5 text-sm transition-colors",
-              tower === t
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-input text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Torre {t}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2">
+        {TOWERS.map((t) => {
+          const towerCoverage = towersCoverage.find((c) => c.tower === t);
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTower(t)}
+              className={cn(
+                "min-w-[4.5rem] rounded-md border px-3 py-1.5 text-sm transition-colors",
+                tower === t
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-input text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="block">Torre {t}</span>
+              {towerCoverage != null && (
+                <span
+                  className={cn(
+                    "block text-xs tabular-nums",
+                    tower === t ? "text-primary-foreground/80" : "text-muted-foreground",
+                  )}
+                >
+                  {towerCoverage.percent}%
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {coverage && coverage.total > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Cobertura no portal (aprovados):{" "}
+          <span className="font-medium text-foreground">{coverageLabel(coverage)}</span>
+        </p>
+      )}
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
       {isError && <QueryError onRetry={() => refetch()} />}

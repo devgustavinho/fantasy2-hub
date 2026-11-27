@@ -35,6 +35,31 @@ const listResidentsByTower = sqlite.prepare(`
   ORDER BY a.floor ASC, a.unit_number ASC, u.household_role ASC
 `);
 
+// Cobertura no portal: apto conta se tem pelo menos um morador aprovado.
+const coverageByTower = sqlite.prepare(`
+  SELECT
+    a.tower AS tower,
+    COUNT(*) AS total,
+    SUM(
+      CASE WHEN EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.apartment_id = a.id AND u.approval_status = 'approved'
+      ) THEN 1 ELSE 0 END
+    ) AS onPortal
+  FROM apartments a
+  GROUP BY a.tower
+  ORDER BY a.tower ASC
+`);
+
+function buildTowersCoverage() {
+  return coverageByTower.all().map((row) => {
+    const total = Number(row.total) || 0;
+    const onPortal = Number(row.onPortal) || 0;
+    const percent = total === 0 ? 0 : Math.round((onPortal / total) * 100);
+    return { tower: row.tower, total, onPortal, percent };
+  });
+}
+
 export function apartmentsRoutes() {
   const router = Router();
 
@@ -52,6 +77,7 @@ export function apartmentsRoutes() {
 
   // Mapa de apartamentos por torre, pra administração não se perder em meio a centenas de
   // usuários — mostra quem mora em cada unidade (titular + familiar, se houver).
+  // Inclui cobertura no portal (% de aptos com morador aprovado) por torre.
   router.get("/map", requireAuth, requireAdmin, (req, res) => {
     const parsed = querySchema.safeParse(req.query);
     if (!parsed.success) {
@@ -84,7 +110,20 @@ export function apartmentsRoutes() {
       }
     }
 
-    res.json({ apartments: Array.from(byApartment.values()) });
+    const towersCoverage = buildTowersCoverage();
+    const coverage =
+      towersCoverage.find((c) => c.tower === parsed.data.tower) ?? {
+        tower: parsed.data.tower,
+        total: 0,
+        onPortal: 0,
+        percent: 0,
+      };
+
+    res.json({
+      apartments: Array.from(byApartment.values()),
+      coverage,
+      towersCoverage,
+    });
   });
 
   return router;

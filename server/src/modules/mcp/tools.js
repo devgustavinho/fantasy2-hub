@@ -943,7 +943,7 @@ export function registerToolsForUser(server, api, user) {
     tool(
       server,
       "list_apartment_map",
-      "Mapa de apartamentos com ocupantes (admin).",
+      "Mapa de apartamentos com ocupantes e cobertura no portal por torre (admin).",
       { tower: z.number().int().min(1).max(5).optional() },
       async ({ tower }) => api.get(`/apartments/map${qs({ tower })}`),
     );
