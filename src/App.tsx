@@ -49,16 +49,15 @@ function RedirectServicoToNegocio() {
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
+  // Shell de viewport: TopBar + main (scroll) + tab bar (mobile).
+  // A tab bar fica FORA do main — não usa sticky/fixed e não some ao rolar.
   return (
-    <div
-      className="flex min-h-screen min-w-0 overflow-x-hidden bg-background md:h-[100dvh] md:min-h-0 md:overflow-hidden"
-      style={{ minHeight: "100dvh" }}
-    >
+    <div className="flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
       <DesktopSidebar />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <TopBar />
         <OnboardingBanner />
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden md:overflow-y-auto md:px-2 lg:px-4">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain md:px-2 lg:px-4">
           {children}
         </main>
         <BottomDock />

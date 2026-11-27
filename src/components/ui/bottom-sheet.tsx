@@ -16,14 +16,23 @@ type BottomSheetProps = {
 export function BottomSheet({ open, onClose, title, description, children, className }: BottomSheetProps) {
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
+    const prevBody = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Shell mobile: o scroll vive no <main>, não no body.
+    const mains = Array.from(document.querySelectorAll("main"));
+    const prevMains = mains.map((el) => (el as HTMLElement).style.overflow);
+    mains.forEach((el) => {
+      (el as HTMLElement).style.overflow = "hidden";
+    });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBody;
+      mains.forEach((el, i) => {
+        (el as HTMLElement).style.overflow = prevMains[i] ?? "";
+      });
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);
