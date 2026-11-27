@@ -31,7 +31,7 @@ const MOCK_WELCOME = {
 ## O que você encontra aqui
 
 - Regras de convivência
-- Horários das áreas comuns
+- Áreas comuns e horários
 - Orientações para mudanças
 
 Nenhum texto desta tela altera a página real. Para editar o conteúdo publicado, use o botão abaixo.`,

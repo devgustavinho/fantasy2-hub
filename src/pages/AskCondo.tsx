@@ -17,7 +17,7 @@ const SOURCE_LABEL: Record<string, string> = {
   topic: "Pauta",
   external: "Embed",
   manual: "Manual",
-  horarios: "Horários",
+  horarios: "Áreas comuns",
 };
 
 type ChatMessage = {

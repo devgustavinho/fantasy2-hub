@@ -2,14 +2,15 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
-  Clock,
   Copy,
+  LayoutGrid,
   Pencil,
   Plus,
   Trash2,
   Volume2,
   Truck,
   Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -409,108 +410,59 @@ export default function Horarios() {
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 pb-28">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          <Clock className="h-6 w-6" />
-          Horários
+          <LayoutGrid className="h-6 w-6" />
+          Áreas comuns
         </h1>
         <p className="text-sm text-muted-foreground">
-          Áreas comuns, mudanças e convivência — fuso America/Fortaleza.
+          Nome e horários de cada área — fuso America/Fortaleza.
         </p>
       </div>
-
-      {statusQuery.data && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5" />
-                Mudança agora
-              </CardDescription>
-              <CardTitle className="text-lg">
-                {statusQuery.data.mudancaNow.allowed ? "Permitida" : "Não"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              {statusQuery.data.mudancaNow.reason}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1.5">
-                <Volume2 className="h-3.5 w-3.5" />
-                Barulho agora
-              </CardDescription>
-              <CardTitle className="text-lg">
-                {statusQuery.data.noiseNow.allowed
-                  ? `Sim (até ${statusQuery.data.noiseNow.noiseUntil})`
-                  : `Silêncio (até ${statusQuery.data.noiseNow.noiseFrom})`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              {statusQuery.data.noiseNow.reason}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription className="flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5" />
-                Mudança amanhã
-              </CardDescription>
-              <CardTitle className="text-lg">
-                {statusQuery.data.mudancaTomorrow.allowed ? "Sim" : "Não"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              {formatDateOnly(statusQuery.data.mudancaTomorrow.date)} —{" "}
-              {statusQuery.data.mudancaTomorrow.reason}
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {bundleQuery.isLoading && <p className="text-muted-foreground">Carregando…</p>}
       {bundleQuery.isError && <QueryError onRetry={() => bundleQuery.refetch()} />}
 
       {bundleQuery.data && (
         <>
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Áreas comuns</h2>
-            <ul className="space-y-2">
+          <section className="space-y-2" aria-label="Lista de áreas comuns">
+            <ul className="divide-y rounded-lg border">
               {bundleQuery.data.areas.map((area) => (
-                <li key={area.id} className="rounded-lg border px-4 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium">{area.name}</p>
-                      <p className="text-sm text-muted-foreground">{formatAreaHours(area)}</p>
-                      {area.assemblyRef && (
-                        <p className="text-xs text-muted-foreground">Assembleia: {area.assemblyRef}</p>
-                      )}
-                      {area.notes && <p className="mt-1 text-xs text-muted-foreground">{area.notes}</p>}
-                      {area.hasWifi && (
-                        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                          <Wifi className="h-3 w-3" />
-                          Wi‑Fi: {area.wifiSsid}
-                        </p>
-                      )}
+                <li key={area.id} className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="truncate text-sm font-medium">{area.name}</span>
+                        <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                          {formatAreaHours(area)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {area.hasWifi && (
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      {area.hasWifi ? (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="gap-1"
+                          className="h-8 gap-1 px-2 text-xs"
                           onClick={() => setWifiAreaId(area.id)}
                         >
                           <Wifi className="h-3.5 w-3.5" />
-                          Conectar
+                          Entrar no Wifi
                         </Button>
+                      ) : (
+                        <span
+                          className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground"
+                          title="Sem Wi‑Fi"
+                          aria-label="Sem Wi‑Fi"
+                        >
+                          <WifiOff className="h-4 w-4" />
+                        </span>
                       )}
                       {isStaff && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="px-2"
+                          className="h-8 px-2"
                           onClick={() => {
                             setEditingAreaId(editingAreaId === area.id ? null : area.id);
                             setAreaError(null);
@@ -523,7 +475,7 @@ export default function Horarios() {
                     </div>
                   </div>
                   {isStaff && editingAreaId === area.id && (
-                    <div className="mt-3">
+                    <div className="mt-2">
                       <AreaEditForm
                         area={area}
                         pending={areaMutation.isPending}
@@ -538,183 +490,237 @@ export default function Horarios() {
             </ul>
           </section>
 
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Mudanças</h2>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Janelas</CardTitle>
-                <CardDescription>{mudancaWindowsText || "Sem janelas cadastradas."}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {bundleQuery.data.mudanca.assemblyRef && (
-                  <p className="text-xs text-muted-foreground">
-                    Assembleia: {bundleQuery.data.mudanca.assemblyRef}
-                  </p>
-                )}
-                {isStaff && (
-                  <MudancaWindowsEditor
-                    initial={bundleQuery.data.mudanca.windows}
-                    assemblyRef={bundleQuery.data.mudanca.assemblyRef}
-                    pending={mudancaMutation.isPending}
-                    onSave={(windows, assemblyRef) =>
-                      mudancaMutation.mutate({ windows, assemblyRef })
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
+          <section className="space-y-4">
+            <h2 className="text-lg font-semibold">Horários e convivência</h2>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Dias bloqueados</CardTitle>
-                <CardDescription>
-                  Feriados nacionais e de Fortaleza já vêm cadastrados; staff pode acrescentar.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <ul className="max-h-64 space-y-1 overflow-y-auto text-sm">
-                  {bundleQuery.data.mudanca.blockedDays.slice(0, 40).map((day) => (
-                    <li key={day.id} className="flex items-center justify-between gap-2 py-1">
-                      <span>
-                        <span className="font-medium tabular-nums">{formatDateOnly(day.date)}</span>
-                        <span className="text-muted-foreground"> — {day.reason}</span>
-                        <span className="ml-1 text-[10px] uppercase text-muted-foreground">
-                          ({day.source})
-                        </span>
-                      </span>
-                      {isStaff && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="px-2"
-                          disabled={unblockMutation.isPending}
-                          aria-label={`Remover bloqueio ${day.date}`}
-                          onClick={() => {
-                            if (window.confirm(`Remover bloqueio de ${formatDateOnly(day.date)}?`)) {
-                              unblockMutation.mutate(day.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                {isStaff && (
-                  <form
-                    className="flex flex-wrap items-end gap-2 border-t pt-3"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!blockDate || blockReason.trim().length < 2) return;
-                      blockMutation.mutate();
-                    }}
-                  >
-                    <div className="space-y-1">
-                      <Label htmlFor="block-date">Data</Label>
-                      <Input
-                        id="block-date"
-                        type="date"
-                        required
-                        value={blockDate}
-                        onChange={(e) => setBlockDate(e.target.value)}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 basis-full space-y-1 sm:min-w-[12rem] sm:basis-auto">
-                      <Label htmlFor="block-reason">Motivo</Label>
-                      <Input
-                        id="block-reason"
-                        required
-                        value={blockReason}
-                        onChange={(e) => setBlockReason(e.target.value)}
-                        placeholder="Ex.: Obra na garagem"
-                      />
-                    </div>
-                    <Button type="submit" size="sm" disabled={blockMutation.isPending}>
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      Bloquear
-                    </Button>
-                  </form>
-                )}
-                {blockMutation.isError && (
-                  <p className="text-sm text-destructive">
-                    {blockMutation.error instanceof Error
-                      ? blockMutation.error.message
-                      : "Falha ao bloquear."}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </section>
+            {statusQuery.data && (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1.5">
+                      <Truck className="h-3.5 w-3.5" />
+                      Mudança agora
+                    </CardDescription>
+                    <CardTitle className="text-lg">
+                      {statusQuery.data.mudancaNow.allowed ? "Permitida" : "Não"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    {statusQuery.data.mudancaNow.reason}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1.5">
+                      <Volume2 className="h-3.5 w-3.5" />
+                      Barulho agora
+                    </CardDescription>
+                    <CardTitle className="text-lg">
+                      {statusQuery.data.noiseNow.allowed
+                        ? `Sim (até ${statusQuery.data.noiseNow.noiseUntil})`
+                        : `Silêncio (até ${statusQuery.data.noiseNow.noiseFrom})`}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    {statusQuery.data.noiseNow.reason}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="flex items-center gap-1.5">
+                      <Truck className="h-3.5 w-3.5" />
+                      Mudança amanhã
+                    </CardDescription>
+                    <CardTitle className="text-lg">
+                      {statusQuery.data.mudancaTomorrow.allowed ? "Sim" : "Não"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground">
+                    {formatDateOnly(statusQuery.data.mudancaTomorrow.date)} —{" "}
+                    {statusQuery.data.mudancaTomorrow.reason}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Convivência</h2>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Barulho nas áreas comuns</CardTitle>
-                <CardDescription>
-                  Barulho permitido das {bundleQuery.data.convivencia.noiseFrom} até{" "}
-                  {bundleQuery.data.convivencia.noiseUntil} (fuso Fortaleza).
-                  {bundleQuery.data.convivencia.assemblyRef
-                    ? ` Assembleia: ${bundleQuery.data.convivencia.assemblyRef}`
-                    : ""}
-                </CardDescription>
-              </CardHeader>
-              {isStaff && (
-                <CardContent>
-                  <form
-                    className="flex flex-wrap items-end gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const from = noiseFrom || bundleQuery.data!.convivencia.noiseFrom;
-                      const until = noiseUntil || bundleQuery.data!.convivencia.noiseUntil;
-                      const assembly =
-                        noiseAssembly || bundleQuery.data!.convivencia.assemblyRef || "";
-                      convivenciaMutation.mutate({
-                        noiseFrom: from,
-                        noiseUntil: until,
-                        assemblyRef: assembly.trim() || null,
-                      });
-                    }}
-                  >
-                    <div className="space-y-1">
-                      <Label htmlFor="noise-from">Das</Label>
-                      <Input
-                        id="noise-from"
-                        type="time"
-                        required
-                        value={noiseFrom || bundleQuery.data.convivencia.noiseFrom}
-                        onChange={(e) => setNoiseFrom(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="noise-until">Até</Label>
-                      <Input
-                        id="noise-until"
-                        type="time"
-                        required
-                        value={noiseUntil || bundleQuery.data.convivencia.noiseUntil}
-                        onChange={(e) => setNoiseUntil(e.target.value)}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 basis-full space-y-1 sm:min-w-[10rem] sm:basis-auto">
-                      <Label htmlFor="noise-assembly">Assembleia (opcional)</Label>
-                      <Input
-                        id="noise-assembly"
-                        value={noiseAssembly || bundleQuery.data.convivencia.assemblyRef || ""}
-                        onChange={(e) => setNoiseAssembly(e.target.value)}
-                        placeholder="Ex.: AG 05/2024"
-                      />
-                    </div>
-                    <Button type="submit" size="sm" disabled={convivenciaMutation.isPending}>
-                      Salvar
-                    </Button>
-                  </form>
-                  {mudancaMsg && <p className="mt-2 text-xs text-muted-foreground">{mudancaMsg}</p>}
+            <div className="space-y-3">
+              <h3 className="text-base font-semibold">Mudanças</h3>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Janelas</CardTitle>
+                  <CardDescription>{mudancaWindowsText || "Sem janelas cadastradas."}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {bundleQuery.data.mudanca.assemblyRef && (
+                    <p className="text-xs text-muted-foreground">
+                      Assembleia: {bundleQuery.data.mudanca.assemblyRef}
+                    </p>
+                  )}
+                  {isStaff && (
+                    <MudancaWindowsEditor
+                      initial={bundleQuery.data.mudanca.windows}
+                      assemblyRef={bundleQuery.data.mudanca.assemblyRef}
+                      pending={mudancaMutation.isPending}
+                      onSave={(windows, assemblyRef) =>
+                        mudancaMutation.mutate({ windows, assemblyRef })
+                      }
+                    />
+                  )}
                 </CardContent>
-              )}
-            </Card>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Dias bloqueados</CardTitle>
+                  <CardDescription>
+                    Feriados nacionais e de Fortaleza já vêm cadastrados; staff pode acrescentar.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <ul className="max-h-64 space-y-1 overflow-y-auto text-sm">
+                    {bundleQuery.data.mudanca.blockedDays.slice(0, 40).map((day) => (
+                      <li key={day.id} className="flex items-center justify-between gap-2 py-1">
+                        <span>
+                          <span className="font-medium tabular-nums">{formatDateOnly(day.date)}</span>
+                          <span className="text-muted-foreground"> — {day.reason}</span>
+                          <span className="ml-1 text-[10px] uppercase text-muted-foreground">
+                            ({day.source})
+                          </span>
+                        </span>
+                        {isStaff && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="px-2"
+                            disabled={unblockMutation.isPending}
+                            aria-label={`Remover bloqueio ${day.date}`}
+                            onClick={() => {
+                              if (window.confirm(`Remover bloqueio de ${formatDateOnly(day.date)}?`)) {
+                                unblockMutation.mutate(day.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {isStaff && (
+                    <form
+                      className="flex flex-wrap items-end gap-2 border-t pt-3"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!blockDate || blockReason.trim().length < 2) return;
+                        blockMutation.mutate();
+                      }}
+                    >
+                      <div className="space-y-1">
+                        <Label htmlFor="block-date">Data</Label>
+                        <Input
+                          id="block-date"
+                          type="date"
+                          required
+                          value={blockDate}
+                          onChange={(e) => setBlockDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 basis-full space-y-1 sm:min-w-[12rem] sm:basis-auto">
+                        <Label htmlFor="block-reason">Motivo</Label>
+                        <Input
+                          id="block-reason"
+                          required
+                          value={blockReason}
+                          onChange={(e) => setBlockReason(e.target.value)}
+                          placeholder="Ex.: Obra na garagem"
+                        />
+                      </div>
+                      <Button type="submit" size="sm" disabled={blockMutation.isPending}>
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Bloquear
+                      </Button>
+                    </form>
+                  )}
+                  {blockMutation.isError && (
+                    <p className="text-sm text-destructive">
+                      {blockMutation.error instanceof Error
+                        ? blockMutation.error.message
+                        : "Falha ao bloquear."}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-base font-semibold">Convivência</h3>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Barulho nas áreas comuns</CardTitle>
+                  <CardDescription>
+                    Barulho permitido das {bundleQuery.data.convivencia.noiseFrom} até{" "}
+                    {bundleQuery.data.convivencia.noiseUntil} (fuso Fortaleza).
+                    {bundleQuery.data.convivencia.assemblyRef
+                      ? ` Assembleia: ${bundleQuery.data.convivencia.assemblyRef}`
+                      : ""}
+                  </CardDescription>
+                </CardHeader>
+                {isStaff && (
+                  <CardContent>
+                    <form
+                      className="flex flex-wrap items-end gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const from = noiseFrom || bundleQuery.data!.convivencia.noiseFrom;
+                        const until = noiseUntil || bundleQuery.data!.convivencia.noiseUntil;
+                        const assembly =
+                          noiseAssembly || bundleQuery.data!.convivencia.assemblyRef || "";
+                        convivenciaMutation.mutate({
+                          noiseFrom: from,
+                          noiseUntil: until,
+                          assemblyRef: assembly.trim() || null,
+                        });
+                      }}
+                    >
+                      <div className="space-y-1">
+                        <Label htmlFor="noise-from">Das</Label>
+                        <Input
+                          id="noise-from"
+                          type="time"
+                          required
+                          value={noiseFrom || bundleQuery.data.convivencia.noiseFrom}
+                          onChange={(e) => setNoiseFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="noise-until">Até</Label>
+                        <Input
+                          id="noise-until"
+                          type="time"
+                          required
+                          value={noiseUntil || bundleQuery.data.convivencia.noiseUntil}
+                          onChange={(e) => setNoiseUntil(e.target.value)}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 basis-full space-y-1 sm:min-w-[10rem] sm:basis-auto">
+                        <Label htmlFor="noise-assembly">Assembleia (opcional)</Label>
+                        <Input
+                          id="noise-assembly"
+                          value={noiseAssembly || bundleQuery.data.convivencia.assemblyRef || ""}
+                          onChange={(e) => setNoiseAssembly(e.target.value)}
+                          placeholder="Ex.: AG 05/2024"
+                        />
+                      </div>
+                      <Button type="submit" size="sm" disabled={convivenciaMutation.isPending}>
+                        Salvar
+                      </Button>
+                    </form>
+                    {mudancaMsg && <p className="mt-2 text-xs text-muted-foreground">{mudancaMsg}</p>}
+                  </CardContent>
+                )}
+              </Card>
+            </div>
           </section>
         </>
       )}
@@ -722,7 +728,7 @@ export default function Horarios() {
       <BottomSheet
         open={Boolean(wifiAreaId)}
         onClose={() => setWifiAreaId(null)}
-        title="Conectar ao Wi‑Fi"
+        title="Entrar no Wifi"
         description={
           wifiQuery.data
             ? wifiQuery.data.areaName

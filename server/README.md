@@ -258,7 +258,7 @@ UI: `/documentos` (Mais → Documentos). Lista via `GET /docs`; pronta para novo
 | Staff | `PATCH /horarios/areas/:id`, `PUT /horarios/mudanca`, blocked days, `PUT /horarios/convivencia` |
 | RAG | indexa convivência + áreas + mudança (sem senha Wi‑Fi); hooks no CRUD |
 
-UI: dock **Horários** (`/horarios`); cards de status também no Início. MCP: tools resident + staff (ver `mcp/README.md`).
+UI: dock **Áreas comuns** (`/horarios`); abaixo, bloco **Horários e convivência**; cards de status também no Início. MCP: tools resident + staff (ver `mcp/README.md`).
 
 ## Adicionando uma nova migration
 

@@ -2,8 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Building2,
   ClipboardList,
-  Clock,
   Columns3,
+  LayoutGrid,
   FileSpreadsheet,
   FileText,
   Gauge,
@@ -69,10 +69,10 @@ function residentSecondary(): NavLink[] {
       icon: <HelpCircle className={iconCls} />,
     },
     {
-      title: "Horários",
+      title: "Áreas comuns",
       href: "/horarios",
-      description: "Áreas comuns e convivência",
-      icon: <Clock className={iconCls} />,
+      description: "Horários, Wi‑Fi e convivência",
+      icon: <LayoutGrid className={iconCls} />,
     },
     {
       title: "Documentos",

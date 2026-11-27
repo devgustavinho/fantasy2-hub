@@ -70,7 +70,7 @@ function CondoNowStatus({ status }: { status: HorariosStatus }) {
           Agora no condomínio
         </h2>
         <Button asChild variant="ghost" size="sm">
-          <Link to="/horarios">Ver horários</Link>
+          <Link to="/horarios">Áreas comuns</Link>
         </Button>
       </div>
 
