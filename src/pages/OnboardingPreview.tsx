@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Eye, Fingerprint, Home, Smartphone, Bell } from "lucide-react";
 import { OnboardingBanner, type OnboardingSuggestion } from "@/components/OnboardingBanner";
+import { TowerGroupNudge } from "@/components/TowerGroupNudge";
 import { WelcomeSteps } from "@/components/WelcomeSteps";
 import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import PortalWelcome from "@/pages/PortalWelcome";
 
 type PreviewTab = "onboarding" | "boas-vindas";
 
@@ -128,10 +130,38 @@ export default function OnboardingPreview() {
 
           <Card>
             <CardHeader className="pb-3">
+              <CardTitle className="text-base">Wizard do Portal</CardTitle>
+              <CardDescription>
+                Fluxo de primeiro acesso (geral → torre → Hub). Progresso só nesta sessão de
+                preview.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mx-auto max-w-sm rounded-2xl border bg-background shadow-sm">
+                <PortalWelcome preview />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Nudge da torre (Home)</CardTitle>
+              <CardDescription>
+                Aparece na próxima visita à Home se a torre ainda não foi concluída.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mx-auto max-w-sm">
+                <TowerGroupNudge preview forceShow />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base">Primeiros passos (FAQ)</CardTitle>
               <CardDescription>
-                Fluxo permanente do FAQ com links de WhatsApp mockados (torre 3). Progresso fica só
-                nesta sessão de preview.
+                Bloco permanente do FAQ com links recuperáveis (torre 3 mockada).
               </CardDescription>
             </CardHeader>
             <CardContent>

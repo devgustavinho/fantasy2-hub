@@ -5,6 +5,7 @@ import { ClipboardList, Clock, Truck, Users, Volume2, type LucideIcon } from "lu
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { QueryError } from "@/components/QueryError";
+import { TowerGroupNudge } from "@/components/TowerGroupNudge";
 import * as statsService from "@/services/stats";
 import * as horariosService from "@/services/horarios";
 import type { HorariosStatus } from "@/services/horarios";
@@ -176,6 +177,8 @@ export default function Home() {
           Visão rápida do Fantasy 2 Hub — pautas, acessos e horários de agora.
         </p>
       </div>
+
+      <TowerGroupNudge />
 
       {isLoading && <p className="text-muted-foreground">Carregando...</p>}
       {isError && <QueryError onRetry={() => refetch()} />}
