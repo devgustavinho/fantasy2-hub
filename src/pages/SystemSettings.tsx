@@ -3,11 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Bot,
   ChevronRight,
-  Clock,
   Eye,
   HelpCircle,
   Home,
   KeyRound,
+  LayoutGrid,
   MessageCircleQuestion,
   Plug,
   Settings2,
@@ -111,10 +111,10 @@ export default function SystemSettings() {
       icon: <HelpCircle className="h-5 w-5" />,
     },
     {
-      title: "Horários",
-      description: "Áreas comuns, silêncio, mudanças e Wi‑Fi",
+      title: "Áreas comuns",
+      description: "Horários, silêncio, mudanças e Wi‑Fi",
       href: "/horarios",
-      icon: <Clock className="h-5 w-5" />,
+      icon: <LayoutGrid className="h-5 w-5" />,
     },
   ];
 

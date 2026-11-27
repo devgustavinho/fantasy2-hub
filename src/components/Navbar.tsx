@@ -3,8 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Building2,
   ClipboardList,
-  Clock,
   Columns3,
+  LayoutGrid,
   Ellipsis,
   FileSpreadsheet,
   FileText,
@@ -115,10 +115,10 @@ export function BottomDock() {
       description: "Perguntas frequentes",
     },
     {
-      title: "Horários",
+      title: "Áreas comuns",
       href: "/horarios",
-      icon: <Clock className="h-5 w-5" />,
-      description: "Áreas comuns, mudanças e convivência",
+      icon: <LayoutGrid className="h-5 w-5" />,
+      description: "Horários, Wi‑Fi, mudanças e convivência",
     },
     {
       title: "Documentos",
