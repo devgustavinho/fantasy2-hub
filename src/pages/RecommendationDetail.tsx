@@ -80,6 +80,7 @@ export default function RecommendationDetail() {
   const { recommendation } = data;
   const isOwner = user?.id === recommendation.createdBy.id;
   const isStaff = user?.role === "admin" || user?.role === "sindico";
+  const canEdit = isOwner || isStaff;
   const canDelete = isOwner || isStaff;
 
   function startEditing() {
@@ -117,7 +118,7 @@ export default function RecommendationDetail() {
           <div className="flex items-center justify-between gap-2">
             {!isEditing && <CardTitle>{recommendation.name}</CardTitle>}
             <div className="ml-auto flex items-center gap-2">
-              {isOwner && !isEditing && (
+              {canEdit && !isEditing && (
                 <Button variant="outline" size="sm" onClick={startEditing}>
                   Editar
                 </Button>

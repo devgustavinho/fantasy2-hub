@@ -220,8 +220,10 @@ export function recommendationsRoutes() {
   router.patch("/:id", (req, res) => {
     const recommendation = getRecommendationById.get(req.params.id);
     if (!recommendation) return res.status(404).json({ message: "Contato não encontrado." });
-    if (recommendation.created_by !== req.user.id) {
-      return res.status(403).json({ message: "Só quem cadastrou o contato pode editá-lo." });
+    const isOwner = recommendation.created_by === req.user.id;
+    const isStaff = req.user.role === "admin" || req.user.role === "sindico";
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ message: "Só quem cadastrou o contato (ou a administração) pode editá-lo." });
     }
 
     const parsed = contactSchema.safeParse(req.body);
