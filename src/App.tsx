@@ -33,6 +33,7 @@ import ClimateDetail from "@/pages/ClimateDetail";
 import ImprovementsBoard from "@/pages/ImprovementsBoard";
 import Welcome from "@/pages/Welcome";
 import WelcomeAdmin from "@/pages/WelcomeAdmin";
+import OnboardingPreview from "@/pages/OnboardingPreview";
 import SystemSettings from "@/pages/SystemSettings";
 import AskCondo from "@/pages/AskCondo";
 import Horarios from "@/pages/Horarios";
@@ -311,6 +312,14 @@ export default function App() {
                 element={
                   <AppLayout>
                     <WelcomeAdmin />
+                  </AppLayout>
+                }
+              />
+              <Route
+                path="/admin/preview-onboarding"
+                element={
+                  <AppLayout>
+                    <OnboardingPreview />
                   </AppLayout>
                 }
               />

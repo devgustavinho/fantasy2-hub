@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { Bell, Fingerprint, Smartphone, X } from "lucide-react";
@@ -8,7 +8,9 @@ import * as webauthnService from "@/services/webauthn";
 import * as pushService from "@/services/push";
 import { hasNativeInstallPrompt, isRunningStandalone, triggerNativeInstallPrompt } from "@/lib/installPrompt";
 
-type Suggestion = "passkey" | "install" | "push";
+export type OnboardingSuggestion = "passkey" | "install" | "push";
+
+type Suggestion = OnboardingSuggestion;
 
 function dismissedKey(type: Suggestion) {
   return `f2hub_onboarding_dismissed_${type}`;
@@ -30,10 +32,17 @@ function dismiss(type: Suggestion) {
   }
 }
 
+type OnboardingBannerProps = {
+  /** Admin preview: força mobile, ignora APIs e não grava dismiss real. */
+  preview?: boolean;
+  /** Qual sugestão mostrar no preview (obrigatório quando preview=true). */
+  previewSuggestion?: Suggestion;
+};
+
 // Sugestões só fazem sentido no celular: passkey (login por biometria), instalar como app, e
 // notificações push. Mostra só UMA por vez, na ordem passkey -> instalar -> push, avançando
 // naturalmente pra próxima assim que a anterior for concluída ou dispensada.
-export function OnboardingBanner() {
+export function OnboardingBanner({ preview = false, previewSuggestion }: OnboardingBannerProps = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [mobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
@@ -42,17 +51,28 @@ export function OnboardingBanner() {
   const [, setDismissTick] = useState(0);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  const [previewNote, setPreviewNote] = useState<string | null>(null);
+  const [previewHidden, setPreviewHidden] = useState(false);
+
+  useEffect(() => {
+    if (!preview) return;
+    setPreviewHidden(false);
+    setPreviewNote(null);
+    setShowInstallHelp(false);
+  }, [preview, previewSuggestion]);
+
+  const liveEnabled = !preview && !!user && mobile;
 
   const { data: passkeysData } = useQuery({
     queryKey: ["passkeys"],
     queryFn: webauthnService.listPasskeys,
-    enabled: !!user && mobile && supportsBiometric,
+    enabled: liveEnabled && supportsBiometric,
   });
 
   const { data: pushSub } = useQuery({
     queryKey: ["push-subscription"],
     queryFn: pushService.getCurrentPushSubscription,
-    enabled: !!user && mobile && pushSupported,
+    enabled: liveEnabled && pushSupported,
   });
 
   const registerPasskeyMutation = useMutation({
@@ -69,10 +89,16 @@ export function OnboardingBanner() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["push-subscription"] }),
   });
 
-  if (!user || !mobile) return null;
+  if (preview) {
+    if (previewHidden || !previewSuggestion) return null;
+  } else if (!user || !mobile) {
+    return null;
+  }
 
   let suggestion: Suggestion | null = null;
-  if (supportsBiometric && passkeysData && passkeysData.credentials.length === 0 && !isDismissed("passkey")) {
+  if (preview) {
+    suggestion = previewSuggestion ?? null;
+  } else if (supportsBiometric && passkeysData && passkeysData.credentials.length === 0 && !isDismissed("passkey")) {
     suggestion = "passkey";
   } else if (!isRunningStandalone() && !isDismissed("install")) {
     suggestion = "install";
@@ -83,11 +109,21 @@ export function OnboardingBanner() {
   if (!suggestion) return null;
 
   function handleDismiss() {
+    if (preview) {
+      setPreviewHidden(true);
+      setPreviewNote("Dispensado só neste preview — nada foi gravado.");
+      return;
+    }
     dismiss(suggestion!);
     setDismissTick((v) => v + 1);
   }
 
   async function handleInstallClick() {
+    if (preview) {
+      setShowInstallHelp((v) => !v);
+      setPreviewNote("Preview: o prompt nativo de instalação não abre aqui.");
+      return;
+    }
     if (hasNativeInstallPrompt()) {
       const accepted = await triggerNativeInstallPrompt();
       if (accepted) handleDismiss();
@@ -96,8 +132,24 @@ export function OnboardingBanner() {
     }
   }
 
+  function handlePasskeyClick() {
+    if (preview) {
+      setPreviewNote("Preview: passkey não é cadastrada de verdade.");
+      return;
+    }
+    registerPasskeyMutation.mutate();
+  }
+
+  function handlePushClick() {
+    if (preview) {
+      setPreviewNote("Preview: notificações não são ativadas de verdade.");
+      return;
+    }
+    enablePushMutation.mutate();
+  }
+
   return (
-    <div className="mx-auto max-w-4xl px-4 pt-4">
+    <div className={preview ? "w-full" : "mx-auto max-w-4xl px-4 pt-4"}>
       <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
         {suggestion === "passkey" && <Fingerprint className="mt-0.5 h-5 w-5 shrink-0 text-primary" />}
         {suggestion === "install" && <Smartphone className="mt-0.5 h-5 w-5 shrink-0 text-primary" />}
@@ -107,13 +159,16 @@ export function OnboardingBanner() {
             <>
               <p>Cadastre o mesmo desbloqueador do seu celular pra entrar mais rápido, sem digitar senha.</p>
               {passkeyError && <p className="text-xs text-destructive">{passkeyError}</p>}
+              {previewNote && suggestion === "passkey" && (
+                <p className="text-xs text-muted-foreground">{previewNote}</p>
+              )}
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  disabled={registerPasskeyMutation.isPending}
-                  onClick={() => registerPasskeyMutation.mutate()}
+                  disabled={!preview && registerPasskeyMutation.isPending}
+                  onClick={handlePasskeyClick}
                 >
-                  {registerPasskeyMutation.isPending ? "Cadastrando..." : "Cadastrar agora"}
+                  {!preview && registerPasskeyMutation.isPending ? "Cadastrando..." : "Cadastrar agora"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={handleDismiss}>
                   Agora não
@@ -131,6 +186,9 @@ export function OnboardingBanner() {
                   tela inicial".
                 </p>
               )}
+              {previewNote && suggestion === "install" && (
+                <p className="text-xs text-muted-foreground">{previewNote}</p>
+              )}
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleInstallClick}>
                   Instalar
@@ -144,9 +202,16 @@ export function OnboardingBanner() {
           {suggestion === "push" && (
             <>
               <p>Ative notificações pra saber na hora quando alguém comentar ou responder numa pauta.</p>
+              {previewNote && suggestion === "push" && (
+                <p className="text-xs text-muted-foreground">{previewNote}</p>
+              )}
               <div className="flex gap-2">
-                <Button size="sm" disabled={enablePushMutation.isPending} onClick={() => enablePushMutation.mutate()}>
-                  {enablePushMutation.isPending ? "Ativando..." : "Ativar"}
+                <Button
+                  size="sm"
+                  disabled={!preview && enablePushMutation.isPending}
+                  onClick={handlePushClick}
+                >
+                  {!preview && enablePushMutation.isPending ? "Ativando..." : "Ativar"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={handleDismiss}>
                   Agora não

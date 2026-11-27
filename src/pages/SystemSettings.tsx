@@ -4,6 +4,7 @@ import {
   Bot,
   ChevronRight,
   Clock,
+  Eye,
   HelpCircle,
   Home,
   KeyRound,
@@ -85,6 +86,20 @@ export default function SystemSettings() {
             description: "Texto do QR do elevador, grupos WhatsApp e cartaz",
             href: "/admin/boas-vindas",
             icon: <Home className="h-5 w-5" />,
+            adminOnly: true,
+          },
+          {
+            title: "Ver onboarding",
+            description: "Preview mockado do banner e dos primeiros passos",
+            href: "/admin/preview-onboarding#onboarding",
+            icon: <Eye className="h-5 w-5" />,
+            adminOnly: true,
+          },
+          {
+            title: "Preview boas-vindas",
+            description: "Como fica a página do QR do elevador (dados fictícios)",
+            href: "/admin/preview-onboarding#boas-vindas",
+            icon: <Eye className="h-5 w-5" />,
             adminOnly: true,
           },
         ]
